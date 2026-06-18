@@ -1,7 +1,11 @@
 import type { Candle } from '../models/Candle';
 import type { Opportunity } from '../models/Opportunity';
 import type { Signal } from '../models/Signal';
-import { InsufficientCandlesError } from '../clients/PolygonClient';
+import {
+  InsufficientCandlesError,
+  MarketDataProviderError,
+  MarketDataRateLimitError,
+} from '../clients/PolygonClient';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { SignalRepository } from '../ports/SignalRepository';
 import type { MarketDataService } from './MarketDataService';
@@ -9,6 +13,7 @@ import type { NotificationService } from './NotificationService';
 import type { OpportunityFilter } from './OpportunityFilter';
 import type { OpportunityService } from './OpportunityService';
 import type { RankingService } from './RankingService';
+import type { RateLimiterService } from './RateLimiterService';
 import type { RiskService } from './RiskService';
 import type { WatchlistService } from './WatchlistService';
 
@@ -51,6 +56,11 @@ export interface MarketScanResult {
     candlesCount?: number;
     requestedFrom?: string;
     requestedTo?: string;
+    status?: number;
+    statusText?: string;
+    provider?: string;
+    endpoint?: string;
+    requestId?: string;
   }>;
 }
 
@@ -64,8 +74,12 @@ export interface MarketScanExecutorDependencies {
   opportunityRepository: OpportunityRepository;
   signalRepository: SignalRepository;
   notificationService: NotificationService;
+  rateLimiterService: RateLimiterService;
   debug?: boolean;
   marketDataMaxAgeMinutes: number;
+  marketDataMaxRetries: number;
+  marketDataRetryBaseDelayMs: number;
+  marketDataSequential: boolean;
 }
 
 export class MarketScanExecutor {
@@ -87,60 +101,17 @@ export class MarketScanExecutor {
       `Debug de escaneo habilitado. temporalidad=${options.timeframe} limiteVelas=${options.candleLimit} notificar=${options.notify}`,
     );
 
-    for (const ticker of tickers) {
-      try {
-        const candles = await this.dependencies.marketDataService.getCandles(
-          ticker,
-          options.timeframe,
-          options.candleLimit,
-        );
-        this.logCandleSummary(ticker, candles, logger);
+    const scanResults = this.dependencies.marketDataSequential
+      ? await this.scanTickersSequentially(tickers, options, logger)
+      : await this.scanTickersInParallel(tickers, options, logger);
 
-        if (candles.length < MINIMUM_PROVIDER_CANDLES) {
-          throw new InsufficientCandlesError(ticker, candles.length, 'n/a', 'n/a');
-        }
+    for (const scanResult of scanResults) {
+      analyzedOpportunities.push(...scanResult.opportunities);
+      skipped.push(...scanResult.skipped);
+      errors.push(...scanResult.errors);
 
-        if (candles.length < options.candleLimit) {
-          logger.log(
-            `Omitiendo ${ticker}: datos insuficientes velas=${candles.length} esperado=${options.candleLimit}`,
-          );
-          skipped.push({
-            ticker,
-            score: 0,
-            reason: 'insufficient-data',
-          });
-          continue;
-        }
-
-        const freshness = this.calculateDataFreshness(candles);
-        this.logFreshnessDebug(ticker, freshness, logger);
-
-        if (
-          this.isIntradayTimeframe(options.timeframe) &&
-          freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes
-        ) {
-          skipped.push({
-            ticker,
-            score: 0,
-            reason: 'stale-market-data',
-            lastTimestamp: freshness.lastTimestamp,
-            dataAgeMinutes: freshness.dataAgeMinutes,
-            maxAllowedAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
-          });
-          continue;
-        }
-
-        const opportunity = this.dependencies.opportunityService.analyze(
-          ticker,
-          options.timeframe,
-          candles,
-        );
-
-        analyzedOpportunities.push(opportunity);
+      for (const [ticker, candles] of scanResult.candlesByTicker) {
         candlesByTicker.set(ticker, candles);
-      } catch (error) {
-        logger.error(`No se pudo escanear ${ticker}`, error);
-        errors.push(this.buildScanError(ticker, error));
       }
     }
 
@@ -213,6 +184,134 @@ export class MarketScanExecutor {
     }
 
     return this.dependencies.watchlistService.getTickers();
+  }
+
+  private async scanTickersSequentially(
+    tickers: string[],
+    options: MarketScanOptions,
+    logger: MarketScanLogger,
+  ): Promise<TickerScanResult[]> {
+    const results: TickerScanResult[] = [];
+
+    for (const [index, ticker] of tickers.entries()) {
+      results.push(await this.scanTicker(ticker, options, logger, index > 0));
+    }
+
+    return results;
+  }
+
+  private async scanTickersInParallel(
+    tickers: string[],
+    options: MarketScanOptions,
+    logger: MarketScanLogger,
+  ): Promise<TickerScanResult[]> {
+    this.debugLog(
+      logger,
+      'MARKET_DATA_SEQUENTIAL=false; las llamadas paralelas pueden provocar 429 en planes gratuitos',
+    );
+
+    return Promise.all(tickers.map((ticker) => this.scanTicker(ticker, options, logger, false)));
+  }
+
+  private async scanTicker(
+    ticker: string,
+    options: MarketScanOptions,
+    logger: MarketScanLogger,
+    shouldWaitBeforeRequest: boolean,
+  ): Promise<TickerScanResult> {
+    const result: TickerScanResult = {
+      opportunities: [],
+      skipped: [],
+      errors: [],
+      candlesByTicker: new Map<string, Candle[]>(),
+    };
+
+    try {
+      if (shouldWaitBeforeRequest) {
+        await this.dependencies.rateLimiterService.wait();
+      }
+
+      const candles = await this.getCandlesWithRetry(
+        ticker,
+        options.timeframe,
+        options.candleLimit,
+      );
+      this.logCandleSummary(ticker, candles, logger);
+
+      if (candles.length < MINIMUM_PROVIDER_CANDLES) {
+        throw new InsufficientCandlesError(ticker, candles.length, 'n/a', 'n/a');
+      }
+
+      if (candles.length < options.candleLimit) {
+        logger.log(
+          `Omitiendo ${ticker}: datos insuficientes velas=${candles.length} esperado=${options.candleLimit}`,
+        );
+        result.skipped.push({
+          ticker,
+          score: 0,
+          reason: 'insufficient-data',
+        });
+        return result;
+      }
+
+      const freshness = this.calculateDataFreshness(candles);
+      this.logFreshnessDebug(ticker, freshness, logger);
+
+      if (
+        this.isIntradayTimeframe(options.timeframe) &&
+        freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes
+      ) {
+        result.skipped.push({
+          ticker,
+          score: 0,
+          reason: 'stale-market-data',
+          lastTimestamp: freshness.lastTimestamp,
+          dataAgeMinutes: freshness.dataAgeMinutes,
+          maxAllowedAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
+        });
+        return result;
+      }
+
+      const opportunity = this.dependencies.opportunityService.analyze(
+        ticker,
+        options.timeframe,
+        candles,
+      );
+
+      result.opportunities.push(opportunity);
+      result.candlesByTicker.set(ticker, candles);
+    } catch (error) {
+      const scanError = this.buildScanError(ticker, error);
+      logger.error(`No se pudo escanear ${ticker}`, scanError);
+      result.errors.push(scanError);
+    }
+
+    return result;
+  }
+
+  private async getCandlesWithRetry(
+    ticker: string,
+    timeframe: string,
+    candleLimit: number,
+  ): Promise<Candle[]> {
+    let attempt = 0;
+
+    while (true) {
+      try {
+        return await this.dependencies.marketDataService.getCandles(ticker, timeframe, candleLimit);
+      } catch (error) {
+        if (
+          !(error instanceof MarketDataRateLimitError) ||
+          attempt >= this.dependencies.marketDataMaxRetries
+        ) {
+          throw error;
+        }
+
+        const delayMs = this.dependencies.marketDataRetryBaseDelayMs * 2 ** attempt;
+        attempt += 1;
+        await this.sleep(delayMs);
+      }
+    }
   }
 
   private logCandleSummary(ticker: string, candles: Candle[], logger: MarketScanLogger): void {
@@ -293,9 +392,50 @@ export class MarketScanExecutor {
       };
     }
 
+    if (error instanceof MarketDataRateLimitError) {
+      return {
+        ticker,
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        provider: error.provider,
+        endpoint: error.endpoint,
+        requestId: error.requestId,
+      };
+    }
+
+    if (error instanceof MarketDataProviderError) {
+      return {
+        ticker,
+        message: error.message,
+        status: error.details.status,
+        statusText: error.details.statusText,
+        provider: error.details.provider,
+        endpoint: error.details.endpoint,
+        requestId: error.details.requestId,
+      };
+    }
+
     return {
       ticker,
       message: error instanceof Error ? error.message : 'Error desconocido',
     };
   }
+
+  private async sleep(delayMs: number): Promise<void> {
+    if (delayMs <= 0) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, delayMs);
+    });
+  }
+}
+
+interface TickerScanResult {
+  opportunities: Opportunity[];
+  skipped: MarketScanResult['skipped'];
+  errors: MarketScanResult['errors'];
+  candlesByTicker: Map<string, Candle[]>;
 }

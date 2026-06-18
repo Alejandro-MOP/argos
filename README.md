@@ -330,6 +330,30 @@ Proveedores alternativos futuros:
 - Twelve Data
 - Yahoo Finance
 
+## Rate limits y Massive/Polygon
+
+Polygon/Massive puede responder `429 Too Many Requests` cuando se escanean varios tickers seguidos,
+especialmente en planes gratuitos. El motor procesa tickers de forma secuencial por defecto, aplica
+un delay antes de cada petición posterior al primer ticker y reintenta errores 429 con backoff
+exponencial.
+
+Configuración recomendada para plan gratuito:
+
+```text
+MARKET_DATA_SEQUENTIAL=true
+MARKET_DATA_REQUEST_DELAY_MS=13000
+MARKET_DATA_MAX_RETRIES=3
+MARKET_DATA_RETRY_BASE_DELAY_MS=30000
+```
+
+Con esa configuración los reintentos esperan aproximadamente `30s`, `60s` y `120s`.
+Si usas `MARKET_DATA_SEQUENTIAL=false`, las llamadas al proveedor se ejecutan en paralelo y pueden
+provocar 429 con mayor facilidad.
+
+Los errores de Axios se sanitizan antes de llegar a logs: nunca se imprime `apiKey`, query string,
+`request._header`, `responseUrl` ni `config.params.apiKey`. Solo se registra status, statusText,
+provider, endpoint sin query string, ticker, requestId si existe y mensaje resumido.
+
 ## Persistencia
 
 Contratos:
@@ -511,9 +535,52 @@ MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
 MARKET_SCAN_TIMEFRAME=15m
 MARKET_SCAN_CANDLE_LIMIT=80
 MARKET_DATA_MAX_AGE_MINUTES=30
+MARKET_DATA_REQUEST_DELAY_MS=13000
+MARKET_DATA_MAX_RETRIES=3
+MARKET_DATA_RETRY_BASE_DELAY_MS=30000
+MARKET_DATA_SEQUENTIAL=true
 OPPORTUNITY_NOTIFY_THRESHOLD=80
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
+
+### Variables De Entorno
+
+| Variable                               | Descripción corta                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
+| `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
+| `POLYGON_API_KEY`                      | API key de Polygon/Massive para obtener velas reales de mercado.                                 |
+| `DATABASE_URL`                         | URL de PostgreSQL reservada para futuras implementaciones persistentes.                          |
+| `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
+| `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |
+| `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                        |
+| `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                             |
+| `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                            |
+| `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                    |
+| `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que el motor espera analizar por ticker.                                  |
+| `MARKET_SCAN_WATCHLIST`                | Watchlist a usar: `custom`, `etfs`, `growth` o `dividends`.                                      |
+| `MARKET_SCAN_DEBUG`                    | Habilita logs debug seguros de escaneo y datos de mercado.                                       |
+| `MARKET_DATA_MAX_AGE_MINUTES`          | Edad máxima permitida para la última vela en timeframes intradía.                                |
+| `MARKET_DATA_REQUEST_DELAY_MS`         | Delay entre requests secuenciales al proveedor de mercado.                                       |
+| `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos cuando el proveedor responde 429.                                    |
+| `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para backoff exponencial de rate limit.                                               |
+| `MARKET_DATA_SEQUENTIAL`               | Si es `true`, escanea tickers uno por uno para reducir 429.                                      |
+| `OPPORTUNITY_NOTIFY_THRESHOLD`         | Score mínimo para intentar notificar una oportunidad.                                            |
+| `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                             |
+| `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                              |
+| `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                      |
+| `TREND_EMA_SLOW_PERIOD`                | Periodo de EMA lenta para `TrendAnalyzer`.                                                       |
+| `VOLUME_LOOKBACK_PERIOD`               | Velas usadas para calcular volumen promedio.                                                     |
+| `VOLUME_STRONG_RATIO`                  | Ratio de volumen para score fuerte.                                                              |
+| `VOLUME_MODERATE_RATIO`                | Ratio de volumen para score moderado.                                                            |
+| `VOLUME_WEAK_RATIO`                    | Ratio de volumen para score débil.                                                               |
+| `MOMENTUM_RSI_PERIOD`                  | Periodo RSI usado por `MomentumAnalyzer`.                                                        |
+| `MOMENTUM_RSI_IDEAL_MIN`               | Límite inferior del rango RSI ideal.                                                             |
+| `MOMENTUM_RSI_IDEAL_MAX`               | Límite superior del rango RSI ideal.                                                             |
+| `MOMENTUM_RSI_NEUTRAL_MIN`             | Límite inferior del rango RSI neutral.                                                           |
+| `MOMENTUM_RSI_NEUTRAL_MAX`             | Límite superior del rango RSI neutral.                                                           |
+| `MOMENTUM_RSI_EXTENDED_MAX`            | Máximo RSI considerado extendido pero todavía puntuable.                                         |
+| `STRUCTURE_LOOKBACK_PERIOD`            | Velas usadas para evaluar estructura/breakout.                                                   |
 
 ## Scripts
 

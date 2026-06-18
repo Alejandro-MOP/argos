@@ -1,5 +1,9 @@
 import type { AxiosInstance } from 'axios';
-import type { InsufficientCandlesError } from '../src/clients/PolygonClient';
+import { AxiosError } from 'axios';
+import type {
+  InsufficientCandlesError,
+  MarketDataRateLimitError,
+} from '../src/clients/PolygonClient';
 import { mapPolygonAggregateToCandle, PolygonClient } from '../src/clients/PolygonClient';
 
 const buildHttpClient = (response: unknown): AxiosInstance => {
@@ -152,5 +156,36 @@ describe('PolygonClient', () => {
     await expect(client.getCandles('SPY', '15m', 80)).rejects.toThrow(
       'POLYGON_API_KEY is required to fetch real market data',
     );
+  });
+
+  it('throws MarketDataRateLimitError when Polygon returns 429', async () => {
+    const error = new AxiosError('Too many requests');
+    Object.defineProperty(error, 'response', {
+      value: {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: {
+          'x-request-id': 'polygon-request-123',
+        },
+      },
+    });
+    Object.defineProperty(error, 'config', {
+      value: {
+        url: '/v2/aggs/ticker/SPY/range/15/minute/2026-06-08/2026-06-18?apiKey=secret',
+      },
+    });
+    const httpClient = {
+      get: jest.fn().mockRejectedValue(error),
+    } as unknown as AxiosInstance;
+    const client = new PolygonClient('secret', httpClient);
+
+    await expect(client.getCandles('SPY', '15m', 80)).rejects.toMatchObject({
+      message: 'rate-limit-exceeded',
+      provider: 'polygon',
+      status: 429,
+      statusText: 'Too Many Requests',
+      endpoint: '/v2/aggs/ticker/SPY/range/15/minute/2026-06-08/2026-06-18',
+      requestId: 'polygon-request-123',
+    } satisfies Partial<MarketDataRateLimitError>);
   });
 });

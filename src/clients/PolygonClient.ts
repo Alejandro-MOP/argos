@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import type { Candle } from '../models/Candle';
 import type { MarketDataProvider } from '../ports/MarketDataProvider';
+import { sanitizeError, type SanitizedProviderError } from '../utils/sanitizeError';
 
 const POLYGON_API_LIMIT = 5_000;
 const MINIMUM_PROVIDER_CANDLES = 60;
@@ -41,6 +42,24 @@ export class InsufficientCandlesError extends Error {
     public readonly requestedTo: string,
   ) {
     super('insufficient-candles');
+  }
+}
+
+export class MarketDataRateLimitError extends Error {
+  public constructor(
+    public readonly provider: string,
+    public readonly status: number,
+    public readonly endpoint?: string,
+    public readonly requestId?: string,
+    public readonly statusText?: string,
+  ) {
+    super('rate-limit-exceeded');
+  }
+}
+
+export class MarketDataProviderError extends Error {
+  public constructor(public readonly details: SanitizedProviderError) {
+    super(details.message);
   }
 }
 
@@ -114,14 +133,7 @@ export class PolygonClient implements MarketDataProvider {
     const requestedFrom = this.formatDate(from);
     const requestedTo = this.formatDate(to);
     const endpoint = `/v2/aggs/ticker/${ticker.toUpperCase()}/range/${parsedTimeframe.multiplier}/${parsedTimeframe.timespan}/${requestedFrom}/${requestedTo}`;
-    const response = await this.httpClient.get<PolygonAggregatesResponse>(endpoint, {
-      params: {
-        adjusted: true,
-        sort: 'asc',
-        limit: POLYGON_API_LIMIT,
-        apiKey: this.apiKey,
-      },
-    });
+    const response = await this.fetchAggregates(endpoint, ticker.toUpperCase());
 
     if (response.data.error || response.data.status === 'ERROR') {
       throw new Error(response.data.error ?? response.data.message ?? 'Polygon API request failed');
@@ -231,6 +243,40 @@ export class PolygonClient implements MarketDataProvider {
 
   private formatDate(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private async fetchAggregates(
+    endpoint: string,
+    ticker: string,
+  ): Promise<{ data: PolygonAggregatesResponse }> {
+    try {
+      return await this.httpClient.get<PolygonAggregatesResponse>(endpoint, {
+        params: {
+          adjusted: true,
+          sort: 'asc',
+          limit: POLYGON_API_LIMIT,
+          apiKey: this.apiKey,
+        },
+      });
+    } catch (error) {
+      const sanitizedError = sanitizeError(error, {
+        provider: 'polygon',
+        endpoint,
+        ticker,
+      });
+
+      if (sanitizedError.status === 429) {
+        throw new MarketDataRateLimitError(
+          'polygon',
+          429,
+          sanitizedError.endpoint,
+          sanitizedError.requestId,
+          sanitizedError.statusText,
+        );
+      }
+
+      throw new MarketDataProviderError(sanitizedError);
+    }
   }
 
   private logDebug(debugInfo: PolygonRequestDebug): void {

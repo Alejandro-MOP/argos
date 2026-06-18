@@ -11,6 +11,7 @@ import { MarketScanExecutor } from '../services/MarketScanExecutor';
 import { NotificationService } from '../services/NotificationService';
 import { OpportunityFilter } from '../services/OpportunityFilter';
 import { OpportunityService } from '../services/OpportunityService';
+import { RateLimiterService } from '../services/RateLimiterService';
 import { RankingService } from '../services/RankingService';
 import { RiskService } from '../services/RiskService';
 import { WatchlistService } from '../services/WatchlistService';
@@ -18,6 +19,7 @@ import { env } from './env';
 
 const polygonClient = new PolygonClient(env.polygonApiKey, undefined, env.marketScanDebug);
 const marketDataService = new MarketDataService(polygonClient);
+const rateLimiterService = new RateLimiterService(env.marketDataRequestDelayMs);
 const opportunityRepository = new OpportunityMemoryRepository();
 const signalRepository = new SignalRepository();
 const watchlistService = new WatchlistService(env.marketScanWatchlist, env.marketScanTickers);
@@ -67,6 +69,10 @@ export const marketScanExecutor = new MarketScanExecutor({
   opportunityRepository,
   signalRepository,
   notificationService,
+  rateLimiterService,
   debug: env.marketScanDebug,
   marketDataMaxAgeMinutes: env.marketDataMaxAgeMinutes,
+  marketDataMaxRetries: env.marketDataMaxRetries,
+  marketDataRetryBaseDelayMs: env.marketDataRetryBaseDelayMs,
+  marketDataSequential: env.marketDataSequential,
 });
