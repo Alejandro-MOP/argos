@@ -2,17 +2,12 @@ import axios, { type AxiosInstance } from 'axios';
 import type { Candle } from '../models/Candle';
 import type { MarketDataProvider } from '../ports/MarketDataProvider';
 
-interface PolygonAggregate {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;
-}
+const POLYGON_API_LIMIT = 5_000;
+const MINIMUM_PROVIDER_CANDLES = 60;
+const DAY_IN_MILLISECONDS = 86_400_000;
 
 interface PolygonAggregatesResponse {
-  results?: PolygonAggregate[];
+  results?: unknown[];
   status?: string;
   error?: string;
   message?: string;
@@ -24,12 +19,80 @@ interface PolygonTimeframe {
   milliseconds: number;
 }
 
+export interface PolygonRequestDebug {
+  ticker: string;
+  timeframe: string;
+  endpoint: string;
+  requestedFrom: string;
+  requestedTo: string;
+  rawResultsCount: number;
+  returnedCandlesCount: number;
+  firstReturnedTimestamp: string;
+  lastReturnedTimestamp: string;
+  firstClose: number | string;
+  lastClose: number | string;
+}
+
+export class InsufficientCandlesError extends Error {
+  public constructor(
+    public readonly ticker: string,
+    public readonly candlesCount: number,
+    public readonly requestedFrom: string,
+    public readonly requestedTo: string,
+  ) {
+    super('insufficient-candles');
+  }
+}
+
+export const mapPolygonAggregateToCandle = (aggregate: unknown): Candle | null => {
+  if (!aggregate || typeof aggregate !== 'object') {
+    return null;
+  }
+
+  const rawAggregate = aggregate as Record<string, unknown>;
+  const timestamp = Number(rawAggregate.t);
+  const open = Number(rawAggregate.o);
+  const high = Number(rawAggregate.h);
+  const low = Number(rawAggregate.l);
+  const close = Number(rawAggregate.c);
+  const volume = Number(rawAggregate.v);
+
+  if (
+    !Number.isFinite(timestamp) ||
+    !Number.isFinite(open) ||
+    !Number.isFinite(high) ||
+    !Number.isFinite(low) ||
+    !Number.isFinite(close) ||
+    !Number.isFinite(volume)
+  ) {
+    return null;
+  }
+
+  if (timestamp <= 0 || open <= 0 || high <= 0 || low <= 0 || close <= 0 || volume <= 0) {
+    return null;
+  }
+
+  if (high < Math.max(open, close) || low > Math.min(open, close)) {
+    return null;
+  }
+
+  return {
+    timestamp: new Date(timestamp),
+    open,
+    high,
+    low,
+    close,
+    volume,
+  };
+};
+
 export class PolygonClient implements MarketDataProvider {
   private readonly httpClient: AxiosInstance;
 
   public constructor(
     private readonly apiKey: string,
     httpClient?: AxiosInstance,
+    private readonly debug = false,
   ) {
     this.httpClient =
       httpClient ??
@@ -48,41 +111,53 @@ export class PolygonClient implements MarketDataProvider {
     const normalizedLimit = Math.max(limit, 1);
     const to = new Date();
     const from = this.calculateFromDate(to, parsedTimeframe, normalizedLimit);
-    const response = await this.httpClient.get<PolygonAggregatesResponse>(
-      `/v2/aggs/ticker/${ticker.toUpperCase()}/range/${parsedTimeframe.multiplier}/${parsedTimeframe.timespan}/${this.formatDate(
-        from,
-      )}/${this.formatDate(to)}`,
-      {
-        params: {
-          adjusted: true,
-          sort: 'asc',
-          limit: normalizedLimit,
-          apiKey: this.apiKey,
-        },
+    const requestedFrom = this.formatDate(from);
+    const requestedTo = this.formatDate(to);
+    const endpoint = `/v2/aggs/ticker/${ticker.toUpperCase()}/range/${parsedTimeframe.multiplier}/${parsedTimeframe.timespan}/${requestedFrom}/${requestedTo}`;
+    const response = await this.httpClient.get<PolygonAggregatesResponse>(endpoint, {
+      params: {
+        adjusted: true,
+        sort: 'asc',
+        limit: POLYGON_API_LIMIT,
+        apiKey: this.apiKey,
       },
-    );
+    });
 
     if (response.data.error || response.data.status === 'ERROR') {
       throw new Error(response.data.error ?? response.data.message ?? 'Polygon API request failed');
     }
 
     const results = response.data.results ?? [];
+    const candles = results
+      .map(mapPolygonAggregateToCandle)
+      .filter((candle): candle is Candle => candle !== null)
+      .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime())
+      .slice(-normalizedLimit);
 
-    if (results.length === 0) {
-      throw new Error(`Polygon returned no candles for ${ticker.toUpperCase()} ${timeframe}`);
+    this.logDebug({
+      ticker: ticker.toUpperCase(),
+      timeframe,
+      endpoint,
+      requestedFrom,
+      requestedTo,
+      rawResultsCount: results.length,
+      returnedCandlesCount: candles.length,
+      firstReturnedTimestamp: candles.at(0)?.timestamp.toISOString() ?? 'n/a',
+      lastReturnedTimestamp: candles.at(-1)?.timestamp.toISOString() ?? 'n/a',
+      firstClose: candles.at(0)?.close ?? 'n/a',
+      lastClose: candles.at(-1)?.close ?? 'n/a',
+    });
+
+    if (candles.length < MINIMUM_PROVIDER_CANDLES) {
+      throw new InsufficientCandlesError(
+        ticker.toUpperCase(),
+        candles.length,
+        requestedFrom,
+        requestedTo,
+      );
     }
 
-    return results
-      .slice(0, normalizedLimit)
-      .sort((left, right) => left.t - right.t)
-      .map((aggregate) => ({
-        timestamp: new Date(aggregate.t),
-        open: aggregate.o,
-        high: aggregate.h,
-        low: aggregate.l,
-        close: aggregate.c,
-        volume: aggregate.v,
-      }));
+    return candles;
   }
 
   private parseTimeframe(timeframe: string): PolygonTimeframe {
@@ -118,13 +193,66 @@ export class PolygonClient implements MarketDataProvider {
   }
 
   private calculateFromDate(to: Date, timeframe: PolygonTimeframe, limit: number): Date {
+    const minimumDays = this.getMinimumCalendarDays(timeframe);
     const calendarBuffer = timeframe.timespan === 'minute' || timeframe.timespan === 'hour' ? 8 : 3;
-    const rangeMilliseconds = timeframe.milliseconds * limit * calendarBuffer;
+    const rangeMilliseconds = Math.max(
+      timeframe.milliseconds * limit * calendarBuffer,
+      minimumDays * DAY_IN_MILLISECONDS,
+    );
 
     return new Date(to.getTime() - rangeMilliseconds);
   }
 
+  private getMinimumCalendarDays(timeframe: PolygonTimeframe): number {
+    if (timeframe.timespan === 'minute') {
+      if (timeframe.multiplier === 1) {
+        return 5;
+      }
+
+      if (timeframe.multiplier === 5) {
+        return 7;
+      }
+
+      if (timeframe.multiplier === 15) {
+        return 10;
+      }
+
+      if (timeframe.multiplier === 30) {
+        return 20;
+      }
+    }
+
+    if (timeframe.timespan === 'hour') {
+      return 20;
+    }
+
+    return 0;
+  }
+
   private formatDate(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private logDebug(debugInfo: PolygonRequestDebug): void {
+    if (!this.debug) {
+      return;
+    }
+
+    console.log(
+      [
+        'Polygon debug',
+        `ticker=${debugInfo.ticker}`,
+        `timeframe=${debugInfo.timeframe}`,
+        `endpoint=${debugInfo.endpoint}`,
+        `requestedFrom=${debugInfo.requestedFrom}`,
+        `requestedTo=${debugInfo.requestedTo}`,
+        `rawResultsCount=${debugInfo.rawResultsCount}`,
+        `returnedCandlesCount=${debugInfo.returnedCandlesCount}`,
+        `firstReturnedTimestamp=${debugInfo.firstReturnedTimestamp}`,
+        `lastReturnedTimestamp=${debugInfo.lastReturnedTimestamp}`,
+        `firstClose=${debugInfo.firstClose}`,
+        `lastClose=${debugInfo.lastClose}`,
+      ].join(' '),
+    );
   }
 }

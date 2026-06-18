@@ -97,7 +97,15 @@ describe('MarketScanExecutor', () => {
       logger,
     );
 
-    expect(result.errors).toEqual([{ ticker: 'SPY', message: 'insufficient-candles' }]);
+    expect(result.errors).toEqual([
+      {
+        ticker: 'SPY',
+        message: 'insufficient-candles',
+        candlesCount: 59,
+        requestedFrom: 'n/a',
+        requestedTo: 'n/a',
+      },
+    ]);
     expect(result.opportunities).toEqual([]);
     expect(logger.log).toHaveBeenCalledWith(
       expect.stringContaining(

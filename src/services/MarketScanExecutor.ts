@@ -1,6 +1,7 @@
 import type { Candle } from '../models/Candle';
 import type { Opportunity } from '../models/Opportunity';
 import type { Signal } from '../models/Signal';
+import { InsufficientCandlesError } from '../clients/PolygonClient';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { SignalRepository } from '../ports/SignalRepository';
 import type { MarketDataService } from './MarketDataService';
@@ -43,6 +44,9 @@ export interface MarketScanResult {
   errors: Array<{
     ticker: string;
     message: string;
+    candlesCount?: number;
+    requestedFrom?: string;
+    requestedTo?: string;
   }>;
 }
 
@@ -88,7 +92,7 @@ export class MarketScanExecutor {
         this.logCandleSummary(ticker, candles, logger);
 
         if (candles.length < MINIMUM_PROVIDER_CANDLES) {
-          throw new Error('insufficient-candles');
+          throw new InsufficientCandlesError(ticker, candles.length, 'n/a', 'n/a');
         }
 
         if (candles.length < options.candleLimit) {
@@ -113,10 +117,7 @@ export class MarketScanExecutor {
         candlesByTicker.set(ticker, candles);
       } catch (error) {
         logger.error(`No se pudo escanear ${ticker}`, error);
-        errors.push({
-          ticker,
-          message: error instanceof Error ? error.message : 'Error desconocido',
-        });
+        errors.push(this.buildScanError(ticker, error));
       }
     }
 
@@ -211,5 +212,22 @@ export class MarketScanExecutor {
     if (this.dependencies.debug) {
       logger.log(`[debug] ${message}`);
     }
+  }
+
+  private buildScanError(ticker: string, error: unknown): MarketScanResult['errors'][number] {
+    if (error instanceof InsufficientCandlesError) {
+      return {
+        ticker: error.ticker,
+        message: error.message,
+        candlesCount: error.candlesCount,
+        requestedFrom: error.requestedFrom,
+        requestedTo: error.requestedTo,
+      };
+    }
+
+    return {
+      ticker,
+      message: error instanceof Error ? error.message : 'Error desconocido',
+    };
   }
 }

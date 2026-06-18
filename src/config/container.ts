@@ -16,7 +16,7 @@ import { RiskService } from '../services/RiskService';
 import { WatchlistService } from '../services/WatchlistService';
 import { env } from './env';
 
-const polygonClient = new PolygonClient(env.polygonApiKey);
+const polygonClient = new PolygonClient(env.polygonApiKey, undefined, env.marketScanDebug);
 const marketDataService = new MarketDataService(polygonClient);
 const opportunityRepository = new OpportunityMemoryRepository();
 const signalRepository = new SignalRepository();
