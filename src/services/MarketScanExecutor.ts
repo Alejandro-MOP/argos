@@ -30,7 +30,8 @@ export type MarketScanSkippedReason =
   | 'below-threshold'
   | 'duplicate-window'
   | 'insufficient-data'
-  | 'invalid-risk';
+  | 'invalid-risk'
+  | 'stale-market-data';
 
 export interface MarketScanResult {
   scannedTickers: string[];
@@ -40,6 +41,9 @@ export interface MarketScanResult {
     ticker: string;
     score: number;
     reason: MarketScanSkippedReason;
+    lastTimestamp?: Date;
+    dataAgeMinutes?: number;
+    maxAllowedAgeMinutes?: number;
   }>;
   errors: Array<{
     ticker: string;
@@ -61,6 +65,7 @@ export interface MarketScanExecutorDependencies {
   signalRepository: SignalRepository;
   notificationService: NotificationService;
   debug?: boolean;
+  marketDataMaxAgeMinutes: number;
 }
 
 export class MarketScanExecutor {
@@ -103,6 +108,24 @@ export class MarketScanExecutor {
             ticker,
             score: 0,
             reason: 'insufficient-data',
+          });
+          continue;
+        }
+
+        const freshness = this.calculateDataFreshness(candles);
+        this.logFreshnessDebug(ticker, freshness, logger);
+
+        if (
+          this.isIntradayTimeframe(options.timeframe) &&
+          freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes
+        ) {
+          skipped.push({
+            ticker,
+            score: 0,
+            reason: 'stale-market-data',
+            lastTimestamp: freshness.lastTimestamp,
+            dataAgeMinutes: freshness.dataAgeMinutes,
+            maxAllowedAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
           });
           continue;
         }
@@ -212,6 +235,51 @@ export class MarketScanExecutor {
     if (this.dependencies.debug) {
       logger.log(`[debug] ${message}`);
     }
+  }
+
+  private calculateDataFreshness(candles: Candle[]): {
+    lastTimestamp?: Date;
+    now: Date;
+    dataAgeMinutes: number;
+  } {
+    const now = new Date();
+    const lastTimestamp = candles.at(-1)?.timestamp;
+    const dataAgeMinutes = lastTimestamp
+      ? Math.max(0, Math.floor((now.getTime() - lastTimestamp.getTime()) / 60_000))
+      : Number.POSITIVE_INFINITY;
+
+    return {
+      lastTimestamp,
+      now,
+      dataAgeMinutes,
+    };
+  }
+
+  private isIntradayTimeframe(timeframe: string): boolean {
+    return /^(\d+)\s*(m|min|minute|minutes|h|hour|hours)$/i.test(timeframe.trim());
+  }
+
+  private logFreshnessDebug(
+    ticker: string,
+    freshness: {
+      lastTimestamp?: Date;
+      now: Date;
+      dataAgeMinutes: number;
+    },
+    logger: MarketScanLogger,
+  ): void {
+    const isStale = freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes;
+
+    this.debugLog(
+      logger,
+      [
+        `frescuraDatos ticker=${ticker}`,
+        `lastTimestamp=${freshness.lastTimestamp?.toISOString() ?? 'n/a'}`,
+        `now=${freshness.now.toISOString()}`,
+        `dataAgeMinutes=${freshness.dataAgeMinutes}`,
+        `isStale=${isStale}`,
+      ].join(' '),
+    );
   }
 
   private buildScanError(ticker: string, error: unknown): MarketScanResult['errors'][number] {

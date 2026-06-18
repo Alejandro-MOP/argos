@@ -312,6 +312,10 @@ interface MarketDataProvider {
 `PolygonClient` implementa este contrato con datos reales desde Polygon Aggregates API.
 Requiere configurar `POLYGON_API_KEY`.
 
+Para timeframes intradía, `MarketScanExecutor` valida frescura de datos con
+`MARKET_DATA_MAX_AGE_MINUTES`. Si la última vela supera ese límite, el ticker se omite con
+`stale-market-data`.
+
 Timeframes soportados:
 
 - Minutos: `1m`, `5m`, `15m`, `30m`
@@ -436,6 +440,7 @@ MARKET_SCAN_WATCHLIST=custom
 MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
 MARKET_SCAN_TIMEFRAME=15m
 MARKET_SCAN_CANDLE_LIMIT=80
+MARKET_DATA_MAX_AGE_MINUTES=30
 OPPORTUNITY_NOTIFY_THRESHOLD=80
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```

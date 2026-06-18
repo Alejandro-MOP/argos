@@ -59,6 +59,7 @@ export const env = {
   marketScanCandleLimit: parseInteger(process.env.MARKET_SCAN_CANDLE_LIMIT, 80),
   marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
   marketScanDebug: parseBoolean(process.env.MARKET_SCAN_DEBUG, false),
+  marketDataMaxAgeMinutes: parseInteger(process.env.MARKET_DATA_MAX_AGE_MINUTES, 30),
   scoring: {
     maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
     opportunityNotifyThreshold: parseInteger(process.env.OPPORTUNITY_NOTIFY_THRESHOLD, 80),

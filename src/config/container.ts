@@ -67,4 +67,5 @@ export const marketScanExecutor = new MarketScanExecutor({
   signalRepository,
   notificationService,
   debug: env.marketScanDebug,
+  marketDataMaxAgeMinutes: env.marketDataMaxAgeMinutes,
 });

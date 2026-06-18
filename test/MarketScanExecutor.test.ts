@@ -6,9 +6,9 @@ import {
   type MarketScanLogger,
 } from '../src/services/MarketScanExecutor';
 
-const buildCandles = (count: number): Candle[] => {
+const buildCandles = (count: number, lastTimestamp = new Date()): Candle[] => {
   return Array.from({ length: count }, (_, index) => ({
-    timestamp: new Date(1_700_000_000_000 + index * 60_000),
+    timestamp: new Date(lastTimestamp.getTime() - (count - index - 1) * 60_000),
     open: 100 + index,
     high: 101 + index,
     low: 99 + index,
@@ -76,6 +76,7 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
     notificationService: {
       sendSignal: jest.fn(),
     },
+    marketDataMaxAgeMinutes: 30,
     ...overrides,
   } as unknown as MarketScanExecutorDependencies;
 
@@ -108,9 +109,7 @@ describe('MarketScanExecutor', () => {
     ]);
     expect(result.opportunities).toEqual([]);
     expect(logger.log).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Datos de mercado ticker=SPY velas=59 primerTimestamp=2023-11-14T22:13:20.000Z',
-      ),
+      expect.stringContaining('Datos de mercado ticker=SPY velas=59'),
     );
   });
 
@@ -189,6 +188,75 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(result.skipped).toEqual([{ ticker: 'SPY', score: 90, reason: 'invalid-risk' }]);
+  });
+
+  it('skips stale intraday market data before generating opportunities', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-18T15:00:00.000Z'));
+    const logger = buildLogger();
+    const staleLastTimestamp = new Date('2026-06-18T14:20:00.000Z');
+    const opportunityService = {
+      analyze: jest.fn(),
+    };
+    const executor = buildExecutor({
+      debug: true,
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80, staleLastTimestamp)),
+      },
+      opportunityService,
+      marketDataMaxAgeMinutes: 30,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(result.skipped).toEqual([
+      {
+        ticker: 'SPY',
+        score: 0,
+        reason: 'stale-market-data',
+        lastTimestamp: staleLastTimestamp,
+        dataAgeMinutes: 40,
+        maxAllowedAgeMinutes: 30,
+      },
+    ]);
+    expect(result.opportunities).toEqual([]);
+    expect(opportunityService.analyze).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      '[debug] frescuraDatos ticker=SPY lastTimestamp=2026-06-18T14:20:00.000Z now=2026-06-18T15:00:00.000Z dataAgeMinutes=40 isStale=true',
+    );
+
+    jest.useRealTimers();
+  });
+
+  it('does not apply freshness validation to daily timeframes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-18T15:00:00.000Z'));
+    const logger = buildLogger();
+    const opportunityService = {
+      analyze: jest.fn().mockReturnValue(buildOpportunity('SPY', 90)),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest
+          .fn()
+          .mockResolvedValue(buildCandles(80, new Date('2026-06-17T14:00:00.000Z'))),
+      },
+      opportunityService,
+      marketDataMaxAgeMinutes: 30,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '1d', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(result.skipped).not.toContainEqual(
+      expect.objectContaining({ reason: 'stale-market-data' }),
+    );
+    expect(opportunityService.analyze).toHaveBeenCalled();
+
+    jest.useRealTimers();
   });
 
   it('logs debug details only when debug is enabled', async () => {
