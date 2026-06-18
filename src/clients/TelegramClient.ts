@@ -7,6 +7,6 @@ export class TelegramClient {
   public async sendMessage(message: string): Promise<void> {
     void this.botToken;
     void this.chatId;
-    console.log(`[Telegram mock] ${message}`);
+    console.log(`[Telegram simulado] ${message}`);
   }
 }

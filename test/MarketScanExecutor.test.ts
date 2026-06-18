@@ -101,7 +101,7 @@ describe('MarketScanExecutor', () => {
     expect(result.opportunities).toEqual([]);
     expect(logger.log).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Market data SPY candlesCount=59 firstTimestamp=2023-11-14T22:13:20.000Z',
+        'Datos de mercado ticker=SPY velas=59 primerTimestamp=2023-11-14T22:13:20.000Z',
       ),
     );
   });
@@ -201,7 +201,7 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] Market scan debug enabled. timeframe=15m candleLimit=80 notify=false',
+      '[debug] Debug de escaneo habilitado. temporalidad=15m limiteVelas=80 notificar=false',
     );
   });
 });

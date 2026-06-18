@@ -32,8 +32,8 @@ export async function marketScanHttp(
 
   context.log(
     whatsAppText
-      ? `Manual market scan requested from message: ${whatsAppText}`
-      : 'Manual market scan requested',
+      ? `Escaneo manual solicitado desde mensaje: ${whatsAppText}`
+      : 'Escaneo manual solicitado',
   );
 
   const result = await marketScanExecutor.run(

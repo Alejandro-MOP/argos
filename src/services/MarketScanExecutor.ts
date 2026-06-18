@@ -72,10 +72,10 @@ export class MarketScanExecutor {
     const errors: MarketScanResult['errors'] = [];
     const skipped: MarketScanResult['skipped'] = [];
 
-    logger.log(`Starting market scan for ${tickers.length} tickers`);
+    logger.log(`Iniciando escaneo de mercado para ${tickers.length} tickers`);
     this.debugLog(
       logger,
-      `Market scan debug enabled. timeframe=${options.timeframe} candleLimit=${options.candleLimit} notify=${options.notify}`,
+      `Debug de escaneo habilitado. temporalidad=${options.timeframe} limiteVelas=${options.candleLimit} notificar=${options.notify}`,
     );
 
     for (const ticker of tickers) {
@@ -93,7 +93,7 @@ export class MarketScanExecutor {
 
         if (candles.length < options.candleLimit) {
           logger.log(
-            `Skipping ${ticker}: insufficient-data candlesCount=${candles.length} expected=${options.candleLimit}`,
+            `Omitiendo ${ticker}: datos insuficientes velas=${candles.length} esperado=${options.candleLimit}`,
           );
           skipped.push({
             ticker,
@@ -112,10 +112,10 @@ export class MarketScanExecutor {
         analyzedOpportunities.push(opportunity);
         candlesByTicker.set(ticker, candles);
       } catch (error) {
-        logger.error(`Failed to scan ${ticker}`, error);
+        logger.error(`No se pudo escanear ${ticker}`, error);
         errors.push({
           ticker,
-          message: error instanceof Error ? error.message : 'Unknown error',
+          message: error instanceof Error ? error.message : 'Error desconocido',
         });
       }
     }
@@ -140,7 +140,7 @@ export class MarketScanExecutor {
       if (!filterResult.shouldNotify) {
         const reason = filterResult.reason ?? 'below-threshold';
         logger.log(
-          `Opportunity skipped for ${opportunity.ticker}. Score: ${opportunity.score}. Reason: ${reason}`,
+          `Oportunidad omitida para ${opportunity.ticker}. Score: ${opportunity.score}. Motivo: ${reason}`,
         );
         skipped.push({
           ticker: opportunity.ticker,
@@ -169,10 +169,10 @@ export class MarketScanExecutor {
       }
 
       notifiedSignals.push(signal);
-      logger.log(`Signal generated for ${signal.ticker} ${signal.timeframe}`);
+      logger.log(`Señal generada para ${signal.ticker} ${signal.timeframe}`);
     }
 
-    logger.log('Market scan finished');
+    logger.log('Escaneo de mercado finalizado');
 
     return {
       scannedTickers: tickers,
@@ -197,12 +197,12 @@ export class MarketScanExecutor {
 
     logger.log(
       [
-        `Market data ${ticker}`,
-        `candlesCount=${candles.length}`,
-        `firstTimestamp=${firstCandle?.timestamp.toISOString() ?? 'n/a'}`,
-        `lastTimestamp=${lastCandle?.timestamp.toISOString() ?? 'n/a'}`,
-        `lastClose=${lastCandle?.close ?? 'n/a'}`,
-        `lastVolume=${lastCandle?.volume ?? 'n/a'}`,
+        `Datos de mercado ticker=${ticker}`,
+        `velas=${candles.length}`,
+        `primerTimestamp=${firstCandle?.timestamp.toISOString() ?? 'n/a'}`,
+        `ultimoTimestamp=${lastCandle?.timestamp.toISOString() ?? 'n/a'}`,
+        `ultimoCierre=${lastCandle?.close ?? 'n/a'}`,
+        `ultimoVolumen=${lastCandle?.volume ?? 'n/a'}`,
       ].join(' '),
     );
   }
