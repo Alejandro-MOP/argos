@@ -1,0 +1,71 @@
+import dotenv from 'dotenv';
+import type { WatchlistName } from '../services/WatchlistService';
+
+dotenv.config();
+
+const parseInteger = (value: string | undefined, fallback: number): number => {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const parseNumber = (value: string | undefined, fallback: number): number => {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const parseTickers = (value: string | undefined): string[] => {
+  const rawTickers = value ?? 'SPY,QQQ,AAPL,MSFT,NVDA';
+
+  return rawTickers
+    .split(',')
+    .map((ticker) => ticker.trim().toUpperCase())
+    .filter(Boolean);
+};
+
+const parseWatchlistName = (value: string | undefined): WatchlistName => {
+  const watchlist = value ?? 'custom';
+
+  if (watchlist === 'etfs' || watchlist === 'growth' || watchlist === 'dividends') {
+    return watchlist;
+  }
+
+  return 'custom';
+};
+
+export const env = {
+  polygonApiKey: process.env.POLYGON_API_KEY ?? '',
+  databaseUrl: process.env.DATABASE_URL ?? '',
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
+  telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
+  marketScanSchedule: process.env.MARKET_SCAN_SCHEDULE ?? '0 */15 14-21 * * 1-5',
+  marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
+  marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
+  marketScanCandleLimit: parseInteger(process.env.MARKET_SCAN_CANDLE_LIMIT, 80),
+  marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
+  scoring: {
+    maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
+    opportunityNotifyThreshold: parseInteger(process.env.OPPORTUNITY_NOTIFY_THRESHOLD, 80),
+    duplicateWindowMinutes: parseInteger(process.env.OPPORTUNITY_DUPLICATE_WINDOW_MINUTES, 60),
+    emaFastPeriod: parseInteger(process.env.TREND_EMA_FAST_PERIOD, 20),
+    emaSlowPeriod: parseInteger(process.env.TREND_EMA_SLOW_PERIOD, 50),
+    volumeLookbackPeriod: parseInteger(process.env.VOLUME_LOOKBACK_PERIOD, 20),
+    volumeStrongRatio: parseNumber(process.env.VOLUME_STRONG_RATIO, 1.5),
+    volumeModerateRatio: parseNumber(process.env.VOLUME_MODERATE_RATIO, 1.3),
+    volumeWeakRatio: parseNumber(process.env.VOLUME_WEAK_RATIO, 1.1),
+    rsiPeriod: parseInteger(process.env.MOMENTUM_RSI_PERIOD, 14),
+    rsiIdealMin: parseNumber(process.env.MOMENTUM_RSI_IDEAL_MIN, 55),
+    rsiIdealMax: parseNumber(process.env.MOMENTUM_RSI_IDEAL_MAX, 70),
+    rsiNeutralMin: parseNumber(process.env.MOMENTUM_RSI_NEUTRAL_MIN, 45),
+    rsiNeutralMax: parseNumber(process.env.MOMENTUM_RSI_NEUTRAL_MAX, 55),
+    rsiExtendedMax: parseNumber(process.env.MOMENTUM_RSI_EXTENDED_MAX, 80),
+    structureLookbackPeriod: parseInteger(process.env.STRUCTURE_LOOKBACK_PERIOD, 20),
+  },
+};

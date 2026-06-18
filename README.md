@@ -1,0 +1,465 @@
+# market-signal-engine
+
+Motor de análisis cuantitativo para detectar oportunidades de trading en ETFs y acciones estadounidenses.
+
+El sistema no ejecuta órdenes, no se conecta a brokers y no toma decisiones operativas. Analiza datos de mercado, genera `Opportunity`, convierte las mejores en `Signal` mediante gestión de riesgo y notifica.
+
+## Stack
+
+- Node.js 22
+- TypeScript
+- Azure Functions v4
+- PostgreSQL preparado por contrato
+- Axios
+- dotenv
+- Jest
+- ESLint
+- Prettier
+
+## Arquitectura
+
+```text
+src/
+  analyzers/
+    TrendAnalyzer.ts
+    VolumeAnalyzer.ts
+    MomentumAnalyzer.ts
+    StructureAnalyzer.ts
+  backtesting/
+    BacktestEngine.ts
+    README.md
+  clients/
+    PolygonClient.ts
+    TelegramClient.ts
+  config/
+    env.ts
+  functions/
+    marketScan/
+  models/
+    Candle.ts
+    Opportunity.ts
+    Signal.ts
+    SignalCandidate.ts
+  ports/
+    Analyzer.ts
+    MarketDataProvider.ts
+    OpportunityRepository.ts
+    SignalRepository.ts
+    SignalStore.ts
+    TradingStrategy.ts
+  repositories/
+    OpportunityMemoryRepository.ts
+    SignalRepository.ts
+  services/
+    MarketDataService.ts
+    NotificationService.ts
+    OpportunityFilter.ts
+    OpportunityService.ts
+    RankingService.ts
+    RiskService.ts
+    StrategyService.ts
+    WatchlistService.ts
+  utils/
+    marketMath.ts
+  watchlists/
+    dividends.ts
+    etfs.ts
+    growth.ts
+```
+
+La arquitectura es hexagonal:
+
+```text
+Azure Timer
+  -> Application Services
+  -> Domain Models and Ports
+  -> External Adapters
+```
+
+Los detalles externos, como Polygon, Telegram o PostgreSQL, viven detrás de interfaces. Cambiar proveedor de datos no requiere tocar la lógica de trading.
+
+## Flujo Principal
+
+```text
+Watchlist
+  -> MarketDataProvider
+  -> Analyzers
+  -> OpportunityService
+  -> RankingService
+  -> OpportunityFilter
+  -> RiskService
+  -> SignalRepository
+  -> NotificationService
+```
+
+Pasos de `marketScan`:
+
+1. Carga la watchlist configurada.
+2. Obtiene velas con `MarketDataService`.
+3. Ejecuta analyzers independientes.
+4. Genera una `Opportunity`.
+5. Rankea oportunidades por score descendente.
+6. Filtra por score mínimo y duplicados recientes.
+7. Convierte `Opportunity` en `Signal` con `RiskService`.
+8. Persiste oportunidad y señal en memoria.
+9. Notifica la señal.
+
+## Azure Functions
+
+El proyecto expone dos entradas para el mismo motor:
+
+```text
+marketScan      -> Timer Trigger / cron
+marketScanHttp  -> HTTP Trigger manual o webhook
+```
+
+Ambas usan `MarketScanExecutor`, así que el pipeline cuantitativo vive en un solo lugar.
+
+### Cron
+
+`marketScan` corre con la expresión configurada en:
+
+```text
+MARKET_SCAN_SCHEDULE=0 */15 14-21 * * 1-5
+```
+
+### HTTP Manual
+
+Endpoint local:
+
+```bash
+curl "http://localhost:7071/api/market-scan?tickers=NVDA,MSFT&timeframe=15m&limit=80&notify=true"
+```
+
+POST JSON:
+
+```bash
+curl -X POST "http://localhost:7071/api/market-scan" \
+  -H "Content-Type: application/json" \
+  -d '{"tickers":["NVDA","MSFT"],"timeframe":"15m","limit":80,"notify":true}'
+```
+
+Parámetros:
+
+- `tickers`: lista opcional. Si no se manda, usa la watchlist configurada.
+- `timeframe`: opcional. Por defecto usa `MARKET_SCAN_TIMEFRAME`.
+- `limit`: opcional. Por defecto usa `MARKET_SCAN_CANDLE_LIMIT`.
+- `notify`: opcional. Por defecto `true`.
+
+### WhatsApp
+
+La función HTTP puede actuar como webhook para WhatsApp porque acepta `POST`.
+
+Para Twilio WhatsApp, soporta `application/x-www-form-urlencoded` y lee el campo `Body`.
+
+Ejemplo de mensaje:
+
+```text
+scan NVDA MSFT
+```
+
+O:
+
+```text
+analiza SPY,QQQ
+```
+
+Si el mensaje no trae tickers, se ejecuta con la watchlist configurada.
+
+## Opportunity Engine
+
+`Opportunity` representa una oportunidad de mercado, no una orden:
+
+```ts
+interface Opportunity {
+  ticker: string;
+  timeframe: string;
+  score: number;
+  trendScore: number;
+  volumeScore: number;
+  momentumScore: number;
+  structureScore: number;
+  reasons: string[];
+  detectedAt: Date;
+}
+```
+
+`OpportunityService` combina analyzers:
+
+```text
+score = trendScore + volumeScore + momentumScore + structureScore
+max score = 100
+```
+
+Cada analyzer devuelve de `0` a `25`.
+
+## Analyzers
+
+### TrendAnalyzer
+
+Calcula EMA20 y EMA50.
+
+- `25`: EMA20 sobre EMA50 y ambas ascendentes.
+- `15`: tendencia moderada.
+- `5`: tendencia débil.
+- `0`: tendencia bajista o insuficiente.
+
+### VolumeAnalyzer
+
+Compara volumen actual contra promedio de las últimas 20 velas.
+
+- `25`: mayor a 150%.
+- `20`: mayor a 130%.
+- `10`: mayor a 110%.
+- `0`: resto.
+
+### MomentumAnalyzer
+
+Calcula RSI 14.
+
+- `25`: RSI entre 55 y 70.
+- `15`: RSI entre 45 y 55.
+- `10`: RSI entre 70 y 80.
+- `0`: resto.
+
+### StructureAnalyzer
+
+Detecta higher highs, higher lows y breakout de máximo de 20 velas.
+
+- `25`: breakout confirmado.
+- `15`: estructura alcista.
+- `5`: consolidación.
+- `0`: estructura bajista o insuficiente.
+
+## Ranking Engine
+
+`RankingService` ordena oportunidades de mayor a menor score:
+
+```ts
+const ranked = rankingService.rank(opportunities);
+```
+
+El objetivo es que el motor notifique primero lo mejor, no todo lo que apenas cumple una regla.
+
+## Filtro
+
+`OpportunityFilter` decide si una oportunidad debe notificarse.
+
+Reglas actuales:
+
+- `score >= OPPORTUNITY_NOTIFY_THRESHOLD`
+- Sin duplicados del mismo `ticker` y `timeframe` durante `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`
+
+Por defecto:
+
+```text
+OPPORTUNITY_NOTIFY_THRESHOLD=80
+OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
+```
+
+## RiskService
+
+`RiskService` convierte una `Opportunity` en `Signal`.
+
+```text
+Opportunity
+  -> RiskService
+  -> Signal
+```
+
+Reglas actuales:
+
+- `entry = close` de la última vela.
+- `stop = low` de la última vela.
+- `target = entry + risk * 2`.
+- Relación riesgo/beneficio mínima esperada: 1:2.
+
+Las estrategias y analyzers no crean `Signal` directamente.
+
+## Watchlists
+
+Watchlists disponibles:
+
+- `etfs`: VOO, XLP, XLV, VGT, SPY, QQQ
+- `growth`: NVDA, AMD, META, TSLA, NFLX, MSFT
+- `dividends`: KO, PG, PEP, JNJ, MCD
+- `custom`: usa `MARKET_SCAN_TICKERS`
+
+Configuración:
+
+```text
+MARKET_SCAN_WATCHLIST=etfs
+```
+
+Para una lista personalizada:
+
+```text
+MARKET_SCAN_WATCHLIST=custom
+MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
+```
+
+## Market Data Providers
+
+`MarketDataProvider` permite cambiar Polygon por otro proveedor sin tocar trading:
+
+```ts
+interface MarketDataProvider {
+  getCandles(ticker: string, timeframe: string, limit: number): Promise<Candle[]>;
+}
+```
+
+`PolygonClient` implementa este contrato y actualmente devuelve datos mockeados.
+
+Proveedores futuros:
+
+- Polygon
+- Alpha Vantage
+- Twelve Data
+- Yahoo Finance
+
+## Persistencia
+
+Contratos:
+
+- `OpportunityRepository`
+- `SignalRepository`
+
+Implementaciones actuales:
+
+- `OpportunityMemoryRepository`
+- `SignalRepository`
+
+Para PostgreSQL, agrega implementaciones como `PostgresOpportunityRepository` y `PostgresSignalRepository` respetando los contratos.
+
+## Telegram
+
+`NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Cuando recibe ambas, envía un formato enriquecido:
+
+```text
+🚨 OPORTUNIDAD DETECTADA
+
+Ticker:
+NVDA
+
+Score:
+87/100
+
+Trend:
+25
+
+Volume:
+22
+
+Momentum:
+20
+
+Structure:
+20
+
+Razones:
+
+* EMA20 sobre EMA50
+* Breakout confirmado
+* Volumen superior al promedio
+
+Entry:
+xxx
+
+Stop:
+xxx
+
+Target:
+xxx
+```
+
+`TelegramClient` sigue mockeado, listo para conexión real.
+
+## Backtesting
+
+La carpeta `src/backtesting` prepara la arquitectura para simulación histórica.
+
+Incluye:
+
+- `BacktestEngine`
+- `BacktestResult`
+- `TradeSimulation`
+
+Todavía no ejecuta simulaciones completas. Está preparado para reutilizar el pipeline de analyzers y risk management contra datos históricos.
+
+## Legacy StrategyService
+
+`BreakoutStrategy` se conserva por compatibilidad y está marcada como legacy mediante su nombre:
+
+```text
+legacy-breakout-20-volume-confirmation
+```
+
+La ruta principal nueva es cuantitativa:
+
+```text
+MarketData
+  -> Analyzers
+  -> Opportunity
+  -> Ranking
+  -> Filter
+  -> Risk
+  -> Signal
+```
+
+## Configuración Local
+
+```bash
+cp local.settings.json.example local.settings.json
+npm install
+npm run build
+npm start
+```
+
+`npm start` usa `func start`, por lo que necesitas Azure Functions Core Tools v4 instalado.
+
+Variables principales:
+
+```text
+POLYGON_API_KEY=
+DATABASE_URL=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+MARKET_SCAN_SCHEDULE=0 */15 14-21 * * 1-5
+MARKET_SCAN_WATCHLIST=custom
+MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
+MARKET_SCAN_TIMEFRAME=15m
+MARKET_SCAN_CANDLE_LIMIT=80
+OPPORTUNITY_NOTIFY_THRESHOLD=80
+OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
+```
+
+## Scripts
+
+```bash
+npm run build
+npm test
+npm run lint
+npm run format
+npm start
+```
+
+## Agregar un Analyzer
+
+1. Implementa `Analyzer`.
+2. Devuelve un score entre `0` y `25`.
+3. Agrega razones en el servicio que lo componga.
+4. Inyecta el analyzer en `OpportunityService`.
+
+```ts
+class VolatilityAnalyzer implements Analyzer {
+  analyze(candles: Candle[]): number {
+    return 0;
+  }
+}
+```
+
+## Agregar una Estrategia Futura
+
+Para reglas discretas todavía existe `TradingStrategy`, pero el camino recomendado es crear analyzers independientes y combinarlos en una oportunidad rankeable.
+
+Esto mantiene el sistema extensible: puedes agregar momentum, volatilidad, fuerza relativa, short interest, earnings proximity o breadth sin reescribir el pipeline.
