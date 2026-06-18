@@ -53,6 +53,7 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL ?? '',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
+  telegramEnabled: parseBoolean(process.env.TELEGRAM_ENABLED, true),
   marketScanSchedule: process.env.MARKET_SCAN_SCHEDULE ?? '0 */15 14-21 * * 1-5',
   marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',

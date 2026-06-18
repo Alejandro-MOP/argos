@@ -35,6 +35,8 @@ src/
     env.ts
   functions/
     marketScan/
+    marketScanHttp/
+    telegramTest/
   models/
     Candle.ts
     Opportunity.ts
@@ -344,13 +346,20 @@ Para PostgreSQL, agrega implementaciones como `PostgresOpportunityRepository` y 
 
 ## Telegram
 
-`NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Cuando recibe ambas, envía un formato enriquecido:
+`NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Si `TELEGRAM_ENABLED=true`
+y existen `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`, envía el mensaje real por Telegram.
+Si falta configuración o Telegram responde con error, el escaneo no falla y el mensaje se escribe en consola.
+
+Cuando recibe ambas entidades, envía un formato enriquecido:
 
 ```text
 🚨 OPORTUNIDAD DETECTADA
 
 Ticker:
 NVDA
+
+Timeframe:
+15m
 
 Score:
 87/100
@@ -381,9 +390,69 @@ xxx
 
 Target:
 xxx
+
+Risk/Reward:
+1:2.00
 ```
 
-`TelegramClient` sigue mockeado, listo para conexión real.
+### Crear Bot
+
+1. Abre Telegram y busca `@BotFather`.
+2. Envía `/newbot`.
+3. Sigue las instrucciones y copia el token entregado.
+4. Configura el token como `TELEGRAM_BOT_TOKEN`.
+
+### Obtener Chat ID
+
+1. Escribe un mensaje a tu bot desde Telegram.
+2. Abre en el navegador:
+
+```text
+https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates
+```
+
+3. Busca `chat.id` en la respuesta y configúralo como `TELEGRAM_CHAT_ID`.
+4. No compartas ni subas el token; `local.settings.json` está ignorado por git.
+
+### Configuración Telegram
+
+```json
+{
+  "Values": {
+    "TELEGRAM_ENABLED": "true",
+    "TELEGRAM_BOT_TOKEN": "123456:token",
+    "TELEGRAM_CHAT_ID": "123456789"
+  }
+}
+```
+
+### Probar Telegram
+
+Con Azure Functions corriendo:
+
+```bash
+curl "http://localhost:7071/api/telegram-test"
+```
+
+También acepta `POST`:
+
+```bash
+curl -X POST "http://localhost:7071/api/telegram-test"
+```
+
+Debe enviar:
+
+```text
+✅ market-signal-engine conectado a Telegram
+```
+
+### Notificar Señales
+
+El escaneo HTTP notifica por defecto. También puedes forzarlo:
+
+```bash
+curl "http://localhost:7071/api/market-scan?tickers=NVDA,MSFT&timeframe=15m&limit=80&notify=true"
+```
 
 ## Backtesting
 
@@ -435,6 +504,7 @@ POLYGON_API_KEY=
 DATABASE_URL=
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+TELEGRAM_ENABLED=true
 MARKET_SCAN_SCHEDULE=0 */15 14-21 * * 1-5
 MARKET_SCAN_WATCHLIST=custom
 MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA

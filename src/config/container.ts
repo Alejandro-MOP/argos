@@ -50,11 +50,12 @@ const opportunityFilter = new OpportunityFilter(opportunityRepository, {
   duplicateWindowMinutes: env.scoring.duplicateWindowMinutes,
 });
 const riskService = new RiskService();
-const telegramClient =
-  env.telegramBotToken && env.telegramChatId
-    ? new TelegramClient(env.telegramBotToken, env.telegramChatId)
-    : undefined;
-const notificationService = new NotificationService(telegramClient);
+const telegramClient = new TelegramClient(
+  env.telegramBotToken,
+  env.telegramChatId,
+  env.telegramEnabled,
+);
+export const notificationService = new NotificationService(telegramClient);
 
 export const marketScanExecutor = new MarketScanExecutor({
   marketDataService,

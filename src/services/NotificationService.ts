@@ -17,8 +17,11 @@ export class NotificationService {
           `Score: ${signal.score}`,
         ].join(' | ');
 
-    if (this.telegramClient) {
-      await this.telegramClient.sendMessage(message);
+    await this.sendMessage(message);
+  }
+
+  public async sendMessage(message: string): Promise<void> {
+    if (this.telegramClient && (await this.telegramClient.sendMessage(message))) {
       return;
     }
 
@@ -34,33 +37,50 @@ export class NotificationService {
       'Ticker:',
       opportunity.ticker,
       '',
+      'Timeframe:',
+      signal.timeframe,
+      '',
       'Score:',
       `${opportunity.score}/100`,
       '',
-      'Tendencia:',
+      'Trend:',
       `${opportunity.trendScore}`,
       '',
-      'Volumen:',
+      'Volume:',
       `${opportunity.volumeScore}`,
       '',
       'Momentum:',
       `${opportunity.momentumScore}`,
       '',
-      'Estructura:',
+      'Structure:',
       `${opportunity.structureScore}`,
       '',
       'Razones:',
       '',
       reasons,
       '',
-      'Entrada:',
+      'Entry:',
       `${signal.entry}`,
       '',
       'Stop:',
       `${signal.stop}`,
       '',
-      'Objetivo:',
+      'Target:',
       `${signal.target}`,
+      '',
+      'Risk/Reward:',
+      this.formatRiskReward(signal),
     ].join('\n');
+  }
+
+  private formatRiskReward(signal: Signal): string {
+    const risk = Math.abs(signal.entry - signal.stop);
+    const reward = Math.abs(signal.target - signal.entry);
+
+    if (risk <= 0) {
+      return 'n/a';
+    }
+
+    return `1:${(reward / risk).toFixed(2)}`;
   }
 }
