@@ -308,11 +308,17 @@ interface MarketDataProvider {
 }
 ```
 
-`PolygonClient` implementa este contrato y actualmente devuelve datos mockeados.
+`PolygonClient` implementa este contrato con datos reales desde Polygon Aggregates API.
+Requiere configurar `POLYGON_API_KEY`.
 
-Proveedores futuros:
+Timeframes soportados:
 
-- Polygon
+- Minutos: `1m`, `5m`, `15m`, `30m`
+- Horas: `1h`, `4h`
+- Diario/semanal/mensual: `1d`, `1w`, `1mo`
+
+Proveedores alternativos futuros:
+
 - Alpha Vantage
 - Twelve Data
 - Yahoo Finance
