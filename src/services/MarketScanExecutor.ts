@@ -11,6 +11,8 @@ import type { RankingService } from './RankingService';
 import type { RiskService } from './RiskService';
 import type { WatchlistService } from './WatchlistService';
 
+const MINIMUM_PROVIDER_CANDLES = 60;
+
 export interface MarketScanLogger {
   log(message: string): void;
   error(message: string, error?: unknown): void;
@@ -23,6 +25,12 @@ export interface MarketScanOptions {
   notify: boolean;
 }
 
+export type MarketScanSkippedReason =
+  | 'below-threshold'
+  | 'duplicate-window'
+  | 'insufficient-data'
+  | 'invalid-risk';
+
 export interface MarketScanResult {
   scannedTickers: string[];
   opportunities: Opportunity[];
@@ -30,7 +38,7 @@ export interface MarketScanResult {
   skipped: Array<{
     ticker: string;
     score: number;
-    reason: string;
+    reason: MarketScanSkippedReason;
   }>;
   errors: Array<{
     ticker: string;
@@ -48,6 +56,7 @@ export interface MarketScanExecutorDependencies {
   opportunityRepository: OpportunityRepository;
   signalRepository: SignalRepository;
   notificationService: NotificationService;
+  debug?: boolean;
 }
 
 export class MarketScanExecutor {
@@ -61,8 +70,13 @@ export class MarketScanExecutor {
     const analyzedOpportunities: Opportunity[] = [];
     const candlesByTicker = new Map<string, Candle[]>();
     const errors: MarketScanResult['errors'] = [];
+    const skipped: MarketScanResult['skipped'] = [];
 
     logger.log(`Starting market scan for ${tickers.length} tickers`);
+    this.debugLog(
+      logger,
+      `Market scan debug enabled. timeframe=${options.timeframe} candleLimit=${options.candleLimit} notify=${options.notify}`,
+    );
 
     for (const ticker of tickers) {
       try {
@@ -71,6 +85,24 @@ export class MarketScanExecutor {
           options.timeframe,
           options.candleLimit,
         );
+        this.logCandleSummary(ticker, candles, logger);
+
+        if (candles.length < MINIMUM_PROVIDER_CANDLES) {
+          throw new Error('insufficient-candles');
+        }
+
+        if (candles.length < options.candleLimit) {
+          logger.log(
+            `Skipping ${ticker}: insufficient-data candlesCount=${candles.length} expected=${options.candleLimit}`,
+          );
+          skipped.push({
+            ticker,
+            score: 0,
+            reason: 'insufficient-data',
+          });
+          continue;
+        }
+
         const opportunity = this.dependencies.opportunityService.analyze(
           ticker,
           options.timeframe,
@@ -90,7 +122,6 @@ export class MarketScanExecutor {
 
     const rankedOpportunities = this.dependencies.rankingService.rank(analyzedOpportunities);
     const notifiedSignals: Signal[] = [];
-    const skipped: MarketScanResult['skipped'] = [];
 
     for (const opportunity of rankedOpportunities) {
       const candles = candlesByTicker.get(opportunity.ticker);
@@ -99,17 +130,22 @@ export class MarketScanExecutor {
         skipped.push({
           ticker: opportunity.ticker,
           score: opportunity.score,
-          reason: 'candles-not-found',
+          reason: 'insufficient-data',
         });
         continue;
       }
 
-      if (!(await this.dependencies.opportunityFilter.shouldNotify(opportunity))) {
-        logger.log(`Opportunity skipped for ${opportunity.ticker}. Score: ${opportunity.score}`);
+      const filterResult = await this.dependencies.opportunityFilter.evaluate(opportunity);
+
+      if (!filterResult.shouldNotify) {
+        const reason = filterResult.reason ?? 'below-threshold';
+        logger.log(
+          `Opportunity skipped for ${opportunity.ticker}. Score: ${opportunity.score}. Reason: ${reason}`,
+        );
         skipped.push({
           ticker: opportunity.ticker,
           score: opportunity.score,
-          reason: 'below-threshold-or-duplicate',
+          reason,
         });
         continue;
       }
@@ -120,7 +156,7 @@ export class MarketScanExecutor {
         skipped.push({
           ticker: opportunity.ticker,
           score: opportunity.score,
-          reason: 'risk-not-valid',
+          reason: 'invalid-risk',
         });
         continue;
       }
@@ -153,5 +189,27 @@ export class MarketScanExecutor {
     }
 
     return this.dependencies.watchlistService.getTickers();
+  }
+
+  private logCandleSummary(ticker: string, candles: Candle[], logger: MarketScanLogger): void {
+    const firstCandle = candles.at(0);
+    const lastCandle = candles.at(-1);
+
+    logger.log(
+      [
+        `Market data ${ticker}`,
+        `candlesCount=${candles.length}`,
+        `firstTimestamp=${firstCandle?.timestamp.toISOString() ?? 'n/a'}`,
+        `lastTimestamp=${lastCandle?.timestamp.toISOString() ?? 'n/a'}`,
+        `lastClose=${lastCandle?.close ?? 'n/a'}`,
+        `lastVolume=${lastCandle?.volume ?? 'n/a'}`,
+      ].join(' '),
+    );
+  }
+
+  private debugLog(logger: MarketScanLogger, message: string): void {
+    if (this.dependencies.debug) {
+      logger.log(`[debug] ${message}`);
+    }
   }
 }

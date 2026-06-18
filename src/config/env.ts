@@ -21,6 +21,14 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
+const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
+  if (!value) {
+    return fallback;
+  }
+
+  return value.trim().toLowerCase() === 'true';
+};
+
 const parseTickers = (value: string | undefined): string[] => {
   const rawTickers = value ?? 'SPY,QQQ,AAPL,MSFT,NVDA';
 
@@ -50,6 +58,7 @@ export const env = {
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
   marketScanCandleLimit: parseInteger(process.env.MARKET_SCAN_CANDLE_LIMIT, 80),
   marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
+  marketScanDebug: parseBoolean(process.env.MARKET_SCAN_DEBUG, false),
   scoring: {
     maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
     opportunityNotifyThreshold: parseInteger(process.env.OPPORTUNITY_NOTIFY_THRESHOLD, 80),

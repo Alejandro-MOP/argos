@@ -55,7 +55,7 @@ export class PolygonClient implements MarketDataProvider {
       {
         params: {
           adjusted: true,
-          sort: 'desc',
+          sort: 'asc',
           limit: normalizedLimit,
           apiKey: this.apiKey,
         },
@@ -74,7 +74,7 @@ export class PolygonClient implements MarketDataProvider {
 
     return results
       .slice(0, normalizedLimit)
-      .reverse()
+      .sort((left, right) => left.t - right.t)
       .map((aggregate) => ({
         timestamp: new Date(aggregate.t),
         open: aggregate.o,

@@ -26,7 +26,7 @@ describe('PolygonClient', () => {
           adjusted: true,
           apiKey: 'test-api-key',
           limit: 2,
-          sort: 'desc',
+          sort: 'asc',
         }),
       }),
     );

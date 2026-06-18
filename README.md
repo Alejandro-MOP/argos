@@ -289,6 +289,7 @@ Configuración:
 
 ```text
 MARKET_SCAN_WATCHLIST=etfs
+MARKET_SCAN_DEBUG=false
 ```
 
 Para una lista personalizada:

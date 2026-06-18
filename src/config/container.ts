@@ -66,4 +66,5 @@ export const marketScanExecutor = new MarketScanExecutor({
   opportunityRepository,
   signalRepository,
   notificationService,
+  debug: env.marketScanDebug,
 });

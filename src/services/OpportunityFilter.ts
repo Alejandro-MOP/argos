@@ -6,6 +6,13 @@ export interface OpportunityFilterConfig {
   duplicateWindowMinutes: number;
 }
 
+export type OpportunityFilterSkipReason = 'below-threshold' | 'duplicate-window';
+
+export interface OpportunityFilterResult {
+  shouldNotify: boolean;
+  reason?: OpportunityFilterSkipReason;
+}
+
 export class OpportunityFilter {
   public constructor(
     private readonly opportunityRepository: OpportunityRepository,
@@ -13,8 +20,17 @@ export class OpportunityFilter {
   ) {}
 
   public async shouldNotify(opportunity: Opportunity): Promise<boolean> {
+    const result = await this.evaluate(opportunity);
+
+    return result.shouldNotify;
+  }
+
+  public async evaluate(opportunity: Opportunity): Promise<OpportunityFilterResult> {
     if (opportunity.score < this.config.minimumScore) {
-      return false;
+      return {
+        shouldNotify: false,
+        reason: 'below-threshold',
+      };
     }
 
     const duplicateWindowStart = new Date(
@@ -26,6 +42,15 @@ export class OpportunityFilter {
       duplicateWindowStart,
     );
 
-    return recentOpportunities.length === 0;
+    if (recentOpportunities.length > 0) {
+      return {
+        shouldNotify: false,
+        reason: 'duplicate-window',
+      };
+    }
+
+    return {
+      shouldNotify: true,
+    };
   }
 }
