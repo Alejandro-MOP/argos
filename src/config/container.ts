@@ -2,8 +2,10 @@ import { MomentumAnalyzer } from '../analyzers/MomentumAnalyzer';
 import { StructureAnalyzer } from '../analyzers/StructureAnalyzer';
 import { TrendAnalyzer } from '../analyzers/TrendAnalyzer';
 import { VolumeAnalyzer } from '../analyzers/VolumeAnalyzer';
+import { FinnhubClient } from '../clients/FinnhubClient';
 import { PolygonClient } from '../clients/PolygonClient';
 import { TelegramClient } from '../clients/TelegramClient';
+import type { MarketDataProvider } from '../ports/MarketDataProvider';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
 import { SignalRepository } from '../repositories/SignalRepository';
 import { MarketDataService } from '../services/MarketDataService';
@@ -15,10 +17,21 @@ import { RateLimiterService } from '../services/RateLimiterService';
 import { RankingService } from '../services/RankingService';
 import { RiskService } from '../services/RiskService';
 import { WatchlistService } from '../services/WatchlistService';
-import { env } from './env';
+import { env, type MarketDataProviderName } from './env';
 
-const polygonClient = new PolygonClient(env.polygonApiKey, undefined, env.marketScanDebug);
-const marketDataService = new MarketDataService(polygonClient);
+export const createMarketDataProvider = (
+  provider: MarketDataProviderName,
+  debug: boolean,
+): MarketDataProvider => {
+  if (provider === 'finnhub') {
+    return new FinnhubClient(env.finnhubApiKey, undefined, debug);
+  }
+
+  return new PolygonClient(env.polygonApiKey, undefined, debug);
+};
+
+const marketDataProvider = createMarketDataProvider(env.marketDataProvider, env.marketScanDebug);
+const marketDataService = new MarketDataService(marketDataProvider);
 const rateLimiterService = new RateLimiterService(env.marketDataRequestDelayMs);
 const opportunityRepository = new OpportunityMemoryRepository();
 const signalRepository = new SignalRepository();

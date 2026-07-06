@@ -1,7 +1,18 @@
 import axios, { type AxiosInstance } from 'axios';
+import {
+  InsufficientCandlesError,
+  MarketDataProviderError,
+  MarketDataRateLimitError,
+} from '../errors/MarketDataErrors';
 import type { Candle } from '../models/Candle';
 import type { MarketDataProvider } from '../ports/MarketDataProvider';
-import { sanitizeError, type SanitizedProviderError } from '../utils/sanitizeError';
+import { sanitizeError } from '../utils/sanitizeError';
+
+export {
+  InsufficientCandlesError,
+  MarketDataProviderError,
+  MarketDataRateLimitError,
+} from '../errors/MarketDataErrors';
 
 const POLYGON_API_LIMIT = 5_000;
 const MINIMUM_PROVIDER_CANDLES = 60;
@@ -32,35 +43,6 @@ export interface PolygonRequestDebug {
   lastReturnedTimestamp: string;
   firstClose: number | string;
   lastClose: number | string;
-}
-
-export class InsufficientCandlesError extends Error {
-  public constructor(
-    public readonly ticker: string,
-    public readonly candlesCount: number,
-    public readonly requestedFrom: string,
-    public readonly requestedTo: string,
-  ) {
-    super('insufficient-candles');
-  }
-}
-
-export class MarketDataRateLimitError extends Error {
-  public constructor(
-    public readonly provider: string,
-    public readonly status: number,
-    public readonly endpoint?: string,
-    public readonly requestId?: string,
-    public readonly statusText?: string,
-  ) {
-    super('rate-limit-exceeded');
-  }
-}
-
-export class MarketDataProviderError extends Error {
-  public constructor(public readonly details: SanitizedProviderError) {
-    super(details.message);
-  }
 }
 
 export const mapPolygonAggregateToCandle = (aggregate: unknown): Candle | null => {

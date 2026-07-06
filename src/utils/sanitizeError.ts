@@ -18,7 +18,7 @@ export interface SanitizeErrorContext {
 
 const redactSensitiveValue = (value: string): string => {
   return value
-    .replace(/(apiKey|apikey|api_key)=[^&\s]+/gi, '$1=[redacted]')
+    .replace(/(apiKey|apikey|api_key|token)=[^&\s]+/gi, '$1=[redacted]')
     .replace(/\/bot[^/\s]+\/sendMessage/g, '/bot[redacted]/sendMessage')
     .slice(0, 220);
 };

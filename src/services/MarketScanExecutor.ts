@@ -5,7 +5,7 @@ import {
   InsufficientCandlesError,
   MarketDataProviderError,
   MarketDataRateLimitError,
-} from '../clients/PolygonClient';
+} from '../errors/MarketDataErrors';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { SignalRepository } from '../ports/SignalRepository';
 import type { MarketDataService } from './MarketDataService';

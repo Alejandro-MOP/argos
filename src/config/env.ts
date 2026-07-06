@@ -3,6 +3,8 @@ import type { WatchlistName } from '../services/WatchlistService';
 
 dotenv.config();
 
+export type MarketDataProviderName = 'polygon' | 'finnhub';
+
 const parseInteger = (value: string | undefined, fallback: number): number => {
   if (!value) {
     return fallback;
@@ -48,8 +50,20 @@ const parseWatchlistName = (value: string | undefined): WatchlistName => {
   return 'custom';
 };
 
+const parseMarketDataProviderName = (value: string | undefined): MarketDataProviderName => {
+  const provider = value?.trim().toLowerCase() ?? 'polygon';
+
+  if (provider === 'polygon' || provider === 'finnhub') {
+    return provider;
+  }
+
+  return 'polygon';
+};
+
 export const env = {
+  marketDataProvider: parseMarketDataProviderName(process.env.MARKET_DATA_PROVIDER),
   polygonApiKey: process.env.POLYGON_API_KEY ?? '',
+  finnhubApiKey: process.env.FINNHUB_API_KEY ?? '',
   databaseUrl: process.env.DATABASE_URL ?? '',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',

@@ -29,6 +29,7 @@ src/
     BacktestEngine.ts
     README.md
   clients/
+    FinnhubClient.ts
     PolygonClient.ts
     TelegramClient.ts
   config/
@@ -314,7 +315,7 @@ MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
 
 ## Market Data Providers
 
-`MarketDataProvider` permite cambiar Polygon por otro proveedor sin tocar trading:
+`MarketDataProvider` permite cambiar proveedor de datos sin tocar la lógica de trading:
 
 ```ts
 interface MarketDataProvider {
@@ -322,18 +323,58 @@ interface MarketDataProvider {
 }
 ```
 
-`PolygonClient` implementa este contrato con datos reales desde Polygon Aggregates API.
-Requiere configurar `POLYGON_API_KEY`.
+El motor usa una arquitectura multiproveedor:
+
+```text
+MarketScanExecutor
+  -> MarketDataService
+    -> MarketDataProvider
+      -> PolygonClient | FinnhubClient
+```
+
+La selección se hace únicamente en `container.ts` mediante inyección de dependencias. El resto
+del motor (`TrendAnalyzer`, `VolumeAnalyzer`, `MomentumAnalyzer`, `StructureAnalyzer`,
+`RiskService`, `NotificationService`, `MarketScanExecutor`) solo recibe `Candle[]` y no conoce
+qué proveedor se está usando.
+
+Proveedores disponibles:
+
+- `polygon`: usa Polygon Aggregates API. Requiere `POLYGON_API_KEY`.
+- `finnhub`: usa Finnhub Stock Candles API. Requiere `FINNHUB_API_KEY`.
+
+Para cambiar de proveedor:
+
+```text
+MARKET_DATA_PROVIDER=polygon
+```
+
+o:
+
+```text
+MARKET_DATA_PROVIDER=finnhub
+```
+
+Para agregar un tercer proveedor:
+
+1. Crea un cliente que implemente `MarketDataProvider`.
+2. Mapea la respuesta externa al modelo interno `Candle`.
+3. Devuelve las velas en orden cronológico ascendente.
+4. Agrega la rama de construcción en `container.ts`.
+5. Mantén las API keys y detalles externos dentro del cliente, nunca en el motor.
 
 Para timeframes intradía, `MarketScanExecutor` valida frescura de datos con
 `MARKET_DATA_MAX_AGE_MINUTES`. Si la última vela supera ese límite, el ticker se omite con
 `stale-market-data`.
 
-Timeframes soportados:
+Timeframes soportados por el motor:
 
 - Minutos: `1m`, `5m`, `15m`, `30m`
 - Horas: `1h`, `4h`
-- Diario/semanal/mensual: `1d`, `1w`, `1mo`
+- Diario/semanal: `1d`, `1w`
+
+Limitación de Finnhub: la API documenta resoluciones `1`, `5`, `15`, `30`, `60`, `D`, `W` y `M`.
+Por eso `1m`, `5m`, `15m`, `30m`, `1h`, `1d` y `1w` están soportados directamente; `4h` no se
+soporta directamente con Finnhub.
 
 Proveedores alternativos futuros:
 
@@ -521,6 +562,8 @@ Variables principales:
 
 ```text
 POLYGON_API_KEY=
+FINNHUB_API_KEY=
+MARKET_DATA_PROVIDER=polygon
 DATABASE_URL=
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
@@ -547,6 +590,8 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
 | `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
 | `POLYGON_API_KEY`                      | API key de Polygon/Massive para obtener velas reales de mercado.                                 |
+| `FINNHUB_API_KEY`                      | API key de Finnhub para obtener velas reales cuando `MARKET_DATA_PROVIDER=finnhub`.              |
+| `MARKET_DATA_PROVIDER`                 | Proveedor de datos de mercado: `polygon` o `finnhub`. Default: `polygon`.                        |
 | `DATABASE_URL`                         | URL de PostgreSQL reservada para futuras implementaciones persistentes.                          |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |

@@ -4,6 +4,8 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "DATABASE_URL": "",
+    "FINNHUB_API_KEY": "",
+    "MARKET_DATA_PROVIDER": "polygon",
     "MARKET_DATA_MAX_AGE_MINUTES": "30",
     "MARKET_DATA_MAX_RETRIES": "3",
     "MARKET_DATA_REQUEST_DELAY_MS": "13000",
