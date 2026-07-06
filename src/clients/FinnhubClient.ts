@@ -12,13 +12,13 @@ const MINIMUM_PROVIDER_CANDLES = 60;
 const DAY_IN_SECONDS = 86_400;
 
 interface FinnhubCandlesResponse {
-  c?: unknown[];
-  h?: unknown[];
-  l?: unknown[];
-  o?: unknown[];
-  s?: string;
-  t?: unknown[];
-  v?: unknown[];
+  closePrices: unknown[];
+  highPrices: unknown[];
+  lowPrices: unknown[];
+  openPrices: unknown[];
+  status?: string;
+  timestamps: unknown[];
+  volumes: unknown[];
 }
 
 interface FinnhubTimeframe {
@@ -37,6 +37,31 @@ export interface FinnhubRequestDebug {
   firstTimestamp: string;
   lastTimestamp: string;
 }
+
+const normalizeFinnhubApiResponse = (rawResponse: unknown): FinnhubCandlesResponse => {
+  if (!rawResponse || typeof rawResponse !== 'object') {
+    return {
+      closePrices: [],
+      highPrices: [],
+      lowPrices: [],
+      openPrices: [],
+      timestamps: [],
+      volumes: [],
+    };
+  }
+
+  const responseRecord = rawResponse as Record<string, unknown>;
+
+  return {
+    closePrices: Array.isArray(responseRecord.c) ? responseRecord.c : [],
+    highPrices: Array.isArray(responseRecord.h) ? responseRecord.h : [],
+    lowPrices: Array.isArray(responseRecord.l) ? responseRecord.l : [],
+    openPrices: Array.isArray(responseRecord.o) ? responseRecord.o : [],
+    status: typeof responseRecord.s === 'string' ? responseRecord.s : undefined,
+    timestamps: Array.isArray(responseRecord.t) ? responseRecord.t : [],
+    volumes: Array.isArray(responseRecord.v) ? responseRecord.v : [],
+  };
+};
 
 export const parseFinnhubTimeframe = (timeframe: string): FinnhubTimeframe => {
   const normalized = timeframe.trim().toLowerCase();
@@ -64,19 +89,13 @@ export const parseFinnhubTimeframe = (timeframe: string): FinnhubTimeframe => {
 };
 
 export const mapFinnhubResponseToCandles = (response: FinnhubCandlesResponse): Candle[] => {
-  const timestamps = response.t ?? [];
-  const opens = response.o ?? [];
-  const highs = response.h ?? [];
-  const lows = response.l ?? [];
-  const closes = response.c ?? [];
-  const volumes = response.v ?? [];
   const length = Math.min(
-    timestamps.length,
-    opens.length,
-    highs.length,
-    lows.length,
-    closes.length,
-    volumes.length,
+    response.timestamps.length,
+    response.openPrices.length,
+    response.highPrices.length,
+    response.lowPrices.length,
+    response.closePrices.length,
+    response.volumes.length,
   );
   const candles: Candle[] = [];
 
@@ -95,12 +114,12 @@ const mapFinnhubCandleAtIndex = (
   response: FinnhubCandlesResponse,
   index: number,
 ): Candle | null => {
-  const timestamp = Number(response.t?.[index]);
-  const open = Number(response.o?.[index]);
-  const high = Number(response.h?.[index]);
-  const low = Number(response.l?.[index]);
-  const close = Number(response.c?.[index]);
-  const volume = Number(response.v?.[index]);
+  const timestamp = Number(response.timestamps[index]);
+  const open = Number(response.openPrices[index]);
+  const high = Number(response.highPrices[index]);
+  const low = Number(response.lowPrices[index]);
+  const close = Number(response.closePrices[index]);
+  const volume = Number(response.volumes[index]);
 
   if (
     !Number.isFinite(timestamp) ||
@@ -159,8 +178,9 @@ export class FinnhubClient implements MarketDataProvider {
     const endpoint = '/api/v1/stock/candle';
     const normalizedTicker = ticker.toUpperCase();
     const response = await this.fetchCandles(endpoint, normalizedTicker, parsedTimeframe, from, to);
+    const normalizedResponse = normalizeFinnhubApiResponse(response.data);
 
-    if (response.data.s === 'no_data') {
+    if (normalizedResponse.status === 'no_data') {
       throw new InsufficientCandlesError(
         normalizedTicker,
         0,
@@ -169,11 +189,11 @@ export class FinnhubClient implements MarketDataProvider {
       );
     }
 
-    if (response.data.s && response.data.s !== 'ok') {
-      throw new Error(`Finnhub API request failed with status: ${response.data.s}`);
+    if (normalizedResponse.status && normalizedResponse.status !== 'ok') {
+      throw new Error(`Finnhub API request failed with status: ${normalizedResponse.status}`);
     }
 
-    const candles = mapFinnhubResponseToCandles(response.data).slice(-normalizedLimit);
+    const candles = mapFinnhubResponseToCandles(normalizedResponse).slice(-normalizedLimit);
 
     this.logDebug({
       provider: 'finnhub',
@@ -237,9 +257,9 @@ export class FinnhubClient implements MarketDataProvider {
     timeframe: FinnhubTimeframe,
     from: number,
     to: number,
-  ): Promise<{ data: FinnhubCandlesResponse }> {
+  ): Promise<{ data: unknown }> {
     try {
-      return await this.httpClient.get<FinnhubCandlesResponse>(endpoint, {
+      return await this.httpClient.get<unknown>(endpoint, {
         params: {
           symbol: ticker,
           resolution: timeframe.resolution,

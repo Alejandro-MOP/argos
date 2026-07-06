@@ -18,28 +18,38 @@ const buildHttpClient = (response: unknown): AxiosInstance => {
 };
 
 interface FinnhubTestResponse {
-  c: number[];
-  h: number[];
-  l: number[];
-  o: number[];
-  s: string;
-  t: number[];
-  v: number[];
+  closePrices: number[];
+  highPrices: number[];
+  lowPrices: number[];
+  openPrices: number[];
+  status: string;
+  timestamps: number[];
+  volumes: number[];
 }
 
 const buildFinnhubResponse = (count: number): FinnhubTestResponse => {
   const timestamps = Array.from({ length: count }, (_, index) => 1_700_000_000 + index * 60);
 
   return {
-    s: 'ok',
-    t: timestamps,
-    o: timestamps.map((_, index) => 100 + index),
-    h: timestamps.map((_, index) => 102 + index),
-    l: timestamps.map((_, index) => 99 + index),
-    c: timestamps.map((_, index) => 101 + index),
-    v: timestamps.map((_, index) => 1_000_000 + index),
+    status: 'ok',
+    timestamps,
+    openPrices: timestamps.map((_, index) => 100 + index),
+    highPrices: timestamps.map((_, index) => 102 + index),
+    lowPrices: timestamps.map((_, index) => 99 + index),
+    closePrices: timestamps.map((_, index) => 101 + index),
+    volumes: timestamps.map((_, index) => 1_000_000 + index),
   };
 };
+
+const buildFinnhubApiResponse = (response: FinnhubTestResponse): Record<string, unknown> => ({
+  c: response.closePrices,
+  h: response.highPrices,
+  l: response.lowPrices,
+  o: response.openPrices,
+  s: response.status,
+  t: response.timestamps,
+  v: response.volumes,
+});
 
 describe('FinnhubClient', () => {
   beforeEach(() => {
@@ -53,13 +63,13 @@ describe('FinnhubClient', () => {
 
   it('maps Finnhub candle arrays to Candle objects in chronological order', () => {
     const candles = mapFinnhubResponseToCandles({
-      s: 'ok',
-      t: [1_700_000_120, 1_700_000_000, 1_700_000_060],
-      o: [102, 100, 101],
-      h: [104, 102, 103],
-      l: [101, 99, 100],
-      c: [103, 101, 102],
-      v: [1_000_002, 1_000_000, 1_000_001],
+      status: 'ok',
+      timestamps: [1_700_000_120, 1_700_000_000, 1_700_000_060],
+      openPrices: [102, 100, 101],
+      highPrices: [104, 102, 103],
+      lowPrices: [101, 99, 100],
+      closePrices: [103, 101, 102],
+      volumes: [1_000_002, 1_000_000, 1_000_001],
     });
 
     expect(candles).toEqual([
@@ -103,13 +113,13 @@ describe('FinnhubClient', () => {
 
   it('fetches Finnhub candles and returns the latest useful candles ascending', async () => {
     const response = buildFinnhubResponse(81);
-    response.t.reverse();
-    response.o.reverse();
-    response.h.reverse();
-    response.l.reverse();
-    response.c.reverse();
-    response.v.reverse();
-    const httpClient = buildHttpClient(response);
+    response.timestamps.reverse();
+    response.openPrices.reverse();
+    response.highPrices.reverse();
+    response.lowPrices.reverse();
+    response.closePrices.reverse();
+    response.volumes.reverse();
+    const httpClient = buildHttpClient(buildFinnhubApiResponse(response));
     const client = new FinnhubClient('test-api-key', httpClient);
 
     const candles = await client.getCandles('googl', '15m', 80);
@@ -132,7 +142,7 @@ describe('FinnhubClient', () => {
 
   it('logs safe Finnhub debug details without the API key', async () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-    const httpClient = buildHttpClient(buildFinnhubResponse(80));
+    const httpClient = buildHttpClient(buildFinnhubApiResponse(buildFinnhubResponse(80)));
     const client = new FinnhubClient('secret-api-key', httpClient, true);
 
     await client.getCandles('SPY', '1d', 80);
