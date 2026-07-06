@@ -48,7 +48,7 @@ const opportunityService = new OpportunityService({
 });
 const rankingService = new RankingService();
 const opportunityFilter = new OpportunityFilter(opportunityRepository, {
-  minimumScore: env.scoring.opportunityNotifyThreshold,
+  minimumScore: env.scoring.opportunityMinScore,
   duplicateWindowMinutes: env.scoring.duplicateWindowMinutes,
 });
 const riskService = new RiskService();
@@ -57,7 +57,9 @@ const telegramClient = new TelegramClient(
   env.telegramChatId,
   env.telegramEnabled,
 );
-export const notificationService = new NotificationService(telegramClient);
+export const notificationService = new NotificationService(telegramClient, {
+  minimumScore: env.scoring.telegramNotificationMinScore,
+});
 
 export const marketScanExecutor = new MarketScanExecutor({
   marketDataService,

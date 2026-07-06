@@ -2,8 +2,23 @@ import type { Signal } from '../models/Signal';
 import type { Opportunity } from '../models/Opportunity';
 import type { TelegramClient } from '../clients/TelegramClient';
 
+export interface NotificationServiceConfig {
+  minimumScore: number;
+}
+
 export class NotificationService {
-  public constructor(private readonly telegramClient?: TelegramClient) {}
+  public constructor(
+    private readonly telegramClient?: TelegramClient,
+    private readonly config: NotificationServiceConfig = { minimumScore: 80 },
+  ) {}
+
+  public shouldNotifyOpportunity(opportunity: Opportunity): boolean {
+    return opportunity.score >= this.config.minimumScore;
+  }
+
+  public getMinimumScore(): number {
+    return this.config.minimumScore;
+  }
 
   public async sendSignal(signal: Signal, opportunity?: Opportunity): Promise<void> {
     const message = opportunity

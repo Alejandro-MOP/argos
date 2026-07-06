@@ -77,12 +77,14 @@ describe('Opportunity pipeline', () => {
   it('filters low score and duplicate opportunities', async () => {
     const repository = new OpportunityMemoryRepository();
     const filter = new OpportunityFilter(repository, {
-      minimumScore: 80,
+      minimumScore: 50,
       duplicateWindowMinutes: 60,
     });
     const opportunity = buildOpportunity(85);
 
-    expect(await filter.shouldNotify(buildOpportunity(60))).toBe(false);
+    expect(filter.getMinimumScore()).toBe(50);
+    expect(await filter.shouldNotify(buildOpportunity(49))).toBe(false);
+    expect(await filter.shouldNotify(buildOpportunity(60))).toBe(true);
     expect(await filter.shouldNotify(opportunity)).toBe(true);
 
     await repository.save(opportunity);

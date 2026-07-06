@@ -67,7 +67,8 @@ export const env = {
   marketDataSequential: parseBoolean(process.env.MARKET_DATA_SEQUENTIAL, true),
   scoring: {
     maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
-    opportunityNotifyThreshold: parseInteger(process.env.OPPORTUNITY_NOTIFY_THRESHOLD, 80),
+    opportunityMinScore: parseInteger(process.env.OPPORTUNITY_MIN_SCORE, 50),
+    telegramNotificationMinScore: parseInteger(process.env.TELEGRAM_NOTIFICATION_MIN_SCORE, 80),
     duplicateWindowMinutes: parseInteger(process.env.OPPORTUNITY_DUPLICATE_WINDOW_MINUTES, 60),
     emaFastPeriod: parseInteger(process.env.TREND_EMA_FAST_PERIOD, 20),
     emaSlowPeriod: parseInteger(process.env.TREND_EMA_SLOW_PERIOD, 50),

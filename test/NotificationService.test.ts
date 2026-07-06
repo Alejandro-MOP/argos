@@ -79,4 +79,13 @@ describe('NotificationService', () => {
       }),
     );
   });
+
+  it('uses its minimum score to decide whether an opportunity should notify', () => {
+    const service = new NotificationService(undefined, { minimumScore: 80 });
+    const opportunity = buildOpportunity();
+
+    expect(service.shouldNotifyOpportunity({ ...opportunity, score: 79 })).toBe(false);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, score: 80 })).toBe(true);
+    expect(service.getMinimumScore()).toBe(80);
+  });
 });

@@ -52,6 +52,7 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
     opportunityFilter: {
       shouldNotify: jest.fn(),
       evaluate: jest.fn().mockResolvedValue({ shouldNotify: true }),
+      getMinimumScore: jest.fn().mockReturnValue(50),
     },
     riskService: {
       calculateRisk: jest.fn().mockReturnValue({
@@ -76,6 +77,8 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
     },
     notificationService: {
       sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn((opportunity: Opportunity) => opportunity.score >= 80),
+      getMinimumScore: jest.fn().mockReturnValue(80),
     },
     rateLimiterService: {
       wait: jest.fn().mockResolvedValue(undefined),
@@ -161,6 +164,7 @@ describe('MarketScanExecutor', () => {
           .fn()
           .mockResolvedValueOnce({ shouldNotify: false, reason: 'below-threshold' })
           .mockResolvedValueOnce({ shouldNotify: false, reason: 'duplicate-window' }),
+        getMinimumScore: jest.fn().mockReturnValue(50),
       },
     } as unknown as Partial<MarketScanExecutorDependencies>);
 
@@ -195,6 +199,89 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(result.skipped).toEqual([{ ticker: 'SPY', score: 90, reason: 'invalid-risk' }]);
+  });
+
+  it('keeps valid opportunities out of notifiedSignals when below Telegram threshold', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 55);
+    const opportunityRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+      findRecentByTicker: jest.fn(),
+    };
+    const signalRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(false),
+      getMinimumScore: jest.fn().mockReturnValue(80),
+    };
+    const executor = buildExecutor({
+      debug: true,
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      opportunityRepository,
+      signalRepository,
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(result.opportunities).toEqual([opportunity]);
+    expect(result.notifiedSignals).toEqual([]);
+    expect(result.skipped).toContainEqual({
+      ticker: 'SPY',
+      score: 55,
+      reason: 'below-telegram-threshold',
+    });
+    expect(opportunityRepository.save).toHaveBeenCalledWith(opportunity);
+    expect(signalRepository.save).not.toHaveBeenCalled();
+    expect(notificationService.sendSignal).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      '[debug] decisionNotificacion ticker=SPY score=55 opportunityMinScore=50 telegramMinScore=80 willNotify=false',
+    );
+  });
+
+  it('adds high-score opportunities to notifiedSignals and sends Telegram when notify is enabled', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 85);
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(80),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(result.notifiedSignals).toHaveLength(1);
+    expect(notificationService.sendSignal).toHaveBeenCalledWith(
+      result.notifiedSignals[0],
+      opportunity,
+    );
+    expect(result.skipped).not.toContainEqual(
+      expect.objectContaining({ reason: 'below-telegram-threshold' }),
+    );
   });
 
   it('skips stale intraday market data before generating opportunities', async () => {

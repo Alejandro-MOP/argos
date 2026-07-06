@@ -25,6 +25,10 @@ export class OpportunityFilter {
     return result.shouldNotify;
   }
 
+  public getMinimumScore(): number {
+    return this.config.minimumScore;
+  }
+
   public async evaluate(opportunity: Opportunity): Promise<OpportunityFilterResult> {
     if (opportunity.score < this.config.minimumScore) {
       return {

@@ -33,6 +33,7 @@ export interface MarketScanOptions {
 
 export type MarketScanSkippedReason =
   | 'below-threshold'
+  | 'below-telegram-threshold'
   | 'duplicate-window'
   | 'insufficient-data'
   | 'invalid-risk'
@@ -141,6 +142,19 @@ export class MarketScanExecutor {
           ticker: opportunity.ticker,
           score: opportunity.score,
           reason,
+        });
+        continue;
+      }
+
+      const willNotify = this.dependencies.notificationService.shouldNotifyOpportunity(opportunity);
+      this.logNotificationDecisionDebug(opportunity, willNotify, logger);
+
+      if (!willNotify) {
+        await this.dependencies.opportunityRepository.save(opportunity);
+        skipped.push({
+          ticker: opportunity.ticker,
+          score: opportunity.score,
+          reason: 'below-telegram-threshold',
         });
         continue;
       }
@@ -377,6 +391,23 @@ export class MarketScanExecutor {
         `now=${freshness.now.toISOString()}`,
         `dataAgeMinutes=${freshness.dataAgeMinutes}`,
         `isStale=${isStale}`,
+      ].join(' '),
+    );
+  }
+
+  private logNotificationDecisionDebug(
+    opportunity: Opportunity,
+    willNotify: boolean,
+    logger: MarketScanLogger,
+  ): void {
+    this.debugLog(
+      logger,
+      [
+        `decisionNotificacion ticker=${opportunity.ticker}`,
+        `score=${opportunity.score}`,
+        `opportunityMinScore=${this.dependencies.opportunityFilter.getMinimumScore()}`,
+        `telegramMinScore=${this.dependencies.notificationService.getMinimumScore()}`,
+        `willNotify=${willNotify}`,
       ].join(' '),
     );
   }

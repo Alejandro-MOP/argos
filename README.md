@@ -245,19 +245,30 @@ El objetivo es que el motor notifique primero lo mejor, no todo lo que apenas cu
 
 ## Filtro
 
-`OpportunityFilter` decide si una oportunidad debe notificarse.
+`OpportunityFilter` decide si una oportunidad es válida para el flujo.
 
 Reglas actuales:
 
-- `score >= OPPORTUNITY_NOTIFY_THRESHOLD`
+- `score >= OPPORTUNITY_MIN_SCORE`
 - Sin duplicados del mismo `ticker` y `timeframe` durante `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`
+
+`NotificationService` usa un threshold independiente para decidir si una oportunidad válida debe
+entrar a `notifiedSignals` y enviarse a Telegram:
+
+- `score >= TELEGRAM_NOTIFICATION_MIN_SCORE`
 
 Por defecto:
 
 ```text
-OPPORTUNITY_NOTIFY_THRESHOLD=80
+OPPORTUNITY_MIN_SCORE=50
+TELEGRAM_NOTIFICATION_MIN_SCORE=80
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
+
+Ejemplo: con `OPPORTUNITY_MIN_SCORE=50` y `TELEGRAM_NOTIFICATION_MIN_SCORE=80`,
+una oportunidad con score `55` aparece en `opportunities`, no aparece en `notifiedSignals`
+y se reporta en `skipped` con `reason: "below-telegram-threshold"`. Una oportunidad con
+score `85` aparece en ambos y, si `notify=true`, se envía por Telegram.
 
 ## RiskService
 
@@ -539,7 +550,8 @@ MARKET_DATA_REQUEST_DELAY_MS=13000
 MARKET_DATA_MAX_RETRIES=3
 MARKET_DATA_RETRY_BASE_DELAY_MS=30000
 MARKET_DATA_SEQUENTIAL=true
-OPPORTUNITY_NOTIFY_THRESHOLD=80
+OPPORTUNITY_MIN_SCORE=50
+TELEGRAM_NOTIFICATION_MIN_SCORE=80
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -565,7 +577,8 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos cuando el proveedor responde 429.                                    |
 | `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para backoff exponencial de rate limit.                                               |
 | `MARKET_DATA_SEQUENTIAL`               | Si es `true`, escanea tickers uno por uno para reducir 429.                                      |
-| `OPPORTUNITY_NOTIFY_THRESHOLD`         | Score mínimo para intentar notificar una oportunidad.                                            |
+| `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                             |
+| `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.     |
 | `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                             |
 | `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                              |
 | `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                      |
