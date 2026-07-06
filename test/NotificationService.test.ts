@@ -7,23 +7,27 @@ import { NotificationService } from '../src/services/NotificationService';
 const buildSignal = (): Signal => ({
   ticker: 'NVDA',
   timeframe: '15m',
-  entry: 100,
-  stop: 95,
-  target: 110,
+  entry: 359.91,
+  stop: 353.42,
+  target: 372.89000000000004,
   score: 90,
   signalType: 'LONG',
   createdAt: new Date('2026-06-18T15:00:00.000Z'),
 });
 
 const buildOpportunity = (): Opportunity => ({
-  ticker: 'NVDA',
+  ticker: 'GOOGL',
   timeframe: '15m',
-  score: 90,
+  score: 55.4,
   trendScore: 25,
-  volumeScore: 20,
-  momentumScore: 20,
-  structureScore: 25,
-  reasons: ['EMA20 sobre EMA50', 'Breakout confirmado'],
+  volumeScore: 0,
+  momentumScore: 15,
+  structureScore: 15,
+  reasons: [
+    'EMA20 sobre EMA50 y ambas ascendentes',
+    'RSI14 en zona constructiva (51.26)',
+    'Higher highs y higher lows',
+  ],
   detectedAt: new Date('2026-06-18T15:00:00.000Z'),
 });
 
@@ -48,6 +52,8 @@ describe('NotificationService', () => {
 
     expect(httpClient.post).not.toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Señal LONG: NVDA'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Temporalidad: 15M'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Objetivo: 372.89'));
   });
 
   it('sends enriched Signal and Opportunity messages through Telegram', async () => {
@@ -56,26 +62,71 @@ describe('NotificationService', () => {
     const telegramClient = new TelegramClient('secret-token', '12345', true, httpClient);
     const service = new NotificationService(telegramClient);
 
-    await service.sendSignal(buildSignal(), buildOpportunity());
+    await service.sendSignal({ ...buildSignal(), timeframe: '1d' }, buildOpportunity());
 
     expect(consoleSpy).not.toHaveBeenCalled();
     expect(httpClient.post).toHaveBeenCalledWith(
       '/botsecret-token/sendMessage',
       expect.objectContaining({
         chat_id: '12345',
-        text: expect.stringContaining('🚨 OPORTUNIDAD DETECTADA'),
+        text: expect.stringContaining('🚨 MARKET SIGNAL'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('Risk/Reward:\n1:2.00'),
+        text: expect.stringContaining('🟢 Ticker: GOOGL'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('Timeframe:\n15m'),
+        text: expect.stringContaining('⏰ Timeframe: 1D'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('⭐ Score: 55/100'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('🎯 Target: 372.89'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.not.stringContaining('372.89000000000004'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('⚖️ Risk/Reward: 1:2.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('✅ EMA20 sobre EMA50 y ambas ascendentes'),
+      }),
+    );
+  });
+
+  it('shows a fallback message when an opportunity has no reasons', async () => {
+    const httpClient = buildHttpClient();
+    const telegramClient = new TelegramClient('secret-token', '12345', true, httpClient);
+    const service = new NotificationService(telegramClient);
+
+    await service.sendSignal(buildSignal(), { ...buildOpportunity(), reasons: [] });
+
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Sin razones registradas.'),
       }),
     );
   });

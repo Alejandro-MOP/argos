@@ -388,46 +388,31 @@ Si falta configuración o Telegram responde con error, el escaneo no falla y el 
 Cuando recibe ambas entidades, envía un formato enriquecido:
 
 ```text
-🚨 OPORTUNIDAD DETECTADA
+🚨 MARKET SIGNAL
 
-Ticker:
-NVDA
+🟢 Ticker: GOOGL
+⏰ Timeframe: 1D
 
-Timeframe:
-15m
+⭐ Score: 55/100
 
-Score:
-87/100
+📈 Trend: 25/25
+📊 Volume: 0/25
+⚡ Momentum: 15/25
+🏗 Structure: 15/25
 
-Trend:
-25
+────────────────────
 
-Volume:
-22
+✅ EMA20 sobre EMA50 y ambas ascendentes
+✅ RSI14 en zona constructiva (51.26)
+✅ Higher highs y higher lows
 
-Momentum:
-20
+────────────────────
 
-Structure:
-20
+💵 Entry: 359.91
+🛑 Stop: 353.42
+🎯 Target: 372.89
 
-Razones:
-
-* EMA20 sobre EMA50
-* Breakout confirmado
-* Volumen superior al promedio
-
-Entry:
-xxx
-
-Stop:
-xxx
-
-Target:
-xxx
-
-Risk/Reward:
-1:2.00
+⚖️ Risk/Reward: 1:2.00
 ```
 
 ### Crear Bot

@@ -25,11 +25,11 @@ export class NotificationService {
       ? this.formatOpportunitySignal(signal, opportunity)
       : [
           `Señal ${signal.signalType}: ${signal.ticker}`,
-          `Temporalidad: ${signal.timeframe}`,
-          `Entrada: ${signal.entry}`,
-          `Stop: ${signal.stop}`,
-          `Objetivo: ${signal.target}`,
-          `Score: ${signal.score}`,
+          `Temporalidad: ${this.formatTimeframe(signal.timeframe)}`,
+          `Entrada: ${this.formatPrice(signal.entry)}`,
+          `Stop: ${this.formatPrice(signal.stop)}`,
+          `Objetivo: ${this.formatPrice(signal.target)}`,
+          `Score: ${this.formatScore(signal.score)}`,
         ].join(' | ');
 
     await this.sendMessage(message);
@@ -44,47 +44,32 @@ export class NotificationService {
   }
 
   private formatOpportunitySignal(signal: Signal, opportunity: Opportunity): string {
-    const reasons = opportunity.reasons.map((reason) => `* ${reason}`).join('\n');
+    const reasons = this.formatReasons(opportunity.reasons);
 
     return [
-      '🚨 OPORTUNIDAD DETECTADA',
+      '🚨 MARKET SIGNAL',
       '',
-      'Ticker:',
-      opportunity.ticker,
+      `🟢 Ticker: ${opportunity.ticker}`,
+      `⏰ Timeframe: ${this.formatTimeframe(signal.timeframe)}`,
       '',
-      'Timeframe:',
-      signal.timeframe,
+      `⭐ Score: ${this.formatScore(opportunity.score)}/100`,
       '',
-      'Score:',
-      `${opportunity.score}/100`,
+      `📈 Trend: ${this.formatScore(opportunity.trendScore)}/25`,
+      `📊 Volume: ${this.formatScore(opportunity.volumeScore)}/25`,
+      `⚡ Momentum: ${this.formatScore(opportunity.momentumScore)}/25`,
+      `🏗 Structure: ${this.formatScore(opportunity.structureScore)}/25`,
       '',
-      'Trend:',
-      `${opportunity.trendScore}`,
-      '',
-      'Volume:',
-      `${opportunity.volumeScore}`,
-      '',
-      'Momentum:',
-      `${opportunity.momentumScore}`,
-      '',
-      'Structure:',
-      `${opportunity.structureScore}`,
-      '',
-      'Razones:',
+      '────────────────────',
       '',
       reasons,
       '',
-      'Entry:',
-      `${signal.entry}`,
+      '────────────────────',
       '',
-      'Stop:',
-      `${signal.stop}`,
+      `💵 Entry: ${this.formatPrice(signal.entry)}`,
+      `🛑 Stop: ${this.formatPrice(signal.stop)}`,
+      `🎯 Target: ${this.formatPrice(signal.target)}`,
       '',
-      'Target:',
-      `${signal.target}`,
-      '',
-      'Risk/Reward:',
-      this.formatRiskReward(signal),
+      `⚖️ Risk/Reward: ${this.formatRiskReward(signal)}`,
     ].join('\n');
   }
 
@@ -97,5 +82,25 @@ export class NotificationService {
     }
 
     return `1:${(reward / risk).toFixed(2)}`;
+  }
+
+  private formatPrice(value: number): string {
+    return value.toFixed(2);
+  }
+
+  private formatScore(value: number): string {
+    return value.toFixed(0);
+  }
+
+  private formatTimeframe(timeframe: string): string {
+    return timeframe.toUpperCase();
+  }
+
+  private formatReasons(reasons: string[]): string {
+    if (reasons.length === 0) {
+      return 'Sin razones registradas.';
+    }
+
+    return reasons.map((reason) => `✅ ${reason}`).join('\n');
   }
 }
