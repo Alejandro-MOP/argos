@@ -32,6 +32,7 @@ src/
     FinnhubClient.ts
     PolygonClient.ts
     TelegramClient.ts
+    YahooFinanceClient.ts
   config/
     env.ts
   functions/
@@ -329,7 +330,7 @@ El motor usa una arquitectura multiproveedor:
 MarketScanExecutor
   -> MarketDataService
     -> MarketDataProvider
-      -> PolygonClient | FinnhubClient
+      -> PolygonClient | FinnhubClient | YahooFinanceClient
 ```
 
 La selección se hace únicamente en `container.ts` mediante inyección de dependencias. El resto
@@ -340,7 +341,10 @@ qué proveedor se está usando.
 Proveedores disponibles:
 
 - `polygon`: usa Polygon Aggregates API. Requiere `POLYGON_API_KEY`.
-- `finnhub`: usa Finnhub Stock Candles API. Requiere `FINNHUB_API_KEY`.
+- `finnhub`: usa Finnhub Stock Candles API. Requiere `FINNHUB_API_KEY`; según el Swagger, este
+  endpoint autentica con `token` en query string y está marcado como `Premium Access Required`.
+  Los logs sanitizan cualquier `token`.
+- `yahoo`: usa `yahoo-finance2` contra Yahoo Finance Chart. No requiere API key.
 
 Para cambiar de proveedor:
 
@@ -352,6 +356,12 @@ o:
 
 ```text
 MARKET_DATA_PROVIDER=finnhub
+```
+
+o:
+
+```text
+MARKET_DATA_PROVIDER=yahoo
 ```
 
 Para agregar un tercer proveedor:
@@ -375,6 +385,10 @@ Timeframes soportados por el motor:
 Limitación de Finnhub: la API documenta resoluciones `1`, `5`, `15`, `30`, `60`, `D`, `W` y `M`.
 Por eso `1m`, `5m`, `15m`, `30m`, `1h`, `1d` y `1w` están soportados directamente; `4h` no se
 soporta directamente con Finnhub.
+
+Limitación de Yahoo Finance: `yahoo-finance2` soporta intervalos como `1m`, `5m`, `15m`, `30m`,
+`1h`, `1d` y `1wk`; `4h` no se soporta directamente. Los intervalos intradía tienen historia
+limitada por Yahoo.
 
 Proveedores alternativos futuros:
 
@@ -591,7 +605,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
 | `POLYGON_API_KEY`                      | API key de Polygon/Massive para obtener velas reales de mercado.                                 |
 | `FINNHUB_API_KEY`                      | API key de Finnhub para obtener velas reales cuando `MARKET_DATA_PROVIDER=finnhub`.              |
-| `MARKET_DATA_PROVIDER`                 | Proveedor de datos de mercado: `polygon` o `finnhub`. Default: `polygon`.                        |
+| `MARKET_DATA_PROVIDER`                 | Proveedor de datos de mercado: `polygon`, `finnhub` o `yahoo`. Default: `polygon`.               |
 | `DATABASE_URL`                         | URL de PostgreSQL reservada para futuras implementaciones persistentes.                          |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |

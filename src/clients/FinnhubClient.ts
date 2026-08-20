@@ -297,6 +297,10 @@ export class FinnhubClient implements MarketDataProvider {
       return `finnhub-unauthorized: ${message}`;
     }
 
+    if (status === 403) {
+      return `finnhub-forbidden: ${message}. Finnhub stock candles are marked as Premium Access Required in the Swagger. Verify FINNHUB_API_KEY, account permissions, and plan access for stock candles.`;
+    }
+
     if (status === 404) {
       return `finnhub-not-found: ${message}`;
     }

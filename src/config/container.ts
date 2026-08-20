@@ -5,6 +5,7 @@ import { VolumeAnalyzer } from '../analyzers/VolumeAnalyzer';
 import { FinnhubClient } from '../clients/FinnhubClient';
 import { PolygonClient } from '../clients/PolygonClient';
 import { TelegramClient } from '../clients/TelegramClient';
+import { YahooFinanceClient } from '../clients/YahooFinanceClient';
 import type { MarketDataProvider } from '../ports/MarketDataProvider';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
 import { SignalRepository } from '../repositories/SignalRepository';
@@ -25,6 +26,10 @@ export const createMarketDataProvider = (
 ): MarketDataProvider => {
   if (provider === 'finnhub') {
     return new FinnhubClient(env.finnhubApiKey, undefined, debug);
+  }
+
+  if (provider === 'yahoo') {
+    return new YahooFinanceClient(undefined, debug);
   }
 
   return new PolygonClient(env.polygonApiKey, undefined, debug);

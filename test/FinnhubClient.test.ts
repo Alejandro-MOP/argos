@@ -203,10 +203,14 @@ describe('FinnhubClient', () => {
     } satisfies Partial<MarketDataRateLimitError>);
   });
 
-  it('throws clear sanitized provider errors for unauthorized, not found, and timeout failures', async () => {
+  it('throws clear sanitized provider errors for unauthorized, forbidden, not found, and timeout failures', async () => {
     const unauthorized = new AxiosError('Request failed with token=secret');
     Object.defineProperty(unauthorized, 'response', {
       value: { status: 401, statusText: 'Unauthorized', headers: {} },
+    });
+    const forbidden = new AxiosError('Request failed with status code 403');
+    Object.defineProperty(forbidden, 'response', {
+      value: { status: 403, statusText: 'Forbidden', headers: {} },
     });
     const notFound = new AxiosError('Not found');
     Object.defineProperty(notFound, 'response', {
@@ -217,6 +221,7 @@ describe('FinnhubClient', () => {
       get: jest
         .fn()
         .mockRejectedValueOnce(unauthorized)
+        .mockRejectedValueOnce(forbidden)
         .mockRejectedValueOnce(notFound)
         .mockRejectedValueOnce(timeout),
     } as unknown as AxiosInstance;
@@ -224,6 +229,10 @@ describe('FinnhubClient', () => {
 
     await expect(client.getCandles('SPY', '15m', 80)).rejects.toMatchObject({
       message: 'finnhub-unauthorized: Request failed with token=[redacted]',
+    } satisfies Partial<MarketDataProviderError>);
+    await expect(client.getCandles('SPY', '15m', 80)).rejects.toMatchObject({
+      message:
+        'finnhub-forbidden: Request failed with status code 403. Finnhub stock candles are marked as Premium Access Required in the Swagger. Verify FINNHUB_API_KEY, account permissions, and plan access for stock candles.',
     } satisfies Partial<MarketDataProviderError>);
     await expect(client.getCandles('SPY', '15m', 80)).rejects.toMatchObject({
       message: 'finnhub-not-found: Not found',

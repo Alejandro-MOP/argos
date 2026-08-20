@@ -1,5 +1,6 @@
 import { FinnhubClient } from '../src/clients/FinnhubClient';
 import { PolygonClient } from '../src/clients/PolygonClient';
+import { YahooFinanceClient } from '../src/clients/YahooFinanceClient';
 import { createMarketDataProvider } from '../src/config/container';
 
 describe('market data provider selection', () => {
@@ -23,6 +24,10 @@ describe('market data provider selection', () => {
     expect(createMarketDataProvider('finnhub', false)).toBeInstanceOf(FinnhubClient);
   });
 
+  it('creates Yahoo Finance through the container factory', () => {
+    expect(createMarketDataProvider('yahoo', false)).toBeInstanceOf(YahooFinanceClient);
+  });
+
   it('defaults MARKET_DATA_PROVIDER to polygon when env is not set', async () => {
     delete process.env.MARKET_DATA_PROVIDER;
     jest.resetModules();
@@ -39,5 +44,14 @@ describe('market data provider selection', () => {
     const { env } = await import('../src/config/env');
 
     expect(env.marketDataProvider).toBe('finnhub');
+  });
+
+  it('changes MARKET_DATA_PROVIDER to yahoo through env', async () => {
+    process.env.MARKET_DATA_PROVIDER = 'yahoo';
+    jest.resetModules();
+
+    const { env } = await import('../src/config/env');
+
+    expect(env.marketDataProvider).toBe('yahoo');
   });
 });

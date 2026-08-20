@@ -3,7 +3,7 @@ import type { WatchlistName } from '../services/WatchlistService';
 
 dotenv.config();
 
-export type MarketDataProviderName = 'polygon' | 'finnhub';
+export type MarketDataProviderName = 'polygon' | 'finnhub' | 'yahoo';
 
 const parseInteger = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -53,7 +53,7 @@ const parseWatchlistName = (value: string | undefined): WatchlistName => {
 const parseMarketDataProviderName = (value: string | undefined): MarketDataProviderName => {
   const provider = value?.trim().toLowerCase() ?? 'polygon';
 
-  if (provider === 'polygon' || provider === 'finnhub') {
+  if (provider === 'polygon' || provider === 'finnhub' || provider === 'yahoo') {
     return provider;
   }
 
