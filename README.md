@@ -29,8 +29,6 @@ src/
     BacktestEngine.ts
     README.md
   clients/
-    FinnhubClient.ts
-    PolygonClient.ts
     TelegramClient.ts
     YahooFinanceClient.ts
   config/
@@ -65,6 +63,10 @@ src/
     WatchlistService.ts
   utils/
     marketMath.ts
+    parse.utils.ts
+    sanitizeError.ts
+    timeframe.utils.ts
+    tradeSizing.utils.ts
   watchlists/
     dividends.ts
     etfs.ts
@@ -80,7 +82,7 @@ Azure Timer
   -> External Adapters
 ```
 
-Los detalles externos, como Polygon, Telegram o PostgreSQL, viven detrás de interfaces. Cambiar proveedor de datos no requiere tocar la lógica de trading.
+Los detalles externos, como Yahoo Finance, Telegram o PostgreSQL, viven detrás de interfaces. El motor analiza `Candle[]` normalizadas y no depende del formato crudo del proveedor.
 
 ## Flujo Principal
 
@@ -104,9 +106,9 @@ Pasos de `marketScan`:
 4. Genera una `Opportunity`.
 5. Rankea oportunidades por score descendente.
 6. Filtra por score mínimo y duplicados recientes.
-7. Convierte `Opportunity` en `Signal` con `RiskService`.
-8. Persiste oportunidad y señal en memoria.
-9. Notifica la señal.
+7. Convierte oportunidades válidas en un plan de riesgo con `RiskService`.
+8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE`, la agrega a `notifiedSignals` y puede notificar Telegram.
+9. Persiste oportunidad y señal en memoria cuando corresponde.
 
 ## Azure Functions
 
@@ -175,6 +177,20 @@ Interpretación del tipo por temporalidad:
 | `1d` | `swing` | Movimiento de días a semanas. |
 | `1w` | `posicion` | Contexto amplio de semanas o meses. |
 
+Cuando envías `capital`, el response calcula el resultado estimado para cada oportunidad que tenga
+un plan de riesgo válido:
+
+```json
+"positionSizing": {
+  "capital": 1000,
+  "estimatedLoss": 50,
+  "estimatedProfit": 100
+}
+```
+
+Ese cálculo asume que usas ese capital completo en cada oportunidad individual. No reparte el capital
+entre todas las oportunidades.
+
 ### WhatsApp
 
 La función HTTP puede actuar como webhook para WhatsApp porque acepta `POST`.
@@ -220,7 +236,17 @@ score = trendScore + volumeScore + momentumScore + structureScore
 max score = 100
 ```
 
-Cada analyzer devuelve de `0` a `25`.
+Cada analyzer devuelve de `0` a `25`. En lenguaje más natural, el motor busca cuatro pistas
+independientes antes de llamar algo oportunidad:
+
+1. `Trend`: que la tendencia esté alineada, principalmente EMA20 sobre EMA50 y medias ascendentes.
+2. `Volume`: que haya participación real; volumen actual por encima del promedio reciente.
+3. `Momentum`: que el RSI esté constructivo, evitando zonas demasiado débiles o excesivamente extendidas.
+4. `Structure`: que el precio esté rompiendo o respetando una estructura alcista reciente.
+
+El score total máximo es `100`. `OPPORTUNITY_MIN_SCORE` decide si la oportunidad entra al response
+`opportunities`; `TELEGRAM_NOTIFICATION_MIN_SCORE` decide si además pasa a `notifiedSignals` y puede
+ser enviada por Telegram.
 
 ## Analyzers
 
@@ -339,9 +365,13 @@ MARKET_SCAN_WATCHLIST=custom
 MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
 ```
 
-## Market Data Providers
+## Market Data
 
-`MarketDataProvider` permite cambiar proveedor de datos sin tocar la lógica de trading:
+El proyecto usa Yahoo Finance como única fuente de datos de mercado mediante `yahoo-finance2`.
+No requiere API key y el resto del motor no conoce detalles de Yahoo: solo recibe velas normalizadas
+con el modelo interno `Candle`.
+
+El puerto se mantiene simple para que el motor siga desacoplado:
 
 ```ts
 interface MarketDataProvider {
@@ -349,86 +379,39 @@ interface MarketDataProvider {
 }
 ```
 
-El motor usa una arquitectura multiproveedor:
+Flujo actual:
 
 ```text
 MarketScanExecutor
   -> MarketDataService
-    -> MarketDataProvider
-      -> PolygonClient | FinnhubClient | YahooFinanceClient
+    -> YahooFinanceClient
+      -> Candle[]
 ```
 
-La selección se hace únicamente en `container.ts` mediante inyección de dependencias. El resto
-del motor (`TrendAnalyzer`, `VolumeAnalyzer`, `MomentumAnalyzer`, `StructureAnalyzer`,
-`RiskService`, `NotificationService`, `MarketScanExecutor`) solo recibe `Candle[]` y no conoce
-qué proveedor se está usando.
+`YahooFinanceClient` se instancia directamente en `container.ts`. La intención es mantener una sola
+fuente útil y evitar código muerto o configuraciones que confundan.
 
-Proveedores disponibles:
+Timeframes soportados por Yahoo Finance en este motor:
 
-- `polygon`: usa Polygon Aggregates API. Requiere `POLYGON_API_KEY`.
-- `finnhub`: usa Finnhub Stock Candles API. Requiere `FINNHUB_API_KEY`; según el Swagger, este
-  endpoint autentica con `token` en query string y está marcado como `Premium Access Required`.
-  Los logs sanitizan cualquier `token`.
-- `yahoo`: usa `yahoo-finance2` contra Yahoo Finance Chart. No requiere API key.
+- Minutos: `1m`, `5m`, `15m`, `30m`
+- Hora: `1h`
+- Diario/semanal: `1d`, `1w`
 
-Para cambiar de proveedor:
-
-```text
-MARKET_DATA_PROVIDER=polygon
-```
-
-o:
-
-```text
-MARKET_DATA_PROVIDER=finnhub
-```
-
-o:
-
-```text
-MARKET_DATA_PROVIDER=yahoo
-```
-
-Para agregar un tercer proveedor:
-
-1. Crea un cliente que implemente `MarketDataProvider`.
-2. Mapea la respuesta externa al modelo interno `Candle`.
-3. Devuelve las velas en orden cronológico ascendente.
-4. Agrega la rama de construcción en `container.ts`.
-5. Mantén las API keys y detalles externos dentro del cliente, nunca en el motor.
+Limitación conocida: Yahoo Finance Chart no soporta `4h` directamente en esta implementación.
+Los intervalos intradía también pueden tener historia limitada, así que si pides demasiadas velas
+en temporalidades pequeñas, el proveedor puede devolver menos datos de los esperados.
 
 Para timeframes intradía, `MarketScanExecutor` valida frescura de datos con
 `MARKET_DATA_MAX_AGE_MINUTES`. Si la última vela supera ese límite, el ticker se omite con
 `stale-market-data`.
 
-Timeframes soportados por el motor:
+## Rate limits y datos de mercado
 
-- Minutos: `1m`, `5m`, `15m`, `30m`
-- Horas: `1h`, `4h`
-- Diario/semanal: `1d`, `1w`
+Aunque Yahoo no requiere API key, puede limitar o rechazar tráfico si se hacen demasiadas llamadas.
+Por eso el motor procesa tickers de forma secuencial por defecto, aplica un delay entre peticiones
+y reintenta errores 429 con backoff exponencial.
 
-Limitación de Finnhub: la API documenta resoluciones `1`, `5`, `15`, `30`, `60`, `D`, `W` y `M`.
-Por eso `1m`, `5m`, `15m`, `30m`, `1h`, `1d` y `1w` están soportados directamente; `4h` no se
-soporta directamente con Finnhub.
-
-Limitación de Yahoo Finance: `yahoo-finance2` soporta intervalos como `1m`, `5m`, `15m`, `30m`,
-`1h`, `1d` y `1wk`; `4h` no se soporta directamente. Los intervalos intradía tienen historia
-limitada por Yahoo.
-
-Proveedores alternativos futuros:
-
-- Alpha Vantage
-- Twelve Data
-- Yahoo Finance
-
-## Rate limits y Massive/Polygon
-
-Polygon/Massive puede responder `429 Too Many Requests` cuando se escanean varios tickers seguidos,
-especialmente en planes gratuitos. El motor procesa tickers de forma secuencial por defecto, aplica
-un delay antes de cada petición posterior al primer ticker y reintenta errores 429 con backoff
-exponencial.
-
-Configuración recomendada para plan gratuito:
+Configuración recomendada:
 
 ```text
 MARKET_DATA_SEQUENTIAL=true
@@ -441,9 +424,9 @@ Con esa configuración los reintentos esperan aproximadamente `30s`, `60s` y `12
 Si usas `MARKET_DATA_SEQUENTIAL=false`, las llamadas al proveedor se ejecutan en paralelo y pueden
 provocar 429 con mayor facilidad.
 
-Los errores de Axios se sanitizan antes de llegar a logs: nunca se imprime `apiKey`, query string,
-`request._header`, `responseUrl` ni `config.params.apiKey`. Solo se registra status, statusText,
-provider, endpoint sin query string, ticker, requestId si existe y mensaje resumido.
+Los errores del proveedor se sanitizan antes de llegar a logs. No se imprime información sensible
+ni detalles ruidosos de request; solo status, statusText, provider, endpoint, ticker, requestId si
+existe y mensaje resumido.
 
 ## Persistencia
 
@@ -600,9 +583,6 @@ npm start
 Variables principales:
 
 ```text
-POLYGON_API_KEY=
-FINNHUB_API_KEY=
-MARKET_DATA_PROVIDER=polygon
 DATABASE_URL=
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
@@ -628,9 +608,6 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
 | `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
-| `POLYGON_API_KEY`                      | API key de Polygon/Massive para obtener velas reales de mercado.                                 |
-| `FINNHUB_API_KEY`                      | API key de Finnhub para obtener velas reales cuando `MARKET_DATA_PROVIDER=finnhub`.              |
-| `MARKET_DATA_PROVIDER`                 | Proveedor de datos de mercado: `polygon`, `finnhub` o `yahoo`. Default: `polygon`.               |
 | `DATABASE_URL`                         | URL de PostgreSQL reservada para futuras implementaciones persistentes.                          |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |

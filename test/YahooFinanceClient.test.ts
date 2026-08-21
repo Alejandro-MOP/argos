@@ -8,7 +8,7 @@ import type {
   InsufficientCandlesError,
   MarketDataProviderError,
   MarketDataRateLimitError,
-} from '../src/clients/PolygonClient';
+} from '../src/errors/MarketDataErrors';
 
 interface YahooFinanceChartTestResult {
   quotes: YahooFinanceChartQuote[];

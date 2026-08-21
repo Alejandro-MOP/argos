@@ -1,6 +1,6 @@
 import type { Candle } from '../src/models/Candle';
 import type { Opportunity } from '../src/models/Opportunity';
-import { MarketDataRateLimitError } from '../src/clients/PolygonClient';
+import { MarketDataRateLimitError } from '../src/errors/MarketDataErrors';
 import {
   MarketScanExecutor,
   type MarketScanExecutorDependencies,
