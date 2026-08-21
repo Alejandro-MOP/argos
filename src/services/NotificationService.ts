@@ -1,7 +1,12 @@
 import type { Signal } from '../models/Signal';
 import type { Opportunity } from '../models/Opportunity';
 import type { TelegramClient } from '../clients/TelegramClient';
-import { calculateTradePlan, type TradePlan, type TradePlanConfig } from '../utils/tradeSizing.utils';
+import {
+  calculateTradePlan,
+  getPriceDecimals,
+  type TradePlan,
+  type TradePlanConfig,
+} from '../utils/tradeSizing.utils';
 
 export interface NotificationServiceConfig {
   minimumScore: number;
@@ -44,7 +49,7 @@ export class NotificationService {
       : [
           `Señal ${signal.signalType}: ${signal.ticker}`,
           `Temporalidad: ${this.formatTimeframe(signal.timeframe)}`,
-          `Entrada: ${this.formatMoney(signal.entry)}`,
+          `Entrada: ${this.formatPrice(signal.entry)}`,
           this.formatCompactTradePlan(signal, capital),
           `Score: ${this.formatScore(signal.score)}`,
         ]
@@ -106,23 +111,23 @@ export class NotificationService {
 
   private formatInvestmentSection(signal: Signal, tradePlan: TradePlan | undefined): string {
     if (!tradePlan) {
-      return [`💰 INVERSIÓN`, '', `Entry: ${this.formatMoney(signal.entry)}`].join('\n');
+      return [`💰 INVERSIÓN`, '', `Entry: ${this.formatPrice(signal.entry)}`].join('\n');
     }
 
     const lines = [
       '💰 INVERSIÓN',
       '',
       tradePlan.capital ? `Capital: ${this.formatMoney(tradePlan.capital)}` : '',
-      `Entry: ${this.formatMoney(tradePlan.entry)}`,
+      `Entry: ${this.formatPrice(tradePlan.entry)}`,
       '',
       `🛑 STOP FINANCIERO (-${this.formatPercent(tradePlan.financialStop.percent)}%)`,
-      `Precio: ${this.formatMoney(tradePlan.financialStop.price)}`,
+      `Precio: ${this.formatPrice(tradePlan.financialStop.price)}`,
       tradePlan.financialStop.estimatedLoss !== undefined
         ? `Pérdida estimada: -${this.formatMoney(tradePlan.financialStop.estimatedLoss)}`
         : '',
       '',
       '📊 STOP TÉCNICO SUGERIDO',
-      `Precio: ${this.formatMoney(tradePlan.technicalStop.price)}`,
+      `Precio: ${this.formatPrice(tradePlan.technicalStop.price)}`,
     ];
 
     return lines.filter(Boolean).join('\n');
@@ -139,7 +144,7 @@ export class NotificationService {
     const lines = [
       `${icon} ${label} +${this.formatPercent(target.percent)}%`,
       '',
-      `Precio objetivo: ${this.formatMoney(target.price)}`,
+      `Precio objetivo: ${this.formatPrice(target.price)}`,
       target.estimatedProfit !== undefined
         ? `Ganancia estimada: +${this.formatMoney(target.estimatedProfit)}`
         : '',
@@ -167,9 +172,9 @@ export class NotificationService {
     }
 
     return [
-      `Stop -${this.formatPercent(tradePlan.financialStop.percent)}%: ${this.formatMoney(tradePlan.financialStop.price)}`,
-      `Target +${this.formatPercent(tradePlan.targets.min.percent)}%: ${this.formatMoney(tradePlan.targets.min.price)}`,
-      `Target +${this.formatPercent(tradePlan.targets.max.percent)}%: ${this.formatMoney(tradePlan.targets.max.price)}`,
+      `Stop -${this.formatPercent(tradePlan.financialStop.percent)}%: ${this.formatPrice(tradePlan.financialStop.price)}`,
+      `Target +${this.formatPercent(tradePlan.targets.min.percent)}%: ${this.formatPrice(tradePlan.targets.min.price)}`,
+      `Target +${this.formatPercent(tradePlan.targets.max.percent)}%: ${this.formatPrice(tradePlan.targets.max.price)}`,
     ].join(' | ');
   }
 
@@ -180,6 +185,10 @@ export class NotificationService {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
+  }
+
+  private formatPrice(value: number): string {
+    return `$${value.toFixed(getPriceDecimals(value))}`;
   }
 
   private formatPercent(value: number): string {

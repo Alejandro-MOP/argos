@@ -219,6 +219,10 @@ Ese cálculo asume que usas ese capital completo en cada oportunidad individual.
 entre todas las oportunidades. Si no envías `capital`, se muestran los precios de entry, stop financiero,
 stop técnico y targets, pero no aparecen pérdida estimada, ganancia estimada ni capital final.
 
+Los precios usan redondeo dinámico: acciones caras suelen mostrarse con 2 decimales, mientras que
+activos baratos como `DOGE-USD` conservan más decimales para que el plan sea ejecutable. Los montos
+de capital, pérdida y ganancia sí se muestran con 2 decimales.
+
 Si `notify=true` y la oportunidad pasa `TELEGRAM_NOTIFICATION_MIN_SCORE`, Telegram también incluye
 la sección de inversión con capital, stop financiero, stop técnico sugerido, take profits y viabilidad
 del objetivo.

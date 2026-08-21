@@ -64,20 +64,20 @@ export const calculateTradePlan = (
     : undefined;
 
   return {
-    entry: roundMoney(signal.entry),
+    entry: roundPrice(signal.entry),
     financialStop: {
       percent: roundPercent(config.stopLossPercent),
-      price: roundMoney(signal.entry * (1 - config.stopLossPercent / 100)),
+      price: roundPrice(signal.entry * (1 - config.stopLossPercent / 100)),
       estimatedLoss,
     },
     technicalStop: {
-      price: roundMoney(signal.stop),
+      price: roundPrice(signal.stop),
       source: 'last-candle-low',
     },
     targets: {
       min: {
         percent: roundPercent(config.targetMinPercent),
-        price: roundMoney(signal.entry * (1 + config.targetMinPercent / 100)),
+        price: roundPrice(signal.entry * (1 + config.targetMinPercent / 100)),
         estimatedProfit: estimatedProfitMin,
         endingCapital:
           normalizedCapital && estimatedProfitMin !== undefined
@@ -86,7 +86,7 @@ export const calculateTradePlan = (
       },
       max: {
         percent: roundPercent(config.targetMaxPercent),
-        price: roundMoney(signal.entry * (1 + config.targetMaxPercent / 100)),
+        price: roundPrice(signal.entry * (1 + config.targetMaxPercent / 100)),
         estimatedProfit: estimatedProfitMax,
         endingCapital:
           normalizedCapital && estimatedProfitMax !== undefined
@@ -151,6 +151,25 @@ const assessTargetFeasibility = (
 
 const roundMoney = (value: number): number => round(value, 2);
 const roundPercent = (value: number): number => round(value, 2);
+const roundPrice = (value: number): number => round(value, getPriceDecimals(value));
+
+export const getPriceDecimals = (value: number): number => {
+  const absoluteValue = Math.abs(value);
+
+  if (absoluteValue >= 100) {
+    return 2;
+  }
+
+  if (absoluteValue >= 1) {
+    return 4;
+  }
+
+  if (absoluteValue >= 0.01) {
+    return 6;
+  }
+
+  return 8;
+};
 
 const round = (value: number, decimals: number): number => {
   const factor = 10 ** decimals;

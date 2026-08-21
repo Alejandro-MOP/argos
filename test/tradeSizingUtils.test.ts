@@ -75,6 +75,27 @@ describe('calculateTradePlan', () => {
     expect(tradePlan?.targets.max).toMatchObject({ price: 362.45, estimatedProfit: 30 });
   });
 
+  it('keeps enough price decimals for low-priced assets', () => {
+    const tradePlan = calculateTradePlan(
+      buildSignal({
+        ticker: 'DOGE-USD',
+        entry: 0.0854400023818016,
+        stop: 0.08534999936819077,
+      }),
+      defaultConfig,
+      1_000,
+    );
+
+    expect(tradePlan?.entry).toBe(0.08544);
+    expect(tradePlan?.financialStop.price).toBe(0.084586);
+    expect(tradePlan?.technicalStop.price).toBe(0.08535);
+    expect(tradePlan?.targets.min.price).toBe(0.087149);
+    expect(tradePlan?.targets.max.price).toBe(0.088003);
+    expect(tradePlan?.financialStop.estimatedLoss).toBe(10);
+    expect(tradePlan?.targets.min.estimatedProfit).toBe(20);
+    expect(tradePlan?.targets.max.estimatedProfit).toBe(30);
+  });
+
   it('omits capital outcomes when capital is not provided', () => {
     expect(calculateTradePlan(buildSignal(), defaultConfig)).toEqual(
       expect.objectContaining({

@@ -143,6 +143,12 @@ describe('NotificationService', () => {
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
+        text: expect.stringContaining('Precio objetivo: $367.11'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
         text: expect.stringContaining('Ganancia estimada: +$20.00'),
       }),
     );
@@ -201,6 +207,43 @@ describe('NotificationService', () => {
       expect.any(String),
       expect.objectContaining({
         text: expect.not.stringContaining('Ganancia estimada'),
+      }),
+    );
+  });
+
+
+  it('keeps low-priced crypto plans executable in Telegram output', async () => {
+    const httpClient = buildHttpClient();
+    const telegramClient = new TelegramClient('secret-token', '12345', true, httpClient);
+    const service = new NotificationService(telegramClient);
+
+    await service.sendSignal(
+      {
+        ...buildSignal(),
+        ticker: 'DOGE-USD',
+        entry: 0.0854400023818016,
+        stop: 0.08534999936819077,
+      },
+      { ...buildOpportunity(), ticker: 'DOGE-USD' },
+      1_000,
+    );
+
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Entry: $0.085440'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Precio: $0.084586'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Precio objetivo: $0.087149'),
       }),
     );
   });
