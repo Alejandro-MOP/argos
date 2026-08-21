@@ -54,6 +54,7 @@ describe('NotificationService', () => {
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Señal LONG: NVDA'));
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Temporalidad: 15M'));
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Objetivo: 372.89'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.not.stringContaining('Pérdida estimada'));
   });
 
   it('sends enriched Signal and Opportunity messages through Telegram', async () => {
@@ -62,7 +63,7 @@ describe('NotificationService', () => {
     const telegramClient = new TelegramClient('secret-token', '12345', true, httpClient);
     const service = new NotificationService(telegramClient);
 
-    await service.sendSignal({ ...buildSignal(), timeframe: '1d' }, buildOpportunity());
+    await service.sendSignal({ ...buildSignal(), timeframe: '1d' }, buildOpportunity(), 1_000);
 
     expect(consoleSpy).not.toHaveBeenCalled();
     expect(httpClient.post).toHaveBeenCalledWith(
@@ -106,6 +107,24 @@ describe('NotificationService', () => {
       expect.any(String),
       expect.objectContaining({
         text: expect.stringContaining('⚖️ Risk/Reward: 1:2.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('💰 Capital: 1000.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('📉 Pérdida estimada: 18.03'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('📈 Ganancia estimada: 36.06'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(

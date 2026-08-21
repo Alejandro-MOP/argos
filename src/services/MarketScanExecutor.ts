@@ -29,6 +29,7 @@ export interface MarketScanOptions {
   timeframe: string;
   candleLimit: number;
   notify: boolean;
+  capital?: number;
 }
 
 export type MarketScanSkippedReason =
@@ -181,7 +182,7 @@ export class MarketScanExecutor {
       await this.dependencies.signalRepository.save(signal);
 
       if (options.notify) {
-        await this.dependencies.notificationService.sendSignal(signal, opportunity);
+        await this.dependencies.notificationService.sendSignal(signal, opportunity, options.capital);
       }
 
       notifiedSignals.push(signal);

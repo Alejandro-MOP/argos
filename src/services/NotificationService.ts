@@ -1,6 +1,7 @@
 import type { Signal } from '../models/Signal';
 import type { Opportunity } from '../models/Opportunity';
 import type { TelegramClient } from '../clients/TelegramClient';
+import { calculateTradeSizing } from '../utils/tradeSizing.utils';
 
 export interface NotificationServiceConfig {
   minimumScore: number;
@@ -20,9 +21,13 @@ export class NotificationService {
     return this.config.minimumScore;
   }
 
-  public async sendSignal(signal: Signal, opportunity?: Opportunity): Promise<void> {
+  public async sendSignal(
+    signal: Signal,
+    opportunity?: Opportunity,
+    capital?: number,
+  ): Promise<void> {
     const message = opportunity
-      ? this.formatOpportunitySignal(signal, opportunity)
+      ? this.formatOpportunitySignal(signal, opportunity, capital)
       : [
           `Señal ${signal.signalType}: ${signal.ticker}`,
           `Temporalidad: ${this.formatTimeframe(signal.timeframe)}`,
@@ -30,7 +35,10 @@ export class NotificationService {
           `Stop: ${this.formatPrice(signal.stop)}`,
           `Objetivo: ${this.formatPrice(signal.target)}`,
           `Score: ${this.formatScore(signal.score)}`,
-        ].join(' | ');
+          this.formatPositionSizing(signal, capital),
+        ]
+          .filter(Boolean)
+          .join(' | ');
 
     await this.sendMessage(message);
   }
@@ -43,8 +51,13 @@ export class NotificationService {
     console.log(message);
   }
 
-  private formatOpportunitySignal(signal: Signal, opportunity: Opportunity): string {
+  private formatOpportunitySignal(
+    signal: Signal,
+    opportunity: Opportunity,
+    capital?: number,
+  ): string {
     const reasons = this.formatReasons(opportunity.reasons);
+    const positionSizing = this.formatPositionSizing(signal, capital);
 
     return [
       '🚨 MARKET SIGNAL',
@@ -70,6 +83,21 @@ export class NotificationService {
       `🎯 Target: ${this.formatPrice(signal.target)}`,
       '',
       `⚖️ Risk/Reward: ${this.formatRiskReward(signal)}`,
+      ...(positionSizing ? ['', '────────────────────', '', positionSizing] : []),
+    ].join('\n');
+  }
+
+  private formatPositionSizing(signal: Signal, capital?: number): string {
+    const positionSizing = calculateTradeSizing(signal, capital ?? 0);
+
+    if (!positionSizing) {
+      return '';
+    }
+
+    return [
+      `💰 Capital: ${this.formatPrice(positionSizing.capital)}`,
+      `📉 Pérdida estimada: ${this.formatPrice(positionSizing.estimatedLoss)}`,
+      `📈 Ganancia estimada: ${this.formatPrice(positionSizing.estimatedProfit)}`,
     ].join('\n');
   }
 

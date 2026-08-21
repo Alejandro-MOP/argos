@@ -191,6 +191,9 @@ un plan de riesgo válido:
 Ese cálculo asume que usas ese capital completo en cada oportunidad individual. No reparte el capital
 entre todas las oportunidades.
 
+Si `notify=true` y la oportunidad pasa `TELEGRAM_NOTIFICATION_MIN_SCORE`, Telegram también incluye
+`Capital`, `Pérdida estimada` y `Ganancia estimada` en el mensaje.
+
 ### WhatsApp
 
 La función HTTP puede actuar como webhook para WhatsApp porque acepta `POST`.

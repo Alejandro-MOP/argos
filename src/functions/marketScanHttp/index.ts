@@ -52,6 +52,7 @@ export async function marketScanHttp(
       timeframe,
       candleLimit,
       notify,
+      capital,
     },
     context,
   );

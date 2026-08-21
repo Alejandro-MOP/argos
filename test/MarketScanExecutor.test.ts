@@ -276,7 +276,7 @@ describe('MarketScanExecutor', () => {
     } as unknown as Partial<MarketScanExecutorDependencies>);
 
     const result = await executor.run(
-      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true },
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true, capital: 1_000 },
       logger,
     );
 
@@ -285,6 +285,7 @@ describe('MarketScanExecutor', () => {
     expect(notificationService.sendSignal).toHaveBeenCalledWith(
       result.notifiedSignals[0],
       opportunity,
+      1_000,
     );
     expect(result.skipped).not.toContainEqual(
       expect.objectContaining({ reason: 'below-telegram-threshold' }),
