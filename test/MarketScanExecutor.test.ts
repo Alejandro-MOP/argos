@@ -177,6 +177,7 @@ describe('MarketScanExecutor', () => {
       { ticker: 'SPY', score: 70, reason: 'below-threshold' },
       { ticker: 'QQQ', score: 90, reason: 'duplicate-window' },
     ]);
+    expect(result.opportunities).toEqual([]);
   });
 
   it('marks opportunities with invalid risk as invalid-risk', async () => {
@@ -199,6 +200,7 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(result.skipped).toEqual([{ ticker: 'SPY', score: 90, reason: 'invalid-risk' }]);
+    expect(result.opportunities).toEqual([expect.objectContaining({ ticker: 'SPY', score: 90 })]);
   });
 
   it('keeps valid opportunities out of notifiedSignals when below Telegram threshold', async () => {

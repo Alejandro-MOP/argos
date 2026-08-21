@@ -117,6 +117,7 @@ export class MarketScanExecutor {
     }
 
     const rankedOpportunities = this.dependencies.rankingService.rank(analyzedOpportunities);
+    const validOpportunities: Opportunity[] = [];
     const notifiedSignals: Signal[] = [];
 
     for (const opportunity of rankedOpportunities) {
@@ -145,6 +146,8 @@ export class MarketScanExecutor {
         });
         continue;
       }
+
+      validOpportunities.push(opportunity);
 
       const willNotify = this.dependencies.notificationService.shouldNotifyOpportunity(opportunity);
       this.logNotificationDecisionDebug(opportunity, willNotify, logger);
@@ -185,7 +188,7 @@ export class MarketScanExecutor {
 
     return {
       scannedTickers: tickers,
-      opportunities: rankedOpportunities,
+      opportunities: validOpportunities,
       notifiedSignals,
       skipped,
       errors,
