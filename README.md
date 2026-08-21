@@ -150,6 +150,17 @@ Parámetros:
 - `limit`: opcional. Por defecto usa `MARKET_SCAN_CANDLE_LIMIT`.
 - `notify`: opcional. Por defecto `true`.
 
+La respuesta HTTP incluye `opportunityType` en `opportunities` y `notifiedSignals` para interpretar
+el horizonte práctico de la señal según el `timeframe` solicitado:
+
+| Timeframe | `opportunityType` | Lectura práctica |
+| --- | --- | --- |
+| `1m`, `5m` | `scalping` | Entrada rápida de minutos. |
+| `15m`, `30m` | `intradia` | Operación dentro del día. |
+| `1h`, `4h` | `swing-corto` | Movimiento de horas a pocos días. |
+| `1d` | `swing` | Movimiento de días a semanas. |
+| `1w` | `posicion` | Contexto amplio de semanas o meses. |
+
 ### WhatsApp
 
 La función HTTP puede actuar como webhook para WhatsApp porque acepta `POST`.

@@ -14,6 +14,7 @@ import {
   parseTickersFromMessage,
   parseWhatsAppText,
 } from '../../utils/parse.utils';
+import { getOpportunityTypeFromTimeframe } from '../../utils/timeframe.utils';
 
 export async function marketScanHttp(
   request: HttpRequest,
@@ -55,6 +56,7 @@ export async function marketScanHttp(
       opportunities: result.opportunities.map((opportunity) => ({
         ticker: opportunity.ticker,
         timeframe: opportunity.timeframe,
+        opportunityType: getOpportunityTypeFromTimeframe(opportunity.timeframe),
         score: opportunity.score,
         trendScore: opportunity.trendScore,
         volumeScore: opportunity.volumeScore,
@@ -63,7 +65,10 @@ export async function marketScanHttp(
         reasons: opportunity.reasons,
         detectedAt: opportunity.detectedAt,
       })),
-      notifiedSignals: result.notifiedSignals,
+      notifiedSignals: result.notifiedSignals.map((signal) => ({
+        ...signal,
+        opportunityType: getOpportunityTypeFromTimeframe(signal.timeframe),
+      })),
       skipped: result.skipped,
       errors: result.errors,
     },
