@@ -6,6 +6,8 @@ interface MarketScanHttpBody {
   timeframe?: string;
   limit?: number | string;
   notify?: boolean | string;
+  capital?: number | string;
+  tradingCapital?: number | string;
   message?: string;
   Body?: string;
   text?: string;
@@ -39,6 +41,19 @@ export const parseLimit = (value: number | string | null | undefined): number =>
   return env.marketScanCandleLimit;
 };
 
+export const parseCapital = (value: number | string | null | undefined): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
 export const parseNotify = (value: boolean | string | null | undefined): boolean => {
   if (typeof value === 'boolean') {
     return value;
@@ -63,6 +78,8 @@ export const parseBody = async (request: HttpRequest): Promise<MarketScanHttpBod
       timeframe: params.get('timeframe') ?? undefined,
       limit: params.get('limit') ?? undefined,
       notify: params.get('notify') ?? undefined,
+      capital: params.get('capital') ?? undefined,
+      tradingCapital: params.get('tradingCapital') ?? undefined,
       message: params.get('message') ?? undefined,
       Body: params.get('Body') ?? undefined,
       text: params.get('text') ?? undefined,

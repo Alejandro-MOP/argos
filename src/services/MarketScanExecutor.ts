@@ -42,6 +42,7 @@ export type MarketScanSkippedReason =
 export interface MarketScanResult {
   scannedTickers: string[];
   opportunities: Opportunity[];
+  opportunitySignals: Signal[];
   notifiedSignals: Signal[];
   skipped: Array<{
     ticker: string;
@@ -118,6 +119,7 @@ export class MarketScanExecutor {
 
     const rankedOpportunities = this.dependencies.rankingService.rank(analyzedOpportunities);
     const validOpportunities: Opportunity[] = [];
+    const opportunitySignals: Signal[] = [];
     const notifiedSignals: Signal[] = [];
 
     for (const opportunity of rankedOpportunities) {
@@ -149,6 +151,19 @@ export class MarketScanExecutor {
 
       validOpportunities.push(opportunity);
 
+      const signal = this.dependencies.riskService.calculateRisk(opportunity, candles);
+
+      if (!signal) {
+        skipped.push({
+          ticker: opportunity.ticker,
+          score: opportunity.score,
+          reason: 'invalid-risk',
+        });
+        continue;
+      }
+
+      opportunitySignals.push(signal);
+
       const willNotify = this.dependencies.notificationService.shouldNotifyOpportunity(opportunity);
       this.logNotificationDecisionDebug(opportunity, willNotify, logger);
 
@@ -158,17 +173,6 @@ export class MarketScanExecutor {
           ticker: opportunity.ticker,
           score: opportunity.score,
           reason: 'below-telegram-threshold',
-        });
-        continue;
-      }
-
-      const signal = this.dependencies.riskService.calculateRisk(opportunity, candles);
-
-      if (!signal) {
-        skipped.push({
-          ticker: opportunity.ticker,
-          score: opportunity.score,
-          reason: 'invalid-risk',
         });
         continue;
       }
@@ -189,6 +193,7 @@ export class MarketScanExecutor {
     return {
       scannedTickers: tickers,
       opportunities: validOpportunities,
+      opportunitySignals,
       notifiedSignals,
       skipped,
       errors,

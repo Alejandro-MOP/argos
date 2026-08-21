@@ -240,6 +240,10 @@ describe('MarketScanExecutor', () => {
 
     expect(result.opportunities).toEqual([opportunity]);
     expect(result.notifiedSignals).toEqual([]);
+    expect(result.opportunitySignals).toHaveLength(1);
+    expect(result.opportunitySignals[0]).toEqual(
+      expect.objectContaining({ ticker: 'SPY', entry: 100, stop: 95, target: 110 }),
+    );
     expect(result.skipped).toContainEqual({
       ticker: 'SPY',
       score: 55,
@@ -276,6 +280,7 @@ describe('MarketScanExecutor', () => {
       logger,
     );
 
+    expect(result.opportunitySignals).toHaveLength(1);
     expect(result.notifiedSignals).toHaveLength(1);
     expect(notificationService.sendSignal).toHaveBeenCalledWith(
       result.notifiedSignals[0],

@@ -149,9 +149,23 @@ Parámetros:
 - `timeframe`: opcional. Por defecto usa `MARKET_SCAN_TIMEFRAME`.
 - `limit`: opcional. Por defecto usa `MARKET_SCAN_CANDLE_LIMIT`.
 - `notify`: opcional. Por defecto `true`.
+- `capital`: opcional. Monto disponible para calcular pérdida estimada y ganancia estimada por oportunidad.
 
 La respuesta HTTP incluye `opportunityType` en `opportunities` y `notifiedSignals` para interpretar
-el horizonte práctico de la señal según el `timeframe` solicitado:
+el horizonte práctico de la señal según el `timeframe` solicitado. Si envías `capital`, también incluye
+`tradePlan.positionSizing` en cada oportunidad con `entry`, `stop`, `target`, pérdida estimada y
+ganancia estimada. `notifiedSignals` conserva su significado: solo señales que pasan el threshold
+de Telegram.
+
+Ejemplo:
+
+```bash
+curl -X POST "http://localhost:7071/api/market-scan" \
+  -H "Content-Type: application/json" \
+  -d '{"tickers":["NVDA","MSFT"],"timeframe":"1d","limit":80,"notify":false,"capital":1000}'
+```
+
+Interpretación del tipo por temporalidad:
 
 | Timeframe | `opportunityType` | Lectura práctica |
 | --- | --- | --- |
