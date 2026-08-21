@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 import type { WatchlistName } from '../services/WatchlistService';
+import type { TradePlanConfig } from '../utils/tradeSizing.utils';
 
 dotenv.config();
-
 
 const parseInteger = (value: string | undefined, fallback: number): number => {
   if (!value) {
@@ -20,6 +20,48 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
 
   const parsed = Number.parseFloat(value);
   return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const parseRequiredPositiveNumber = (
+  value: string | undefined,
+  fallback: number,
+  envName: string,
+): number => {
+  const parsed = parseNumber(value, fallback);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${envName} must be greater than 0`);
+  }
+
+  return parsed;
+};
+
+export const parseTradePlanConfig = (values: NodeJS.ProcessEnv = process.env): TradePlanConfig => {
+  const stopLossPercent = parseRequiredPositiveNumber(
+    values.TRADE_STOP_LOSS_PERCENT,
+    1,
+    'TRADE_STOP_LOSS_PERCENT',
+  );
+  const targetMinPercent = parseRequiredPositiveNumber(
+    values.TRADE_TARGET_MIN_PERCENT,
+    2,
+    'TRADE_TARGET_MIN_PERCENT',
+  );
+  const targetMaxPercent = parseRequiredPositiveNumber(
+    values.TRADE_TARGET_MAX_PERCENT,
+    3,
+    'TRADE_TARGET_MAX_PERCENT',
+  );
+
+  if (targetMaxPercent <= targetMinPercent) {
+    throw new Error('TRADE_TARGET_MAX_PERCENT must be greater than TRADE_TARGET_MIN_PERCENT');
+  }
+
+  return {
+    stopLossPercent,
+    targetMinPercent,
+    targetMaxPercent,
+  };
 };
 
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
@@ -65,6 +107,7 @@ export const env = {
   marketDataMaxRetries: parseInteger(process.env.MARKET_DATA_MAX_RETRIES, 3),
   marketDataRetryBaseDelayMs: parseInteger(process.env.MARKET_DATA_RETRY_BASE_DELAY_MS, 30_000),
   marketDataSequential: parseBoolean(process.env.MARKET_DATA_SEQUENTIAL, true),
+  tradePlan: parseTradePlanConfig(),
   scoring: {
     maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
     opportunityMinScore: parseInteger(process.env.OPPORTUNITY_MIN_SCORE, 50),

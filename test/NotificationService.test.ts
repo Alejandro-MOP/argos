@@ -52,8 +52,9 @@ describe('NotificationService', () => {
 
     expect(httpClient.post).not.toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Señal LONG: NVDA'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Temporalidad: 15M'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Objetivo: 372.89'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Temporalidad: 15m'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Target +2%: $367.11'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Target +3%: $370.71'));
     expect(consoleSpy).toHaveBeenCalledWith(expect.not.stringContaining('Pérdida estimada'));
   });
 
@@ -63,7 +64,7 @@ describe('NotificationService', () => {
     const telegramClient = new TelegramClient('secret-token', '12345', true, httpClient);
     const service = new NotificationService(telegramClient);
 
-    await service.sendSignal({ ...buildSignal(), timeframe: '1d' }, buildOpportunity(), 1_000);
+    await service.sendSignal({ ...buildSignal(), timeframe: '1m' }, buildOpportunity(), 1_000);
 
     expect(consoleSpy).not.toHaveBeenCalled();
     expect(httpClient.post).toHaveBeenCalledWith(
@@ -82,7 +83,7 @@ describe('NotificationService', () => {
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('⏰ Timeframe: 1D'),
+        text: expect.stringContaining('⏰ Timeframe: 1m'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
@@ -94,43 +95,112 @@ describe('NotificationService', () => {
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('🎯 Target: 372.89'),
-      }),
-    );
-    expect(httpClient.post).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
         text: expect.not.stringContaining('372.89000000000004'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('⚖️ Risk/Reward: 1:2.00'),
+        text: expect.stringContaining('💰 INVERSIÓN'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('💰 Capital: 1000.00'),
+        text: expect.stringContaining('Capital: $1,000.00'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('📉 Pérdida estimada: 18.03'),
+        text: expect.stringContaining('🛑 STOP FINANCIERO (-1%)'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        text: expect.stringContaining('📈 Ganancia estimada: 36.06'),
+        text: expect.stringContaining('Precio: $356.31'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Pérdida estimada: -$10.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('📊 STOP TÉCNICO SUGERIDO'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('🎯 TAKE PROFIT +2%'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Ganancia estimada: +$20.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Capital estimado: $1,020.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('🚀 TAKE PROFIT +3%'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Ganancia estimada: +$30.00'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('📐 Objetivo +2/+3%:'),
       }),
     );
     expect(httpClient.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         text: expect.stringContaining('✅ EMA20 sobre EMA50 y ambas ascendentes'),
+      }),
+    );
+  });
+
+  it('shows prices without capital outcomes when capital is omitted', async () => {
+    const httpClient = buildHttpClient();
+    const telegramClient = new TelegramClient('secret-token', '12345', true, httpClient);
+    const service = new NotificationService(telegramClient);
+
+    await service.sendSignal(buildSignal(), buildOpportunity());
+
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Entry: $359.91'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.stringContaining('Precio objetivo: $367.11'),
+      }),
+    );
+    expect(httpClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        text: expect.not.stringContaining('Ganancia estimada'),
       }),
     );
   });

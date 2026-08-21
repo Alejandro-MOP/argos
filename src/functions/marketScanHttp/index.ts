@@ -6,7 +6,6 @@ import {
 } from '@azure/functions';
 import { marketScanExecutor } from '../../config/container';
 import { env } from '../../config/env';
-import type { Signal } from '../../models/Signal';
 import {
   parseBody,
   parseCapital,
@@ -17,7 +16,7 @@ import {
   parseWhatsAppText,
 } from '../../utils/parse.utils';
 import { getOpportunityTypeFromTimeframe } from '../../utils/timeframe.utils';
-import { calculateTradeSizing } from '../../utils/tradeSizing.utils';
+import { calculateTradePlan } from '../../utils/tradeSizing.utils';
 
 export async function marketScanHttp(
   request: HttpRequest,
@@ -87,13 +86,13 @@ export async function marketScanHttp(
           structureScore: opportunity.structureScore,
           reasons: opportunity.reasons,
           detectedAt: opportunity.detectedAt,
-          tradePlan: signal ? buildTradePlan(signal, capital) : undefined,
+          tradePlan: signal ? calculateTradePlan(signal, env.tradePlan, capital) : undefined,
         };
       }),
       notifiedSignals: result.notifiedSignals.map((signal) => ({
         ...signal,
         opportunityType: getOpportunityTypeFromTimeframe(signal.timeframe),
-        positionSizing: calculateTradeSizing(signal, capital ?? 0),
+        tradePlan: calculateTradePlan(signal, env.tradePlan, capital),
       })),
       skipped: result.skipped,
       errors: result.errors,
@@ -109,11 +108,3 @@ app.http('marketScanHttp', {
 });
 
 const buildSignalKey = (ticker: string, timeframe: string): string => `${ticker}:${timeframe}`;
-
-const buildTradePlan = (signal: Signal, capital: number | undefined) => ({
-  entry: signal.entry,
-  stop: signal.stop,
-  target: signal.target,
-  signalType: signal.signalType,
-  positionSizing: calculateTradeSizing(signal, capital ?? 0),
-});

@@ -154,10 +154,10 @@ Parámetros:
 - `capital`: opcional. Monto disponible para calcular pérdida estimada y ganancia estimada por oportunidad.
 
 La respuesta HTTP incluye `opportunityType` en `opportunities` y `notifiedSignals` para interpretar
-el horizonte práctico de la señal según el `timeframe` solicitado. Si envías `capital`, también incluye
-`tradePlan.positionSizing` en cada oportunidad con `entry`, `stop`, `target`, pérdida estimada y
-ganancia estimada. `notifiedSignals` conserva su significado: solo señales que pasan el threshold
-de Telegram.
+el horizonte práctico de la señal según el `timeframe` solicitado. También incluye un `tradePlan`
+porcentual basado en el `entry` y en las variables `TRADE_*`. Si envías `capital`, el trade plan
+agrega pérdida/ganancia estimada y capital final esperado. `notifiedSignals` conserva su significado:
+solo señales que pasan el threshold de Telegram.
 
 Ejemplo:
 
@@ -173,26 +173,55 @@ Interpretación del tipo por temporalidad:
 | --- | --- | --- |
 | `1m`, `5m` | `scalping` | Entrada rápida de minutos. |
 | `15m`, `30m` | `intradia` | Operación dentro del día. |
-| `1h`, `4h` | `swing-corto` | Movimiento de horas a pocos días. |
+| `1h` | `swing-corto` | Movimiento de horas a pocos días. |
 | `1d` | `swing` | Movimiento de días a semanas. |
 | `1w` | `posicion` | Contexto amplio de semanas o meses. |
 
-Cuando envías `capital`, el response calcula el resultado estimado para cada oportunidad que tenga
-un plan de riesgo válido:
+El trade plan ya no usa el target técnico `entry + risk * 2` como objetivo principal. Ahora muestra
+escenarios simples sobre el capital completo:
 
 ```json
-"positionSizing": {
+"tradePlan": {
+  "entry": 351.89,
+  "financialStop": {
+    "percent": 1,
+    "price": 348.37,
+    "estimatedLoss": 10
+  },
+  "technicalStop": {
+    "price": 340.12,
+    "source": "last-candle-low"
+  },
+  "targets": {
+    "min": {
+      "percent": 2,
+      "price": 358.93,
+      "estimatedProfit": 20,
+      "endingCapital": 1020
+    },
+    "max": {
+      "percent": 3,
+      "price": 362.45,
+      "estimatedProfit": 30,
+      "endingCapital": 1030
+    }
+  },
   "capital": 1000,
-  "estimatedLoss": 50,
-  "estimatedProfit": 100
+  "targetFeasibility": {
+    "minTargetPercent": 2,
+    "maxTargetPercent": 3,
+    "assessment": "reasonable"
+  }
 }
 ```
 
 Ese cálculo asume que usas ese capital completo en cada oportunidad individual. No reparte el capital
-entre todas las oportunidades.
+entre todas las oportunidades. Si no envías `capital`, se muestran los precios de entry, stop financiero,
+stop técnico y targets, pero no aparecen pérdida estimada, ganancia estimada ni capital final.
 
 Si `notify=true` y la oportunidad pasa `TELEGRAM_NOTIFICATION_MIN_SCORE`, Telegram también incluye
-`Capital`, `Pérdida estimada` y `Ganancia estimada` en el mensaje.
+la sección de inversión con capital, stop financiero, stop técnico sugerido, take profits y viabilidad
+del objetivo.
 
 ### WhatsApp
 
@@ -318,6 +347,9 @@ Por defecto:
 ```text
 OPPORTUNITY_MIN_SCORE=50
 TELEGRAM_NOTIFICATION_MIN_SCORE=80
+TRADE_STOP_LOSS_PERCENT=1
+TRADE_TARGET_MIN_PERCENT=2
+TRADE_TARGET_MAX_PERCENT=3
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -339,11 +371,15 @@ Opportunity
 Reglas actuales:
 
 - `entry = close` de la última vela.
-- `stop = low` de la última vela.
-- `target = entry + risk * 2`.
-- Relación riesgo/beneficio mínima esperada: 1:2.
+- `stop = low` de la última vela; este valor se conserva como `technicalStop`.
+- `target` técnico todavía se calcula internamente para compatibilidad, pero ya no es el objetivo
+  principal mostrado al usuario.
+- Los targets principales del `tradePlan` vienen de `TRADE_TARGET_MIN_PERCENT` y
+  `TRADE_TARGET_MAX_PERCENT`.
 
-Las estrategias y analyzers no crean `Signal` directamente.
+Las estrategias y analyzers no crean `Signal` directamente. El score responde “qué tan bueno se ve
+el setup técnico”; el `tradePlan` responde “qué pasa con mi capital si el precio cae/sube ciertos
+porcentajes”.
 
 ## Watchlists
 
@@ -457,8 +493,7 @@ Cuando recibe ambas entidades, envía un formato enriquecido:
 🚨 MARKET SIGNAL
 
 🟢 Ticker: GOOGL
-⏰ Timeframe: 1D
-
+⏰ Timeframe: 1m
 ⭐ Score: 55/100
 
 📈 Trend: 25/25
@@ -474,11 +509,35 @@ Cuando recibe ambas entidades, envía un formato enriquecido:
 
 ────────────────────
 
-💵 Entry: 359.91
-🛑 Stop: 353.42
-🎯 Target: 372.89
+💰 INVERSIÓN
 
-⚖️ Risk/Reward: 1:2.00
+Capital: $1,000.00
+Entry: $359.91
+
+🛑 STOP FINANCIERO (-1%)
+Precio: $356.31
+Pérdida estimada: -$10.00
+
+📊 STOP TÉCNICO SUGERIDO
+Precio: $353.42
+
+────────────────────
+
+🎯 TAKE PROFIT +2%
+
+Precio objetivo: $367.11
+Ganancia estimada: +$20.00
+Capital estimado: $1,020.00
+
+🚀 TAKE PROFIT +3%
+
+Precio objetivo: $370.71
+Ganancia estimada: +$30.00
+Capital estimado: $1,030.00
+
+────────────────────
+
+📐 Objetivo +2/+3%: Razonable
 ```
 
 ### Crear Bot
@@ -602,6 +661,9 @@ MARKET_DATA_RETRY_BASE_DELAY_MS=30000
 MARKET_DATA_SEQUENTIAL=true
 OPPORTUNITY_MIN_SCORE=50
 TELEGRAM_NOTIFICATION_MIN_SCORE=80
+TRADE_STOP_LOSS_PERCENT=1
+TRADE_TARGET_MIN_PERCENT=2
+TRADE_TARGET_MAX_PERCENT=3
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -628,6 +690,9 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `MARKET_DATA_SEQUENTIAL`               | Si es `true`, escanea tickers uno por uno para reducir 429.                                      |
 | `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                             |
 | `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.     |
+| `TRADE_STOP_LOSS_PERCENT`             | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.             |
+| `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                          |
+| `TRADE_TARGET_MAX_PERCENT`             | Segundo escenario de take profit; debe ser mayor que `TRADE_TARGET_MIN_PERCENT`.                 |
 | `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                             |
 | `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                              |
 | `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                      |

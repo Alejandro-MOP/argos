@@ -11,7 +11,7 @@ export const getOpportunityTypeFromTimeframe = (timeframe: string): OpportunityT
     return 'intradia';
   }
 
-  if (normalizedTimeframe === '1h' || normalizedTimeframe === '4h') {
+  if (normalizedTimeframe === '1h') {
     return 'swing-corto';
   }
 

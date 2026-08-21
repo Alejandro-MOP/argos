@@ -59,6 +59,7 @@ const telegramClient = new TelegramClient(
 );
 export const notificationService = new NotificationService(telegramClient, {
   minimumScore: env.scoring.telegramNotificationMinScore,
+  tradePlan: env.tradePlan,
 });
 
 export const marketScanExecutor = new MarketScanExecutor({
