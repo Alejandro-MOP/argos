@@ -199,3 +199,37 @@ El motor no pretende adivinar el mercado. Su valor está en estandarizar el aná
 medir resultados históricos y crear disciplina antes de tomar una decisión. Es una herramienta de
 soporte: detecta setups con reglas claras, muestra el riesgo de forma explícita y permite validar si
 la lógica tiene sentido antes de escalarla.
+
+
+## Signal Intelligence en Telegram
+
+Las alertas de Telegram ahora se explican en tres capas para que una persona pueda leerlas sin mezclar
+conceptos:
+
+### 1. Setup actual
+
+Muestra lo que el motor ve hoy: ticker, temporalidad, score, tendencia, volumen, momentum, estructura,
+razones técnicas y plan de operación. Esta capa responde si el setup actual cumple las reglas del motor.
+
+### 2. Evidencia histórica — Backtest
+
+Muestra qué ocurrió en el pasado con setups comparables usando el mismo motor. Incluye cuántos casos
+históricos existen, resultados para TP +2% y TP +3%, MFE promedio y MAE promedio. Esta información sirve
+como evidencia, no como promesa. Un 71% histórico no significa “71% de probabilidad de ganar”.
+
+Si la muestra es pequeña, el mensaje lo advierte. Si no hay suficientes datos históricos, el sistema lo
+dice de forma explícita y no inventa números.
+
+### 3. Evidencia real — Forward Test
+
+Esta capa queda preparada para medir señales reales emitidas por el bot. Es diferente al backtest porque
+no simula el pasado: audita alertas que el sistema realmente generó en vivo. En la versión actual todavía
+no hay persistencia suficiente para calcularlo, por eso Telegram muestra que está pendiente de recopilar
+señales reales.
+
+## Por qué importa esta separación
+
+Separar score, backtest y forward test evita vender humo. El score mide calidad técnica actual; el
+backtest mide comportamiento histórico de reglas comparables; el forward test medirá desempeño real del
+bot cuando exista historial vivo. Esa separación hace que el sistema sea más honesto, auditable y fácil
+de explicar a usuarios no técnicos.

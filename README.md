@@ -229,8 +229,8 @@ activos baratos como `DOGE-USD` conservan más decimales para que el plan sea ej
 de capital, pérdida y ganancia sí se muestran con 2 decimales.
 
 Si `notify=true` y la oportunidad pasa `TELEGRAM_NOTIFICATION_MIN_SCORE`, Telegram también incluye
-la sección de inversión con capital, stop financiero, stop técnico sugerido, take profits y viabilidad
-del objetivo.
+la sección de trade plan con capital, stop financiero, take profits y contexto de performance cuando
+está habilitado.
 
 ### WhatsApp
 
@@ -359,6 +359,10 @@ TELEGRAM_NOTIFICATION_MIN_SCORE=80
 TRADE_STOP_LOSS_PERCENT=1
 TRADE_TARGET_MIN_PERCENT=2
 TRADE_TARGET_MAX_PERCENT=3
+BACKTEST_CONTEXT_ENABLED=true
+BACKTEST_CONTEXT_MONTHS=24
+PERFORMANCE_MIN_SAMPLE_SIZE=20
+FORWARD_TEST_CONTEXT_ENABLED=true
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -490,6 +494,80 @@ Implementaciones actuales:
 
 Para PostgreSQL, agrega implementaciones como `PostgresOpportunityRepository` y `PostgresSignalRepository` respetando los contratos.
 
+## Signal Intelligence
+
+Las alertas de Telegram ahora se presentan en tres capas separadas para evitar confundir conceptos:
+
+```text
+Score actual ≠ win rate histórico ≠ forward-test win rate
+```
+
+### 1. Current Setup
+
+Es el setup técnico actual. Resume ticker, timeframe, score total y los cuatro componentes del motor:
+`Trend`, `Volume`, `Momentum` y `Structure`. Este score responde:
+
+```text
+¿Qué tan bien cumple el setup actual nuestras reglas técnicas?
+```
+
+No es una probabilidad de ganar.
+
+### 2. Historical Backtest
+
+Cuando `BACKTEST_CONTEXT_ENABLED=true`, el motor intenta adjuntar un resumen histórico comparable a la
+señal actual usando el mismo ticker, timeframe, threshold comparable y ventana configurada por
+`BACKTEST_CONTEXT_MONTHS`.
+
+Para V1, el contexto histórico se obtiene mediante `HistoricalPerformanceProvider`, cuya implementación
+actual puede usar `BacktestEngine` y cachea resultados en memoria por `ticker/timeframe/threshold/meses`.
+Esto mantiene `NotificationService` desacoplado del backtester y deja preparada una futura lectura desde
+PostgreSQL o resultados precalculados.
+
+La sección muestra siempre el tamaño de muestra:
+
+```text
+📊 BACKTEST
+NVDA · 15m · Score ≥80
+
+143 casos históricos
+
+🎯 TP +2%: 71%
+🚀 TP +3%: 54%
+
+📈 MFE promedio: +3.40%
+📉 MAE promedio: -0.60%
+```
+
+Los porcentajes salen del backtesting con:
+
+```text
+wins / (wins + losses) * 100
+```
+
+No se incluyen `EXPIRED` ni `AMBIGUOUS` como wins/losses. Si hay menos casos que
+`PERFORMANCE_MIN_SAMPLE_SIZE`, la alerta muestra `⚠️ Muestra pequeña`. Si Yahoo o el backtest no
+tienen datos suficientes, muestra `Datos históricos insuficientes` y no inventa estadísticas.
+
+### 3. Forward Test
+
+Cuando `FORWARD_TEST_CONTEXT_ENABLED=true`, Telegram reserva una tercera capa para resultados de señales
+reales emitidas por el bot y evaluadas posteriormente. Esto no es backtesting: son alertas reales que el
+sistema habría guardado en operación viva.
+
+Como todavía no existe persistencia PostgreSQL para forward testing, V1 usa `ForwardPerformanceProvider`
+con una implementación `EmptyForwardPerformanceProvider`. Por eso hoy la sección muestra:
+
+```text
+🧪 FORWARD TEST
+Pendiente de recopilar señales reales
+```
+
+La interfaz queda lista para que una implementación PostgreSQL lea señales reales sin modificar
+`NotificationService`.
+
+Historical performance does not guarantee future results.
+
 ## Telegram
 
 `NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Si `TELEGRAM_ENABLED=true`
@@ -501,14 +579,13 @@ Cuando recibe ambas entidades, envía un formato enriquecido:
 ```text
 🚨 MARKET SIGNAL
 
-🟢 Ticker: GOOGL
-⏰ Timeframe: 1m
-⭐ Score: 55/100
+🟢 NVDA · 15m
+⭐ Score: 87/100
 
 📈 Trend: 25/25
-📊 Volume: 0/25
-⚡ Momentum: 15/25
-🏗 Structure: 15/25
+📊 Volume: 22/25
+⚡ Momentum: 20/25
+🏗 Structure: 20/25
 
 ────────────────────
 
@@ -518,35 +595,37 @@ Cuando recibe ambas entidades, envía un formato enriquecido:
 
 ────────────────────
 
-💰 INVERSIÓN
+💰 TRADE PLAN
 
 Capital: $1,000.00
 Entry: $359.91
 
-🛑 STOP FINANCIERO (-1%)
-Precio: $356.31
+🛑 -1% → $356.31
 Pérdida estimada: -$10.00
 
-📊 STOP TÉCNICO SUGERIDO
-Precio: $353.42
-
-────────────────────
-
-🎯 TAKE PROFIT +2%
-
-Precio objetivo: $367.11
+🎯 +2% → $367.11
 Ganancia estimada: +$20.00
-Capital estimado: $1,020.00
 
-🚀 TAKE PROFIT +3%
-
-Precio objetivo: $370.71
+🚀 +3% → $370.71
 Ganancia estimada: +$30.00
-Capital estimado: $1,030.00
 
 ────────────────────
 
-📐 Objetivo +2/+3%: Razonable
+📊 BACKTEST
+NVDA · 15m · Score ≥80
+
+143 casos históricos
+
+🎯 TP +2%: 71%
+🚀 TP +3%: 54%
+
+📈 MFE promedio: +3.40%
+📉 MAE promedio: -0.60%
+
+────────────────────
+
+🧪 FORWARD TEST
+Pendiente de recopilar señales reales
 ```
 
 ### Crear Bot
@@ -834,6 +913,10 @@ TELEGRAM_NOTIFICATION_MIN_SCORE=80
 TRADE_STOP_LOSS_PERCENT=1
 TRADE_TARGET_MIN_PERCENT=2
 TRADE_TARGET_MAX_PERCENT=3
+BACKTEST_CONTEXT_ENABLED=true
+BACKTEST_CONTEXT_MONTHS=24
+PERFORMANCE_MIN_SAMPLE_SIZE=20
+FORWARD_TEST_CONTEXT_ENABLED=true
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -863,6 +946,10 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `TRADE_STOP_LOSS_PERCENT`             | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.             |
 | `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                          |
 | `TRADE_TARGET_MAX_PERCENT`             | Segundo escenario de take profit; debe ser mayor que `TRADE_TARGET_MIN_PERCENT`.                 |
+| `BACKTEST_CONTEXT_ENABLED`             | Activa/desactiva la sección `📊 BACKTEST` en alertas Telegram.                                   |
+| `BACKTEST_CONTEXT_MONTHS`              | Meses de historia usados para buscar setups comparables en el contexto histórico.                 |
+| `PERFORMANCE_MIN_SAMPLE_SIZE`          | Muestra mínima esperada antes de advertir `⚠️ Muestra pequeña`.                                  |
+| `FORWARD_TEST_CONTEXT_ENABLED`         | Activa/desactiva la sección `🧪 FORWARD TEST`; hoy queda pendiente hasta tener persistencia real. |
 | `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                             |
 | `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                              |
 | `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                      |
