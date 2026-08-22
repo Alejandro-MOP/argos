@@ -37,6 +37,7 @@ src/
     marketScan/
     marketScanHttp/
     telegramTest/
+    backtest/
   models/
     Candle.ts
     Opportunity.ts
@@ -112,14 +113,18 @@ Pasos de `marketScan`:
 
 ## Azure Functions
 
-El proyecto expone dos entradas para el mismo motor:
+El proyecto expone entradas independientes para producción, pruebas manuales y backtesting:
 
 ```text
-marketScan      -> Timer Trigger / cron
+marketScan      -> Timer Trigger / cron para escaneo automático
 marketScanHttp  -> HTTP Trigger manual o webhook
+backtest        -> HTTP Trigger para simulación histórica
+telegramTest    -> HTTP Trigger de prueba de Telegram
 ```
 
-Ambas usan `MarketScanExecutor`, así que el pipeline cuantitativo vive en un solo lugar.
+`marketScan` y `marketScanHttp` usan `MarketScanExecutor`, así que el pipeline cuantitativo vivo
+vive en un solo lugar. `backtest` usa `BacktestEngine`, pero reutiliza los mismos analyzers,
+`OpportunityService` y `RiskService` para evitar reglas paralelas.
 
 ### Cron
 
@@ -603,17 +608,178 @@ El escaneo HTTP notifica por defecto. También puedes forzarlo:
 curl "http://localhost:7071/api/market-scan?tickers=NVDA,MSFT&timeframe=15m&limit=80&notify=true"
 ```
 
-## Backtesting
+## Backtesting V1
 
-La carpeta `src/backtesting` prepara la arquitectura para simulación histórica.
+El proyecto incluye un endpoint independiente para simular cómo se habría comportado el motor en
+un periodo histórico sin modificar el flujo de producción:
 
-Incluye:
+```text
+POST /api/backtest
+```
 
-- `BacktestEngine`
-- `BacktestResult`
-- `TradeSimulation`
+Ejemplo:
 
-Todavía no ejecuta simulaciones completas. Está preparado para reutilizar el pipeline de analyzers y risk management contra datos históricos.
+```bash
+curl -X POST "http://localhost:7071/api/backtest" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tickers": ["NVDA"],
+    "timeframe": "1d",
+    "from": "2024-01-01",
+    "to": "2026-08-01",
+    "minimumScore": 80,
+    "stopLossPercent": 1,
+    "takeProfitMinPercent": 2,
+    "takeProfitMaxPercent": 3,
+    "includeTrades": true
+  }'
+```
+
+El backtest responde dos preguntas distintas:
+
+1. Si la estrategia tuvo buen desempeño en todo el periodo solicitado.
+2. Si la estrategia ha funcionado recientemente, mediante ventanas comparativas.
+
+El backtest reutiliza exactamente la misma lógica de producción para calcular `Trend`, `Volume`,
+`Momentum`, `Structure`, `Score`, `Opportunity` y el `entry` vía `RiskService`. No existen analyzers
+especiales para backtesting y no se modifica el scoring del motor vivo.
+
+### Regla anti look-ahead bias
+
+Para cada vela histórica `i`, el motor solo analiza:
+
+```text
+candles[0..i]
+```
+
+Las velas futuras `candles[i+1..N]` solo se usan después de crear la señal histórica, exclusivamente
+para evaluar si se alcanzó stop loss o take profit. Esto evita que el backtest use información que
+en la vida real no habría existido al momento de alertar.
+
+### Cuándo nace una operación histórica
+
+Una operación simulada nace cuando:
+
+```text
+score >= minimumScore
+```
+
+Para no contar varias veces el mismo movimiento, el engine no abre una nueva operación para el mismo
+`ticker + timeframe` mientras exista una operación activa. La siguiente señal puede abrirse cuando
+la anterior termina como `WIN`, `LOSS`, `EXPIRED` o `AMBIGUOUS`.
+
+### Niveles simulados
+
+Para señales `LONG`, el backtest calcula niveles porcentuales desde el `entry`:
+
+```text
+stopLoss = entry * (1 - stopLossPercent / 100)
+tp1      = entry * (1 + takeProfitMinPercent / 100)
+tp2      = entry * (1 + takeProfitMaxPercent / 100)
+```
+
+Ejemplo con `entry=100`, `stopLossPercent=1`, `takeProfitMinPercent=2` y
+`takeProfitMaxPercent=3`:
+
+```text
+SL  = 99
+TP1 = 102
+TP2 = 103
+```
+
+TP1 y TP2 se evalúan de forma independiente. Por eso puede existir un trade donde TP1 sea `WIN`
+y TP2 sea `LOSS` si el precio toca +2% primero y después cae al stop antes de llegar a +3%.
+
+### Outcomes
+
+Cada target puede terminar como:
+
+| Outcome | Significado |
+| --- | --- |
+| `WIN` | El target se alcanzó antes que el stop. |
+| `LOSS` | El stop se alcanzó antes que el target. |
+| `EXPIRED` | No tocó ni stop ni target dentro de la ventana máxima. |
+| `AMBIGUOUS` | La misma vela tocó stop y target; con OHLC no sabemos qué ocurrió primero. |
+
+`AMBIGUOUS` no cuenta automáticamente como win ni como loss. El `winRate` principal usa:
+
+```text
+wins / (wins + losses) * 100
+```
+
+`EXPIRED` y `AMBIGUOUS` quedan fuera del denominador principal, pero sí aparecen en el resumen.
+
+### Ventanas máximas por timeframe
+
+Defaults iniciales:
+
+| Timeframe | Ventana máxima del trade |
+| --- | --- |
+| `1m` | 1 día |
+| `5m` | 2 días |
+| `15m` | 3 días |
+| `30m` | 5 días |
+| `1h` | 10 días |
+| `1d` | 45 días |
+| `1w` | 180 días |
+
+Estas ventanas viven desacopladas en `BacktestEngine`, para poder ajustarlas después sin reescribir
+la lógica de evaluación.
+
+### MFE y MAE
+
+Cada trade incluye:
+
+- `maxFavorableExcursionPercent`: máximo movimiento favorable mientras el trade estuvo activo.
+- `maxAdverseExcursionPercent`: máximo movimiento adverso mientras el trade estuvo activo.
+
+Esto sirve para revisar si los niveles `SL -1%`, `TP +2%` y `TP +3%` son razonables para cada
+temporalidad y activo.
+
+### Respuesta resumida
+
+El response incluye un resumen del periodo completo y ventanas recientes:
+
+```json
+{
+  "fullPeriod": {
+    "totalSignals": 52,
+    "tp1": { "wins": 35, "losses": 10, "winRate": 77.78 },
+    "tp2": { "wins": 28, "losses": 15, "winRate": 65.12 },
+    "averageScore": 86.4,
+    "averageMfePercent": 4.15,
+    "averageMaePercent": -0.62
+  },
+  "windows": {
+    "fullPeriod": { "signals": 52, "tp1WinRate": 77.78, "tp2WinRate": 65.12 },
+    "last12Months": { "signals": 24, "tp1WinRate": 75, "tp2WinRate": 62.5 },
+    "last6Months": { "signals": 11, "tp1WinRate": 72.73, "tp2WinRate": 54.55 },
+    "last30Days": { "signals": 2, "tp1WinRate": 100, "tp2WinRate": 50 },
+    "last7Days": { "signals": 0, "tp1WinRate": 0, "tp2WinRate": 0 }
+  }
+}
+```
+
+Las ventanas pequeñas siempre deben leerse con cuidado. Un `last7Days` con 1 o 2 señales no es
+estadísticamente fuerte; por eso el response siempre incluye `signals` junto al win rate.
+
+### Trades individuales
+
+Si `includeTrades=true`, el response incluye operaciones simuladas individuales con `signalAt`,
+`entry`, `stopLoss`, `takeProfit1`, `takeProfit2`, outcomes, fechas de salida, velas transcurridas,
+MFE y MAE. Esto permite revisar literalmente algo como:
+
+```text
+El motor habría alertado NVDA el 24-Jul; TP1 se alcanzó dos velas después.
+```
+
+### Backtesting vs Forward Testing
+
+`Backtesting` simula qué habría ocurrido si el motor hubiera existido históricamente.
+
+`Forward Testing` guardará señales realmente generadas en vivo y evaluará después qué pasó. Esa fase
+no está implementada todavía; los modelos actuales ya separan `signalAt`, `ticker`, `timeframe`,
+`score`, `entry`, `SL`, `TP1` y `TP2` para facilitar persistencia futura.
 
 ## Legacy StrategyService
 
