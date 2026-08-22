@@ -87,21 +87,19 @@ export class NotificationService {
       `⚡ Momentum: ${this.formatScore(opportunity.momentumScore)}/25`,
       `🏗 Structure: ${this.formatScore(opportunity.structureScore)}/25`,
       '',
-      '────────────────────',
+      '──────────────────',
       '',
       reasons,
       '',
-      '────────────────────',
+      '──────────────────',
       '',
       this.formatInvestmentSection(signal, tradePlan),
-      '',
-      '────────────────────',
       '',
       this.formatTargetSection(tradePlan, 'min'),
       '',
       this.formatTargetSection(tradePlan, 'max'),
       '',
-      '────────────────────',
+      '──────────────────',
       '',
       this.formatTargetFeasibility(tradePlan),
     ]
@@ -120,13 +118,13 @@ export class NotificationService {
       tradePlan.capital ? `Capital: ${this.formatMoney(tradePlan.capital)}` : '',
       `Entry: ${this.formatPrice(tradePlan.entry)}`,
       '',
-      `🛑 STOP FINANCIERO (-${this.formatPercent(tradePlan.financialStop.percent)}%)`,
+      `\n🛑 STOP FINANCIERO (-${this.formatPercent(tradePlan.financialStop.percent)}%)`,
       `Precio: ${this.formatPrice(tradePlan.financialStop.price)}`,
       tradePlan.financialStop.estimatedLoss !== undefined
         ? `Pérdida estimada: -${this.formatMoney(tradePlan.financialStop.estimatedLoss)}`
         : '',
       '',
-      '📊 STOP TÉCNICO SUGERIDO',
+      '\n📊 STOP TÉCNICO SUGERIDO',
       `Precio: ${this.formatPrice(tradePlan.technicalStop.price)}`,
     ];
 
@@ -139,7 +137,7 @@ export class NotificationService {
     }
 
     const target = tradePlan.targets[targetKey];
-    const icon = targetKey === 'min' ? '🎯' : '🚀';
+    const icon = targetKey === 'min' ? '\n🎯' : '\n🚀';
     const label = targetKey === 'min' ? 'TAKE PROFIT' : 'TAKE PROFIT';
     const lines = [
       `${icon} ${label} +${this.formatPercent(target.percent)}%`,
