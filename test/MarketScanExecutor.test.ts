@@ -257,6 +257,55 @@ describe('MarketScanExecutor', () => {
     );
   });
 
+
+  it('builds signal context before sending Telegram when context service is configured', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 85);
+    const signalContext = {
+      historicalEnabled: true,
+      forwardEnabled: true,
+      historical: {
+        sampleSize: 30,
+        tp1: { targetPercent: 2, wins: 21, losses: 9, winRate: 70 },
+        tp2: { targetPercent: 3, wins: 15, losses: 15, winRate: 50 },
+      },
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(80),
+    };
+    const signalContextService = {
+      buildContext: jest.fn().mockResolvedValue(signalContext),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      notificationService,
+      signalContextService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true, capital: 1_000 },
+      logger,
+    );
+
+    expect(signalContextService.buildContext).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'SPY' }),
+      opportunity,
+    );
+    expect(notificationService.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'SPY' }),
+      opportunity,
+      1_000,
+      signalContext,
+    );
+  });
+
   it('adds high-score opportunities to notifiedSignals and sends Telegram when notify is enabled', async () => {
     const logger = buildLogger();
     const opportunity = buildOpportunity('SPY', 85);
@@ -286,6 +335,7 @@ describe('MarketScanExecutor', () => {
       result.notifiedSignals[0],
       opportunity,
       1_000,
+      undefined,
     );
     expect(result.skipped).not.toContainEqual(
       expect.objectContaining({ reason: 'below-telegram-threshold' }),

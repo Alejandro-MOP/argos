@@ -1,6 +1,7 @@
 import type { Candle } from '../models/Candle';
 import type { Opportunity } from '../models/Opportunity';
 import type { Signal } from '../models/Signal';
+import type { SignalContext } from '../models/SignalContext';
 import {
   InsufficientCandlesError,
   MarketDataProviderError,
@@ -15,6 +16,7 @@ import type { OpportunityService } from './OpportunityService';
 import type { RankingService } from './RankingService';
 import type { RateLimiterService } from './RateLimiterService';
 import type { RiskService } from './RiskService';
+import type { SignalContextService } from './SignalContextService';
 import type { WatchlistService } from './WatchlistService';
 
 const MINIMUM_PROVIDER_CANDLES = 60;
@@ -77,6 +79,7 @@ export interface MarketScanExecutorDependencies {
   opportunityRepository: OpportunityRepository;
   signalRepository: SignalRepository;
   notificationService: NotificationService;
+  signalContextService?: SignalContextService;
   rateLimiterService: RateLimiterService;
   debug?: boolean;
   marketDataMaxAgeMinutes: number;
@@ -182,7 +185,13 @@ export class MarketScanExecutor {
       await this.dependencies.signalRepository.save(signal);
 
       if (options.notify) {
-        await this.dependencies.notificationService.sendSignal(signal, opportunity, options.capital);
+        const signalContext = await this.buildSignalContext(signal, opportunity, logger);
+        await this.dependencies.notificationService.sendSignal(
+          signal,
+          opportunity,
+          options.capital,
+          signalContext,
+        );
       }
 
       notifiedSignals.push(signal);
@@ -199,6 +208,28 @@ export class MarketScanExecutor {
       skipped,
       errors,
     };
+  }
+
+
+  private async buildSignalContext(
+    signal: Signal,
+    opportunity: Opportunity,
+    logger: MarketScanLogger,
+  ): Promise<SignalContext | undefined> {
+    if (!this.dependencies.signalContextService) {
+      return undefined;
+    }
+
+    try {
+      return await this.dependencies.signalContextService.buildContext(signal, opportunity);
+    } catch (error) {
+      logger.error(`No se pudo construir contexto de señal para ${signal.ticker}`, {
+        ticker: signal.ticker,
+        timeframe: signal.timeframe,
+        message: error instanceof Error ? error.message : 'signal-context-failed',
+      });
+      return undefined;
+    }
   }
 
   private resolveTickers(tickers?: string[]): string[] {

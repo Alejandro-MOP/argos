@@ -5,6 +5,10 @@ import { VolumeAnalyzer } from '../analyzers/VolumeAnalyzer';
 import { BacktestEngine } from '../backtesting/BacktestEngine';
 import { TelegramClient } from '../clients/TelegramClient';
 import { YahooFinanceClient } from '../clients/YahooFinanceClient';
+import {
+  BacktestHistoricalPerformanceProvider,
+  EmptyForwardPerformanceProvider,
+} from '../performance/PerformanceProviders';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
 import { SignalRepository } from '../repositories/SignalRepository';
 import { MarketDataService } from '../services/MarketDataService';
@@ -13,6 +17,7 @@ import { NotificationService } from '../services/NotificationService';
 import { OpportunityFilter } from '../services/OpportunityFilter';
 import { OpportunityService } from '../services/OpportunityService';
 import { RateLimiterService } from '../services/RateLimiterService';
+import { SignalContextService } from '../services/SignalContextService';
 import { RankingService } from '../services/RankingService';
 import { RiskService } from '../services/RiskService';
 import { WatchlistService } from '../services/WatchlistService';
@@ -64,6 +69,21 @@ export const backtestEngine = new BacktestEngine({
   riskService,
 });
 
+const signalContextService = new SignalContextService(
+  {
+    historicalPerformanceProvider: new BacktestHistoricalPerformanceProvider(backtestEngine),
+    forwardPerformanceProvider: new EmptyForwardPerformanceProvider(),
+  },
+  {
+    backtestContextEnabled: env.signalIntelligence.backtestContextEnabled,
+    backtestContextMonths: env.signalIntelligence.backtestContextMonths,
+    historicalMinimumScore: env.scoring.telegramNotificationMinScore,
+    forwardTestContextEnabled: env.signalIntelligence.forwardTestContextEnabled,
+    performanceMinSampleSize: env.signalIntelligence.performanceMinSampleSize,
+    tradePlan: env.tradePlan,
+  },
+);
+
 export const notificationService = new NotificationService(telegramClient, {
   minimumScore: env.scoring.telegramNotificationMinScore,
   tradePlan: env.tradePlan,
@@ -79,6 +99,7 @@ export const marketScanExecutor = new MarketScanExecutor({
   opportunityRepository,
   signalRepository,
   notificationService,
+  signalContextService,
   rateLimiterService,
   debug: env.marketScanDebug,
   marketDataMaxAgeMinutes: env.marketDataMaxAgeMinutes,

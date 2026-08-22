@@ -108,6 +108,12 @@ export const env = {
   marketDataRetryBaseDelayMs: parseInteger(process.env.MARKET_DATA_RETRY_BASE_DELAY_MS, 30_000),
   marketDataSequential: parseBoolean(process.env.MARKET_DATA_SEQUENTIAL, true),
   tradePlan: parseTradePlanConfig(),
+  signalIntelligence: {
+    backtestContextEnabled: parseBoolean(process.env.BACKTEST_CONTEXT_ENABLED, true),
+    backtestContextMonths: parseInteger(process.env.BACKTEST_CONTEXT_MONTHS, 24),
+    performanceMinSampleSize: parseInteger(process.env.PERFORMANCE_MIN_SAMPLE_SIZE, 20),
+    forwardTestContextEnabled: parseBoolean(process.env.FORWARD_TEST_CONTEXT_ENABLED, true),
+  },
   scoring: {
     maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
     opportunityMinScore: parseInteger(process.env.OPPORTUNITY_MIN_SCORE, 50),

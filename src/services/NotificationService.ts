@@ -1,5 +1,6 @@
 import type { Signal } from '../models/Signal';
 import type { Opportunity } from '../models/Opportunity';
+import type { SignalContext, PerformanceSummary } from '../models/SignalContext';
 import type { TelegramClient } from '../clients/TelegramClient';
 import {
   calculateTradePlan,
@@ -17,6 +18,8 @@ const DEFAULT_NOTIFICATION_CONFIG: NotificationServiceConfig = {
   minimumScore: 80,
   tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 3 },
 };
+
+const SEPARATOR = '────────────────────';
 
 export class NotificationService {
   private readonly config: NotificationServiceConfig;
@@ -43,9 +46,10 @@ export class NotificationService {
     signal: Signal,
     opportunity?: Opportunity,
     capital?: number,
+    context?: SignalContext,
   ): Promise<void> {
     const message = opportunity
-      ? this.formatOpportunitySignal(signal, opportunity, capital)
+      ? this.formatOpportunitySignal(signal, opportunity, capital, context)
       : [
           `Señal ${signal.signalType}: ${signal.ticker}`,
           `Temporalidad: ${this.formatTimeframe(signal.timeframe)}`,
@@ -71,95 +75,132 @@ export class NotificationService {
     signal: Signal,
     opportunity: Opportunity,
     capital?: number,
+    context?: SignalContext,
   ): string {
-    const reasons = this.formatReasons(opportunity.reasons);
     const tradePlan = calculateTradePlan(signal, this.config.tradePlan, capital);
+    const sections = [
+      this.formatCurrentSetup(signal, opportunity),
+      this.formatReasons(opportunity.reasons),
+      this.formatTradePlan(signal, tradePlan),
+      this.formatHistoricalPerformance(opportunity, context),
+      this.formatForwardPerformance(context),
+    ].filter((section): section is string => Boolean(section));
 
+    return sections.join(`\n\n${SEPARATOR}\n\n`);
+  }
+
+  private formatCurrentSetup(signal: Signal, opportunity: Opportunity): string {
     return [
       '🚨 MARKET SIGNAL',
       '',
-      `🟢 Ticker: ${opportunity.ticker}`,
-      `⏰ Timeframe: ${this.formatTimeframe(signal.timeframe)}`,
+      `🟢 ${opportunity.ticker} · ${this.formatTimeframe(signal.timeframe)}`,
       `⭐ Score: ${this.formatScore(opportunity.score)}/100`,
       '',
       `📈 Trend: ${this.formatScore(opportunity.trendScore)}/25`,
       `📊 Volume: ${this.formatScore(opportunity.volumeScore)}/25`,
       `⚡ Momentum: ${this.formatScore(opportunity.momentumScore)}/25`,
       `🏗 Structure: ${this.formatScore(opportunity.structureScore)}/25`,
+    ].join('\n');
+  }
+
+  private formatTradePlan(signal: Signal, tradePlan: TradePlan | undefined): string {
+    if (!tradePlan) {
+      return ['💰 TRADE PLAN', '', `Entry: ${this.formatPrice(signal.entry)}`].join('\n');
+    }
+
+    const lines = [
+      '💰 TRADE PLAN',
       '',
-      '──────────────────',
+      tradePlan.capital ? `Capital: ${this.formatMoney(tradePlan.capital)}` : '',
+      `Entry: ${this.formatPrice(tradePlan.entry)}`,
       '',
-      reasons,
+      `🛑 -${this.formatPercent(tradePlan.financialStop.percent)}% → ${this.formatPrice(tradePlan.financialStop.price)}`,
+      tradePlan.financialStop.estimatedLoss !== undefined
+        ? `Pérdida estimada: -${this.formatMoney(tradePlan.financialStop.estimatedLoss)}`
+        : '',
       '',
-      '──────────────────',
+      `🎯 +${this.formatPercent(tradePlan.targets.min.percent)}% → ${this.formatPrice(tradePlan.targets.min.price)}`,
+      tradePlan.targets.min.estimatedProfit !== undefined
+        ? `Ganancia estimada: +${this.formatMoney(tradePlan.targets.min.estimatedProfit)}`
+        : '',
       '',
-      this.formatInvestmentSection(signal, tradePlan),
+      `🚀 +${this.formatPercent(tradePlan.targets.max.percent)}% → ${this.formatPrice(tradePlan.targets.max.price)}`,
+      tradePlan.targets.max.estimatedProfit !== undefined
+        ? `Ganancia estimada: +${this.formatMoney(tradePlan.targets.max.estimatedProfit)}`
+        : '',
+    ];
+
+    return lines.filter((line) => line !== '').join('\n');
+  }
+
+  private formatHistoricalPerformance(
+    opportunity: Opportunity,
+    context?: SignalContext,
+  ): string | undefined {
+    if (!context?.historicalEnabled) {
+      return undefined;
+    }
+
+    const summary = context.historical;
+
+    if (!summary || summary.sampleSize === 0) {
+      return ['📊 BACKTEST', 'Datos históricos insuficientes'].join('\n');
+    }
+
+    return [
+      '📊 BACKTEST',
+      `${opportunity.ticker} · ${this.formatTimeframe(opportunity.timeframe)} · Score ≥${this.formatScore(this.config.minimumScore)}`,
       '',
-      this.formatTargetSection(tradePlan, 'min'),
+      `${summary.sampleSize} casos históricos`,
+      summary.insufficientData ? '⚠️ Muestra pequeña' : '',
       '',
-      this.formatTargetSection(tradePlan, 'max'),
+      this.formatTargetPerformance('🎯', 'TP', summary.tp1),
+      this.formatTargetPerformance('🚀', 'TP', summary.tp2),
       '',
-      '──────────────────',
-      '',
-      this.formatTargetFeasibility(tradePlan),
+      summary.averageMfePercent !== undefined
+        ? `📈 MFE promedio: ${this.formatSignedPercent(summary.averageMfePercent)}`
+        : '',
+      summary.averageMaePercent !== undefined
+        ? `📉 MAE promedio: ${this.formatSignedPercent(summary.averageMaePercent)}`
+        : '',
     ]
       .filter((line) => line !== '')
       .join('\n');
   }
 
-  private formatInvestmentSection(signal: Signal, tradePlan: TradePlan | undefined): string {
-    if (!tradePlan) {
-      return [`💰 INVERSIÓN`, '', `Entry: ${this.formatPrice(signal.entry)}`].join('\n');
+  private formatForwardPerformance(context?: SignalContext): string | undefined {
+    if (!context?.forwardEnabled) {
+      return undefined;
     }
 
-    const lines = [
-      '💰 INVERSIÓN',
-      '',
-      tradePlan.capital ? `Capital: ${this.formatMoney(tradePlan.capital)}` : '',
-      `Entry: ${this.formatPrice(tradePlan.entry)}`,
-      '',
-      `\n🛑 STOP FINANCIERO (-${this.formatPercent(tradePlan.financialStop.percent)}%)`,
-      `Precio: ${this.formatPrice(tradePlan.financialStop.price)}`,
-      tradePlan.financialStop.estimatedLoss !== undefined
-        ? `Pérdida estimada: -${this.formatMoney(tradePlan.financialStop.estimatedLoss)}`
-        : '',
-      '',
-      '\n📊 STOP TÉCNICO SUGERIDO',
-      `Precio: ${this.formatPrice(tradePlan.technicalStop.price)}`,
-    ];
+    const summary = context.forward;
 
-    return lines.filter(Boolean).join('\n');
+    if (!summary || summary.sampleSize === 0) {
+      return ['🧪 FORWARD TEST', 'Pendiente de recopilar señales reales'].join('\n');
+    }
+
+    return [
+      '🧪 FORWARD TEST',
+      'Alertas reales del bot',
+      '',
+      `${summary.sampleSize} señales registradas`,
+      summary.insufficientData ? '⚠️ Muestra pequeña' : '',
+      '',
+      this.formatTargetPerformance('🎯', 'TP', summary.tp1),
+      this.formatTargetPerformance('🚀', 'TP', summary.tp2),
+    ]
+      .filter((line) => line !== '')
+      .join('\n');
   }
 
-  private formatTargetSection(tradePlan: TradePlan | undefined, targetKey: 'min' | 'max'): string {
-    if (!tradePlan) {
-      return '';
-    }
+  private formatTargetPerformance(
+    icon: string,
+    label: string,
+    target: PerformanceSummary['tp1'],
+  ): string {
+    const winRate = target.winRate === null ? 'n/a' : `${this.formatPercent(target.winRate)}%`;
 
-    const target = tradePlan.targets[targetKey];
-    const icon = targetKey === 'min' ? '\n🎯' : '\n🚀';
-    const label = targetKey === 'min' ? 'TAKE PROFIT' : 'TAKE PROFIT';
-    const lines = [
-      `${icon} ${label} +${this.formatPercent(target.percent)}%`,
-      '',
-      `Precio objetivo: ${this.formatPrice(target.price)}`,
-      target.estimatedProfit !== undefined
-        ? `Ganancia estimada: +${this.formatMoney(target.estimatedProfit)}`
-        : '',
-      target.endingCapital !== undefined
-        ? `Capital estimado: ${this.formatMoney(target.endingCapital)}`
-        : '',
-    ];
-
-    return lines.filter(Boolean).join('\n');
-  }
-
-  private formatTargetFeasibility(tradePlan: TradePlan | undefined): string {
-    if (!tradePlan) {
-      return '';
-    }
-
-    return `📐 Objetivo +${this.formatPercent(tradePlan.targetFeasibility.minTargetPercent)}/+${this.formatPercent(tradePlan.targetFeasibility.maxTargetPercent)}%: ${this.formatAssessment(tradePlan.targetFeasibility.assessment)}`;
+    return `${icon} ${label} +${this.formatPercent(target.targetPercent)}%: ${winRate}`;
   }
 
   private formatCompactTradePlan(signal: Signal, capital?: number): string {
@@ -193,16 +234,10 @@ export class NotificationService {
     return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2);
   }
 
-  private formatAssessment(assessment: TradePlan['targetFeasibility']['assessment']): string {
-    if (assessment === 'reasonable') {
-      return 'Razonable';
-    }
+  private formatSignedPercent(value: number): string {
+    const prefix = value > 0 ? '+' : '';
 
-    if (assessment === 'aggressive') {
-      return 'Agresivo';
-    }
-
-    return 'Muy agresivo';
+    return `${prefix}${this.formatPercent(value)}%`;
   }
 
   private formatScore(value: number): string {
