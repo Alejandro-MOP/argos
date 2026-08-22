@@ -2,6 +2,7 @@ import { MomentumAnalyzer } from '../analyzers/MomentumAnalyzer';
 import { StructureAnalyzer } from '../analyzers/StructureAnalyzer';
 import { TrendAnalyzer } from '../analyzers/TrendAnalyzer';
 import { VolumeAnalyzer } from '../analyzers/VolumeAnalyzer';
+import { BacktestEngine } from '../backtesting/BacktestEngine';
 import { TelegramClient } from '../clients/TelegramClient';
 import { YahooFinanceClient } from '../clients/YahooFinanceClient';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
@@ -57,6 +58,12 @@ const telegramClient = new TelegramClient(
   env.telegramChatId,
   env.telegramEnabled,
 );
+export const backtestEngine = new BacktestEngine({
+  marketDataService,
+  opportunityService,
+  riskService,
+});
+
 export const notificationService = new NotificationService(telegramClient, {
   minimumScore: env.scoring.telegramNotificationMinScore,
   tradePlan: env.tradePlan,

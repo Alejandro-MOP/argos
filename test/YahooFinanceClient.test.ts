@@ -117,6 +117,50 @@ describe('YahooFinanceClient', () => {
     } satisfies Partial<InsufficientCandlesError>);
   });
 
+
+  it('fetches historical Yahoo candles with requested date range in ascending order', async () => {
+    const response = buildChartResponse(80);
+    response.quotes.reverse();
+    const yahooFinance = {
+      chart: jest.fn().mockResolvedValue(response),
+    };
+    const client = new YahooFinanceClient(yahooFinance);
+    const from = new Date('2024-01-01T00:00:00.000Z');
+    const to = new Date('2024-06-01T00:00:00.000Z');
+
+    const candles = await client.getHistoricalCandles('nvda', '1d', from, to);
+
+    expect(yahooFinance.chart).toHaveBeenCalledWith('NVDA', {
+      period1: from,
+      period2: to,
+      interval: '1d',
+      includePrePost: false,
+      return: 'array',
+    });
+    expect(candles).toHaveLength(80);
+    expect(candles[0].timestamp.getTime()).toBeLessThan(candles.at(-1)!.timestamp.getTime());
+  });
+
+  it('throws insufficient-historical-data when Yahoo returns too few historical candles', async () => {
+    const client = new YahooFinanceClient({
+      chart: jest.fn().mockResolvedValue(buildChartResponse(10)),
+    });
+
+    await expect(
+      client.getHistoricalCandles(
+        'SPY',
+        '1d',
+        new Date('2024-01-01T00:00:00.000Z'),
+        new Date('2024-02-01T00:00:00.000Z'),
+      ),
+    ).rejects.toMatchObject({
+      message: 'insufficient-historical-data',
+      ticker: 'SPY',
+      timeframe: '1d',
+      candlesReturned: 10,
+    });
+  });
+
   it('throws MarketDataRateLimitError when Yahoo appears rate limited', async () => {
     const error = new Error('Yahoo Finance request failed with 429');
     const client = new YahooFinanceClient({

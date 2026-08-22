@@ -6,6 +6,7 @@ import {
 } from '../errors/MarketDataErrors';
 import type { Candle } from '../models/Candle';
 import type { MarketDataProvider } from '../ports/MarketDataProvider';
+import { InsufficientHistoricalDataError } from '../backtesting/BacktestEngine';
 
 const MINIMUM_PROVIDER_CANDLES = 60;
 const DAY_IN_MILLISECONDS = 86_400_000;
@@ -193,6 +194,71 @@ export class YahooFinanceClient implements MarketDataProvider {
         ticker: normalizedTicker,
         status: this.getErrorStatus(error),
         message: error instanceof Error ? error.message : 'Yahoo Finance request failed',
+      });
+    }
+  }
+
+
+  public async getHistoricalCandles(
+    ticker: string,
+    timeframe: string,
+    from: Date,
+    to: Date,
+  ): Promise<Candle[]> {
+    const parsedTimeframe = parseYahooTimeframe(timeframe);
+    const normalizedTicker = ticker.toUpperCase();
+
+    try {
+      const response = await this.yahooFinance.chart(normalizedTicker, {
+        period1: from,
+        period2: to,
+        interval: parsedTimeframe.interval,
+        includePrePost: false,
+        return: 'array',
+      });
+      const candles = response.quotes
+        .map(mapYahooQuoteToCandle)
+        .filter((candle): candle is Candle => candle !== null)
+        .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+
+      this.logDebug({
+        provider: 'yahoo',
+        ticker: normalizedTicker,
+        timeframe,
+        endpoint: YAHOO_CHART_ENDPOINT,
+        requestedFrom: from.toISOString(),
+        requestedTo: to.toISOString(),
+        candlesReturned: candles.length,
+        firstTimestamp: candles.at(0)?.timestamp.toISOString() ?? 'n/a',
+        lastTimestamp: candles.at(-1)?.timestamp.toISOString() ?? 'n/a',
+      });
+
+      if (candles.length < MINIMUM_PROVIDER_CANDLES) {
+        throw new InsufficientHistoricalDataError(
+          normalizedTicker,
+          timeframe,
+          from.toISOString(),
+          to.toISOString(),
+          candles.length,
+        );
+      }
+
+      return candles;
+    } catch (error) {
+      if (error instanceof InsufficientHistoricalDataError) {
+        throw error;
+      }
+
+      if (this.isRateLimitError(error)) {
+        throw new MarketDataRateLimitError('yahoo', 429, YAHOO_CHART_ENDPOINT);
+      }
+
+      throw new MarketDataProviderError({
+        provider: 'yahoo',
+        endpoint: YAHOO_CHART_ENDPOINT,
+        ticker: normalizedTicker,
+        status: this.getErrorStatus(error),
+        message: error instanceof Error ? error.message : 'Yahoo Finance historical request failed',
       });
     }
   }
