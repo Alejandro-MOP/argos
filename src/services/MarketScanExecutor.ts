@@ -1,6 +1,7 @@
 import type { Candle } from '../models/Candle';
 import type { Opportunity } from '../models/Opportunity';
 import type { Signal } from '../models/Signal';
+import type { ForwardSignalSnapshot } from '../models/ForwardSignal';
 import type { SignalContext } from '../models/SignalContext';
 import {
   InsufficientCandlesError,
@@ -8,6 +9,7 @@ import {
   MarketDataRateLimitError,
 } from '../errors/MarketDataErrors';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
+import type { ForwardSignalRepository } from '../ports/ForwardSignalRepository';
 import type { SignalRepository } from '../ports/SignalRepository';
 import type { MarketDataService } from './MarketDataService';
 import type { NotificationService } from './NotificationService';
@@ -18,6 +20,7 @@ import type { RateLimiterService } from './RateLimiterService';
 import type { RiskService } from './RiskService';
 import type { SignalContextService } from './SignalContextService';
 import type { WatchlistService } from './WatchlistService';
+import { calculateTradePlan, type TradePlanConfig } from '../utils/tradeSizing.utils';
 
 const MINIMUM_PROVIDER_CANDLES = 60;
 
@@ -78,6 +81,7 @@ export interface MarketScanExecutorDependencies {
   riskService: RiskService;
   opportunityRepository: OpportunityRepository;
   signalRepository: SignalRepository;
+  forwardSignalRepository?: ForwardSignalRepository;
   notificationService: NotificationService;
   signalContextService?: SignalContextService;
   rateLimiterService: RateLimiterService;
@@ -86,6 +90,7 @@ export interface MarketScanExecutorDependencies {
   marketDataMaxRetries: number;
   marketDataRetryBaseDelayMs: number;
   marketDataSequential: boolean;
+  tradePlan?: TradePlanConfig;
 }
 
 export class MarketScanExecutor {
@@ -185,6 +190,7 @@ export class MarketScanExecutor {
       await this.dependencies.signalRepository.save(signal);
 
       if (options.notify) {
+        await this.persistForwardSignal(signal, opportunity, logger, true);
         const signalContext = await this.buildSignalContext(signal, opportunity, logger);
         await this.dependencies.notificationService.sendSignal(
           signal,
@@ -207,6 +213,73 @@ export class MarketScanExecutor {
       notifiedSignals,
       skipped,
       errors,
+    };
+  }
+
+
+  private async persistForwardSignal(
+    signal: Signal,
+    opportunity: Opportunity,
+    logger: MarketScanLogger,
+    telegramSent: boolean,
+  ): Promise<void> {
+    if (!this.dependencies.forwardSignalRepository || !this.dependencies.tradePlan) {
+      return;
+    }
+
+    const snapshot = this.buildForwardSignalSnapshot(
+      signal,
+      opportunity,
+      this.dependencies.tradePlan,
+      telegramSent,
+    );
+
+    if (!snapshot) {
+      return;
+    }
+
+    try {
+      await this.dependencies.forwardSignalRepository.save(snapshot);
+    } catch (error) {
+      logger.error(`No se pudo persistir señal forward para ${signal.ticker}`, {
+        ticker: signal.ticker,
+        timeframe: signal.timeframe,
+        message: error instanceof Error ? error.message : 'forward-signal-persistence-failed',
+      });
+    }
+  }
+
+  private buildForwardSignalSnapshot(
+    signal: Signal,
+    opportunity: Opportunity,
+    tradePlanConfig: TradePlanConfig,
+    telegramSent: boolean,
+  ): ForwardSignalSnapshot | undefined {
+    const tradePlan = calculateTradePlan(signal, tradePlanConfig);
+
+    if (!tradePlan) {
+      return undefined;
+    }
+
+    return {
+      ticker: signal.ticker,
+      timeframe: signal.timeframe,
+      signalType: signal.signalType,
+      signalAt: signal.createdAt,
+      score: opportunity.score,
+      trendScore: opportunity.trendScore,
+      volumeScore: opportunity.volumeScore,
+      momentumScore: opportunity.momentumScore,
+      structureScore: opportunity.structureScore,
+      entry: tradePlan.entry,
+      technicalStopPrice: tradePlan.technicalStop.price,
+      financialStopPercent: tradePlan.financialStop.percent,
+      financialStopPrice: tradePlan.financialStop.price,
+      tp1Percent: tradePlan.targets.min.percent,
+      tp1Price: tradePlan.targets.min.price,
+      tp2Percent: tradePlan.targets.max.percent,
+      tp2Price: tradePlan.targets.max.price,
+      telegramSent,
     };
   }
 

@@ -75,6 +75,9 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
       save: jest.fn(),
       findAll: jest.fn(),
     },
+    forwardSignalRepository: {
+      save: jest.fn(),
+    },
     notificationService: {
       sendSignal: jest.fn(),
       shouldNotifyOpportunity: jest.fn((opportunity: Opportunity) => opportunity.score >= 80),
@@ -87,6 +90,7 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
     marketDataMaxRetries: 3,
     marketDataRetryBaseDelayMs: 30_000,
     marketDataSequential: true,
+    tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 3 },
     ...overrides,
   } as unknown as MarketScanExecutorDependencies;
 
@@ -257,6 +261,111 @@ describe('MarketScanExecutor', () => {
     );
   });
 
+
+
+  it('persists a complete forward signal snapshot before sending Telegram', async () => {
+    const logger = buildLogger();
+    const detectedAt = new Date('2026-08-24T12:00:00.000Z');
+    const signalAt = new Date('2026-08-24T12:01:00.000Z');
+    const opportunity: Opportunity = {
+      ...buildOpportunity('SPY', 85),
+      trendScore: 25,
+      volumeScore: 20,
+      momentumScore: 15,
+      structureScore: 25,
+      detectedAt,
+    };
+    const forwardSignalRepository = { save: jest.fn().mockResolvedValue(undefined) };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(80),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      riskService: {
+        calculateRisk: jest.fn().mockReturnValue({
+          ticker: 'SPY',
+          timeframe: '15m',
+          entry: 100,
+          stop: 95,
+          target: 110,
+          score: 85,
+          signalType: 'LONG',
+          createdAt: signalAt,
+        }),
+      },
+      forwardSignalRepository,
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true, capital: 1_000 },
+      logger,
+    );
+
+    expect(forwardSignalRepository.save).toHaveBeenCalledWith({
+      ticker: 'SPY',
+      timeframe: '15m',
+      signalType: 'LONG',
+      signalAt,
+      score: 85,
+      trendScore: 25,
+      volumeScore: 20,
+      momentumScore: 15,
+      structureScore: 25,
+      entry: 100,
+      technicalStopPrice: 95,
+      financialStopPercent: 1,
+      financialStopPrice: 99,
+      tp1Percent: 2,
+      tp1Price: 102,
+      tp2Percent: 3,
+      tp2Price: 103,
+      telegramSent: true,
+    });
+    expect(notificationService.sendSignal).toHaveBeenCalled();
+  });
+
+  it('continues sending Telegram when forward signal persistence fails', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 85);
+    const forwardSignalRepository = {
+      save: jest.fn().mockRejectedValue(new Error('database unavailable')),
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(80),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      forwardSignalRepository,
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true, capital: 1_000 },
+      logger,
+    );
+
+    expect(forwardSignalRepository.save).toHaveBeenCalled();
+    expect(notificationService.sendSignal).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      'No se pudo persistir señal forward para SPY',
+      expect.objectContaining({ message: 'database unavailable' }),
+    );
+  });
 
   it('builds signal context before sending Telegram when context service is configured', async () => {
     const logger = buildLogger();

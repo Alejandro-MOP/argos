@@ -10,7 +10,8 @@
     "test": "jest",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
-    "format:check": "prettier --check \"**/*.{ts,json,md}\""
+    "format:check": "prettier --check \"**/*.{ts,json,md}\"",
+    "db:migrate": "npm run build && node dist/src/db/migrate.js"
   },
   "engines": {
     "node": ">=22.0.0"

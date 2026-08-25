@@ -480,6 +480,42 @@ Los errores del proveedor se sanitizan antes de llegar a logs. No se imprime inf
 ni detalles ruidosos de request; solo status, statusText, provider, endpoint, ticker, requestId si
 existe y mensaje resumido.
 
+
+## PostgreSQL local y migraciones
+
+Fase 2 agrega persistencia opcional para construir el dataset de Forward Testing real. El proyecto
+sigue funcionando sin PostgreSQL: si `DATABASE_URL` está vacío, usa repositorios en memoria y no bloquea
+Telegram.
+
+Para levantar PostgreSQL local con Docker:
+
+```bash
+docker compose up -d postgres
+```
+
+URL local de ejemplo:
+
+```text
+DATABASE_URL=postgres://market_signal_engine:market_signal_engine_dev_password@localhost:5432/market_signal_engine
+```
+
+La contraseña anterior es solo de desarrollo local y no debe reutilizarse en producción.
+
+Ejecutar migraciones:
+
+```bash
+npm run db:migrate
+```
+
+Las migraciones crean:
+
+- `opportunities`: auditoría y deduplicación persistente por ticker/timeframe.
+- `signals`: snapshot inmutable de cada señal real emitida para Telegram.
+- `signal_evaluations`: tabla preparada para outcomes futuros del Forward Evaluator.
+
+El flujo de Telegram es resiliente: si PostgreSQL falla, se registra un error seguro y la alerta se
+sigue enviando.
+
 ## Persistencia
 
 Contratos:

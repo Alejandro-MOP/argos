@@ -9,8 +9,7 @@ import {
   BacktestHistoricalPerformanceProvider,
   EmptyForwardPerformanceProvider,
 } from '../performance/PerformanceProviders';
-import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
-import { SignalRepository } from '../repositories/SignalRepository';
+import { createRepositories } from './repositories';
 import { MarketDataService } from '../services/MarketDataService';
 import { MarketScanExecutor } from '../services/MarketScanExecutor';
 import { NotificationService } from '../services/NotificationService';
@@ -26,8 +25,9 @@ import { env } from './env';
 const marketDataProvider = new YahooFinanceClient(undefined, env.marketScanDebug);
 const marketDataService = new MarketDataService(marketDataProvider);
 const rateLimiterService = new RateLimiterService(env.marketDataRequestDelayMs);
-const opportunityRepository = new OpportunityMemoryRepository();
-const signalRepository = new SignalRepository();
+const { opportunityRepository, signalRepository, forwardSignalRepository } = createRepositories(
+  env.databaseUrl,
+);
 const watchlistService = new WatchlistService(env.marketScanWatchlist, env.marketScanTickers);
 const opportunityService = new OpportunityService({
   trendAnalyzer: new TrendAnalyzer({
@@ -98,6 +98,7 @@ export const marketScanExecutor = new MarketScanExecutor({
   riskService,
   opportunityRepository,
   signalRepository,
+  forwardSignalRepository,
   notificationService,
   signalContextService,
   rateLimiterService,
@@ -106,4 +107,5 @@ export const marketScanExecutor = new MarketScanExecutor({
   marketDataMaxRetries: env.marketDataMaxRetries,
   marketDataRetryBaseDelayMs: env.marketDataRetryBaseDelayMs,
   marketDataSequential: env.marketDataSequential,
+  tradePlan: env.tradePlan,
 });
