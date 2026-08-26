@@ -161,6 +161,22 @@ describe('YahooFinanceClient', () => {
     });
   });
 
+  it('allows historical callers to disable provider candle count rejection', async () => {
+    const client = new YahooFinanceClient({
+      chart: jest.fn().mockResolvedValue(buildChartResponse(10)),
+    });
+
+    await expect(
+      client.getHistoricalCandles(
+        'SPY',
+        '1d',
+        new Date('2024-01-01T00:00:00.000Z'),
+        new Date('2024-02-01T00:00:00.000Z'),
+        { minimumCandles: 0 },
+      ),
+    ).resolves.toHaveLength(10);
+  });
+
   it('throws MarketDataRateLimitError when Yahoo appears rate limited', async () => {
     const error = new Error('Yahoo Finance request failed with 429');
     const client = new YahooFinanceClient({

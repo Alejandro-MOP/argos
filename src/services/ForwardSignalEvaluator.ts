@@ -12,6 +12,9 @@ import { TradeOutcomeEvaluator, type TargetOutcomeEvaluation } from './TradeOutc
 
 const DAY_IN_MILLISECONDS = 86_400_000;
 const DEFAULT_PENDING_LIMIT = 100;
+const EVALUATION_HISTORICAL_DATA_OPTIONS = { minimumCandles: 0 };
+
+type EvaluationPendingReason = 'no-future-candles-yet';
 
 export interface ForwardSignalEvaluatorLogger {
   log(message: string): void;
@@ -32,6 +35,7 @@ export interface ForwardSignalEvaluationResultItem {
   status?: SignalEvaluationStatus;
   outcomeTp1?: BacktestOutcome;
   outcomeTp2?: BacktestOutcome;
+  pendingReason?: EvaluationPendingReason;
   error?: string;
 }
 
@@ -44,6 +48,8 @@ export interface ForwardSignalEvaluationRunResult {
   open: number;
   expired: number;
   ambiguous: number;
+  pendingNoFutureCandles: number;
+  providerErrors: number;
   errors: number;
   items: ForwardSignalEvaluationResultItem[];
 }
@@ -115,6 +121,8 @@ export class ForwardSignalEvaluator {
       open: 0,
       expired: 0,
       ambiguous: 0,
+      pendingNoFutureCandles: 0,
+      providerErrors: 0,
       errors: 0,
       items: [],
     };
@@ -127,7 +135,13 @@ export class ForwardSignalEvaluator {
       const item = await this.evaluateSignalSafely(signal, logger);
       result.items.push(item);
 
+      if (item.pendingReason === 'no-future-candles-yet') {
+        result.pendingNoFutureCandles += 1;
+        continue;
+      }
+
       if (item.error) {
+        result.providerErrors += 1;
         result.errors += 1;
         continue;
       }
@@ -165,6 +179,8 @@ export class ForwardSignalEvaluator {
         `open=${result.open}`,
         `expired=${result.expired}`,
         `ambiguous=${result.ambiguous}`,
+        `pendingNoFutureCandles=${result.pendingNoFutureCandles}`,
+        `providerErrors=${result.providerErrors}`,
         `errors=${result.errors}`,
       ].join(' '),
     );
@@ -178,6 +194,16 @@ export class ForwardSignalEvaluator {
   ): Promise<ForwardSignalEvaluationResultItem> {
     try {
       const result = await this.evaluateSignal(signal);
+      if (result.pendingReason) {
+        logger.log(`${signal.ticker} ${signal.timeframe} → pending (${result.pendingReason})`);
+        return {
+          signalId: signal.id,
+          ticker: signal.ticker,
+          timeframe: signal.timeframe,
+          pendingReason: result.pendingReason,
+        };
+      }
+
       logger.log(
         `${signal.ticker} ${signal.timeframe} → TP1 ${result.outcomeTp1 ?? 'pending'} / TP2 ${result.outcomeTp2 ?? 'pending'} (${result.status})`,
       );
@@ -208,17 +234,18 @@ export class ForwardSignalEvaluator {
   }
 
   private async evaluateSignal(signal: PersistedForwardSignalSnapshot): Promise<{
-    evaluationTimeframe: string;
-    status: SignalEvaluationStatus;
+    evaluationTimeframe?: string;
+    status?: SignalEvaluationStatus;
     outcomeTp1?: BacktestOutcome;
     outcomeTp2?: BacktestOutcome;
+    pendingReason?: EvaluationPendingReason;
   }> {
     const now = this.dependencies.now?.() ?? new Date();
     const expiresAt = this.calculateExpiresAt(signal.signalAt, signal.timeframe);
-    const { timeframe, candles } = await this.getCandlesWithFallback(signal, expiresAt, now);
+    const { timeframe, candles, pendingReason } = await this.getCandlesWithFallback(signal, expiresAt, now);
 
-    if (candles.length === 0) {
-      throw new Error('forward-evaluation-no-future-candles');
+    if (pendingReason) {
+      return { pendingReason };
     }
 
     const evaluatedUntil = candles.at(-1)?.timestamp;
@@ -262,11 +289,16 @@ export class ForwardSignalEvaluator {
     signal: PersistedForwardSignalSnapshot,
     expiresAt: Date,
     now: Date,
-  ): Promise<{ timeframe: string; candles: Awaited<ReturnType<HistoricalMarketDataProvider['getHistoricalCandles']>> }> {
+  ): Promise<{
+    timeframe?: string;
+    candles: Awaited<ReturnType<HistoricalMarketDataProvider['getHistoricalCandles']>>;
+    pendingReason?: EvaluationPendingReason;
+  }> {
     const timeframes = resolveForwardEvaluationTimeframes(signal.timeframe);
     const from = signal.signalAt;
     const to = new Date(Math.min(now.getTime(), expiresAt.getTime()));
     const errors: string[] = [];
+    let hasProviderResponse = false;
 
     for (const timeframe of timeframes) {
       try {
@@ -275,7 +307,9 @@ export class ForwardSignalEvaluator {
           timeframe,
           from,
           to,
+          EVALUATION_HISTORICAL_DATA_OPTIONS,
         );
+        hasProviderResponse = true;
         const futureCandles = candles
           .filter((candle) => candle.timestamp.getTime() > signal.signalAt.getTime())
           .filter((candle) => candle.timestamp.getTime() <= expiresAt.getTime())
@@ -289,6 +323,10 @@ export class ForwardSignalEvaluator {
       } catch (error) {
         errors.push(`${timeframe}: ${error instanceof Error ? error.message : 'market-data-failed'}`);
       }
+    }
+
+    if (hasProviderResponse) {
+      return { candles: [], pendingReason: 'no-future-candles-yet' };
     }
 
     throw new Error(`forward-evaluation-market-data-unavailable (${errors.join('; ')})`);

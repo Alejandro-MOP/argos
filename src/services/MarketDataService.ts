@@ -7,7 +7,12 @@ export interface HistoricalMarketDataProvider extends MarketDataProvider {
     timeframe: string,
     from: Date,
     to: Date,
+    options?: HistoricalCandlesOptions,
   ): Promise<Candle[]>;
+}
+
+export interface HistoricalCandlesOptions {
+  minimumCandles?: number;
 }
 
 export class MarketDataService {
@@ -22,12 +27,13 @@ export class MarketDataService {
     timeframe: string,
     from: Date,
     to: Date,
+    options?: HistoricalCandlesOptions,
   ): Promise<Candle[]> {
     if (!this.hasHistoricalCandles(this.marketDataProvider)) {
       throw new Error('market-data-provider-does-not-support-historical-candles');
     }
 
-    return this.marketDataProvider.getHistoricalCandles(ticker, timeframe, from, to);
+    return this.marketDataProvider.getHistoricalCandles(ticker, timeframe, from, to, options);
   }
 
   private hasHistoricalCandles(

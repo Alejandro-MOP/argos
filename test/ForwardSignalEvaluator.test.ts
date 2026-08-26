@@ -191,6 +191,43 @@ describe('ForwardSignalEvaluator', () => {
     expect(deps.evaluations.get('signal-1')?.status).toBe('OPEN');
   });
 
+  it('keeps a signal pending without creating an evaluation when no future candles exist', async () => {
+    const deps = buildDependencies([buildSignal()], [candle(-15, 106, 98), candle(0, 106, 98)]);
+    const evaluator = new ForwardSignalEvaluator({ ...deps, now: () => new Date(baseTime.getTime() + day) });
+
+    const result = await evaluator.execute();
+
+    expect(result.evaluated).toBe(0);
+    expect(result.pendingNoFutureCandles).toBe(1);
+    expect(result.providerErrors).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(result.items[0]).toEqual(expect.objectContaining({ pendingReason: 'no-future-candles-yet' }));
+    expect(deps.signalEvaluationRepository.upsert).not.toHaveBeenCalled();
+  });
+
+  it('uses the preferred evaluation timeframe when it has at least one future candle', async () => {
+    const deps = buildDependencies([buildSignal({ timeframe: '1m' })], [candle(-5, 106, 98), candle(1, 101, 99.5)]);
+    const evaluator = new ForwardSignalEvaluator({ ...deps, now: () => new Date(baseTime.getTime() + 30 * 60_000) });
+
+    const result = await evaluator.execute();
+
+    expect(deps.marketDataService.getHistoricalCandles).toHaveBeenCalledTimes(1);
+    expect(result.items[0]).toEqual(expect.objectContaining({ evaluationTimeframe: '1m', status: 'OPEN' }));
+  });
+
+  it('tries fallback timeframes when raw preferred candles are not future candles', async () => {
+    const deps = buildDependencies([buildSignal({ timeframe: '1m' })], []);
+    deps.marketDataService.getHistoricalCandles
+      .mockResolvedValueOnce([candle(-5, 106, 98), candle(0, 106, 98)])
+      .mockResolvedValueOnce([candle(5, 101, 99.5)]);
+    const evaluator = new ForwardSignalEvaluator({ ...deps, now: () => new Date(baseTime.getTime() + 30 * 60_000) });
+
+    const result = await evaluator.execute();
+
+    expect(deps.marketDataService.getHistoricalCandles).toHaveBeenCalledTimes(2);
+    expect(result.items[0]).toEqual(expect.objectContaining({ evaluationTimeframe: '5m', status: 'OPEN' }));
+  });
+
   it('upserts by signal id so repeated runs are idempotent at repository level', async () => {
     const deps = buildDependencies([buildSignal()], [candle(15, 102.2, 100)]);
     const evaluator = new ForwardSignalEvaluator({ ...deps, now: () => new Date(baseTime.getTime() + day) });
@@ -219,6 +256,7 @@ describe('ForwardSignalEvaluator', () => {
     const result = await evaluator.execute({}, logger);
 
     expect(result.errors).toBe(1);
+    expect(result.providerErrors).toBe(1);
     expect(result.evaluated).toBe(1);
     expect(deps.evaluations.get('ok')?.status).toBe('PARTIALLY_RESOLVED');
     expect(logger.error).toHaveBeenCalledWith(
@@ -242,6 +280,7 @@ describe('ForwardSignalEvaluator', () => {
       '15m',
       baseTime,
       expect.any(Date),
+      { minimumCandles: 0 },
     );
     expect(deps.marketDataService.getHistoricalCandles).toHaveBeenNthCalledWith(
       2,
@@ -249,6 +288,7 @@ describe('ForwardSignalEvaluator', () => {
       '30m',
       baseTime,
       expect.any(Date),
+      { minimumCandles: 0 },
     );
     expect(result.items[0]).toEqual(expect.objectContaining({ evaluationTimeframe: '30m' }));
   });

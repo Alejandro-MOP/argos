@@ -14,6 +14,9 @@ import { DEFAULT_BACKTEST_EXPIRATION_WINDOWS_DAYS } from '../backtesting/Backtes
 
 const DAY_IN_MILLISECONDS = 86_400_000;
 const DEFAULT_PENDING_LIMIT = 100;
+const EVALUATION_HISTORICAL_DATA_OPTIONS = { minimumCandles: 0 };
+
+type EvaluationPendingReason = 'no-future-candles-yet';
 
 export interface EvidenceSignalEvaluatorLogger {
   log(message: string): void;
@@ -34,6 +37,7 @@ export interface EvidenceSignalEvaluationResultItem {
   status?: SignalEvaluationStatus;
   outcomeTp1?: BacktestOutcome;
   outcomeTp2?: BacktestOutcome;
+  pendingReason?: EvaluationPendingReason;
   error?: string;
 }
 
@@ -46,6 +50,8 @@ export interface EvidenceSignalEvaluationRunResult {
   open: number;
   expired: number;
   ambiguous: number;
+  pendingNoFutureCandles: number;
+  providerErrors: number;
   errors: number;
   items: EvidenceSignalEvaluationResultItem[];
 }
@@ -95,6 +101,8 @@ export class EvidenceSignalEvaluator {
       open: 0,
       expired: 0,
       ambiguous: 0,
+      pendingNoFutureCandles: 0,
+      providerErrors: 0,
       errors: 0,
       items: [],
     };
@@ -107,7 +115,13 @@ export class EvidenceSignalEvaluator {
       const item = await this.evaluateSignalSafely(signal, logger);
       result.items.push(item);
 
+      if (item.pendingReason === 'no-future-candles-yet') {
+        result.pendingNoFutureCandles += 1;
+        continue;
+      }
+
       if (item.error) {
+        result.providerErrors += 1;
         result.errors += 1;
         continue;
       }
@@ -145,6 +159,8 @@ export class EvidenceSignalEvaluator {
         `open=${result.open}`,
         `expired=${result.expired}`,
         `ambiguous=${result.ambiguous}`,
+        `pendingNoFutureCandles=${result.pendingNoFutureCandles}`,
+        `providerErrors=${result.providerErrors}`,
         `errors=${result.errors}`,
       ].join(' '),
     );
@@ -158,6 +174,16 @@ export class EvidenceSignalEvaluator {
   ): Promise<EvidenceSignalEvaluationResultItem> {
     try {
       const result = await this.evaluateSignal(signal);
+      if (result.pendingReason) {
+        logger.log(`${signal.ticker} ${signal.timeframe} evidence → pending (${result.pendingReason})`);
+        return {
+          evidenceSignalId: signal.id,
+          ticker: signal.ticker,
+          timeframe: signal.timeframe,
+          pendingReason: result.pendingReason,
+        };
+      }
+
       logger.log(
         `${signal.ticker} ${signal.timeframe} evidence → TP1 ${result.outcomeTp1 ?? 'pending'} / TP2 ${result.outcomeTp2 ?? 'pending'} (${result.status})`,
       );
@@ -188,17 +214,18 @@ export class EvidenceSignalEvaluator {
   }
 
   private async evaluateSignal(signal: PersistedEvidenceSignalSnapshot): Promise<{
-    evaluationTimeframe: string;
-    status: SignalEvaluationStatus;
+    evaluationTimeframe?: string;
+    status?: SignalEvaluationStatus;
     outcomeTp1?: BacktestOutcome;
     outcomeTp2?: BacktestOutcome;
+    pendingReason?: EvaluationPendingReason;
   }> {
     const now = this.dependencies.now?.() ?? new Date();
     const expiresAt = this.calculateExpiresAt(signal.detectedAt, signal.timeframe);
-    const { timeframe, candles } = await this.getCandlesWithFallback(signal, expiresAt, now);
+    const { timeframe, candles, pendingReason } = await this.getCandlesWithFallback(signal, expiresAt, now);
 
-    if (candles.length === 0) {
-      throw new Error('evidence-evaluation-no-future-candles');
+    if (pendingReason) {
+      return { pendingReason };
     }
 
     const evaluatedUntil = candles.at(-1)?.timestamp;
@@ -266,11 +293,16 @@ export class EvidenceSignalEvaluator {
     signal: PersistedEvidenceSignalSnapshot,
     expiresAt: Date,
     now: Date,
-  ): Promise<{ timeframe: string; candles: Awaited<ReturnType<HistoricalMarketDataProvider['getHistoricalCandles']>> }> {
+  ): Promise<{
+    timeframe?: string;
+    candles: Awaited<ReturnType<HistoricalMarketDataProvider['getHistoricalCandles']>>;
+    pendingReason?: EvaluationPendingReason;
+  }> {
     const timeframes = resolveForwardEvaluationTimeframes(signal.timeframe);
     const from = signal.detectedAt;
     const to = new Date(Math.min(now.getTime(), expiresAt.getTime()));
     const errors: string[] = [];
+    let hasProviderResponse = false;
 
     for (const timeframe of timeframes) {
       try {
@@ -279,7 +311,9 @@ export class EvidenceSignalEvaluator {
           timeframe,
           from,
           to,
+          EVALUATION_HISTORICAL_DATA_OPTIONS,
         );
+        hasProviderResponse = true;
         const futureCandles = candles
           .filter((candle) => candle.timestamp.getTime() > signal.detectedAt.getTime())
           .filter((candle) => candle.timestamp.getTime() <= expiresAt.getTime())
@@ -293,6 +327,10 @@ export class EvidenceSignalEvaluator {
       } catch (error) {
         errors.push(`${timeframe}: ${error instanceof Error ? error.message : 'market-data-failed'}`);
       }
+    }
+
+    if (hasProviderResponse) {
+      return { candles: [], pendingReason: 'no-future-candles-yet' };
     }
 
     throw new Error(`evidence-evaluation-market-data-unavailable (${errors.join('; ')})`);

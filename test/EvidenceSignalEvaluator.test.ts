@@ -47,21 +47,22 @@ const buildEvaluator = (candles: Candle[], now: Date) => {
     upsert: jest.fn(),
     upsertTargetEvaluations: jest.fn(),
   };
+  const marketDataService = {
+    getCandles: jest.fn(),
+    getHistoricalCandles: jest.fn().mockResolvedValue(candles),
+  };
   const evaluator = new EvidenceSignalEvaluator({
     evidenceSignalRepository: {
       findPending: jest.fn().mockResolvedValue([baseSignal()]),
       saveIfNotDuplicate: jest.fn(),
     },
     evidenceSignalEvaluationRepository: evaluationRepository,
-    marketDataService: {
-      getCandles: jest.fn(),
-      getHistoricalCandles: jest.fn().mockResolvedValue(candles),
-    },
+    marketDataService,
     now: () => now,
     expirationWindows: { '15m': 1 },
   });
 
-  return { evaluator, evaluationRepository };
+  return { evaluator, evaluationRepository, marketDataService };
 };
 
 describe('EvidenceSignalEvaluator', () => {
@@ -164,5 +165,85 @@ describe('EvidenceSignalEvaluator', () => {
         expect.objectContaining({ targetPercent: 5, outcome: 'LOSS' }),
       ]),
     );
+  });
+
+  it('keeps Evidence pending without creating an evaluation when no future candles exist', async () => {
+    const { evaluator, evaluationRepository } = buildEvaluator(
+      [candle('2026-01-01T13:45:00.000Z', 103, 98), candle('2026-01-01T14:00:00.000Z', 103, 98)],
+      new Date('2026-01-01T16:00:00.000Z'),
+    );
+
+    const result = await evaluator.execute();
+
+    expect(result.evaluated).toBe(0);
+    expect(result.pendingNoFutureCandles).toBe(1);
+    expect(result.providerErrors).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(result.items[0]).toEqual(expect.objectContaining({ pendingReason: 'no-future-candles-yet' }));
+    expect(evaluationRepository.upsert).not.toHaveBeenCalled();
+    expect(evaluationRepository.upsertTargetEvaluations).not.toHaveBeenCalled();
+  });
+
+  it('evaluates Evidence with available future candles even when fewer than analyzer history is available', async () => {
+    const candles = Array.from({ length: 13 }, (_, index) =>
+      candle(new Date(Date.UTC(2026, 0, 1, 14, index + 1)).toISOString(), 100.5, 99.5),
+    );
+    const { evaluator, evaluationRepository, marketDataService } = buildEvaluator(
+      candles,
+      new Date('2026-01-01T16:00:00.000Z'),
+    );
+
+    const result = await evaluator.execute();
+
+    expect(marketDataService.getHistoricalCandles).toHaveBeenCalledWith(
+      'NVDA',
+      '15m',
+      new Date('2026-01-01T14:00:00.000Z'),
+      expect.any(Date),
+      { minimumCandles: 0 },
+    );
+    expect(result.evaluated).toBe(1);
+    expect(result.pendingNoFutureCandles).toBe(0);
+    expect(evaluationRepository.upsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'OPEN' }));
+  });
+
+  it('uses fallback timeframe when preferred Evidence candles are raw but not future candles', async () => {
+    const evaluationRepository = {
+      upsert: jest.fn(),
+      upsertTargetEvaluations: jest.fn(),
+    };
+    const marketDataService = {
+      getCandles: jest.fn(),
+      getHistoricalCandles: jest
+        .fn()
+        .mockResolvedValueOnce([candle('2026-01-01T13:55:00.000Z', 103, 98)])
+        .mockResolvedValueOnce([candle('2026-01-01T14:05:00.000Z', 100.5, 99.5)]),
+    };
+    const evaluator = new EvidenceSignalEvaluator({
+      evidenceSignalRepository: {
+        findPending: jest.fn().mockResolvedValue([baseSignal({ timeframe: '1m' })]),
+        saveIfNotDuplicate: jest.fn(),
+      },
+      evidenceSignalEvaluationRepository: evaluationRepository,
+      marketDataService,
+      now: () => new Date('2026-01-01T16:00:00.000Z'),
+      expirationWindows: { '1m': 1 },
+    });
+
+    const result = await evaluator.execute();
+
+    expect(marketDataService.getHistoricalCandles).toHaveBeenCalledTimes(2);
+    expect(result.items[0]).toEqual(expect.objectContaining({ evaluationTimeframe: '5m', status: 'OPEN' }));
+  });
+
+  it('counts Evidence provider failures separately from no-future pending states', async () => {
+    const { evaluator, marketDataService } = buildEvaluator([], new Date('2026-01-01T16:00:00.000Z'));
+    marketDataService.getHistoricalCandles.mockRejectedValue(new Error('Yahoo timeout'));
+
+    const result = await evaluator.execute();
+
+    expect(result.providerErrors).toBe(1);
+    expect(result.errors).toBe(1);
+    expect(result.pendingNoFutureCandles).toBe(0);
   });
 });

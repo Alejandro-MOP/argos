@@ -231,6 +231,10 @@ Responder con datos:
     EXPIRED/AMBIGUOUS del cálculo principal.
 -   Profit Factor experimental solo cuando hay pérdidas resueltas suficientes;
     si no, se devuelve `null` para no inventar una métrica falsa.
+-   Fix V1.2: Forward/Evidence evaluation ya no exige el mínimo histórico usado
+    para análisis técnico. Evalúa con `futureCandles >= 1`, deja pendiente con
+    `no-future-candles-yet` cuando todavía no hay velas posteriores, y separa
+    `pendingNoFutureCandles` de `providerErrors`.
 
 ### Pendiente antes de tag `v1.0.0`
 
@@ -246,6 +250,9 @@ Responder con datos:
 
 -   El timer reutiliza infraestructura y ejecuta Forward + Evidence, pero todavía
     no comparte cache de velas entre ambos evaluadores.
+-   La evaluación Forward/Evidence acepta pocas velas futuras por diseño; las
+    métricas deben interpretarse como progreso incremental hasta que la señal
+    cierre o expire.
 -   El endpoint de performance trabaja sobre PostgreSQL; sin `DATABASE_URL`
     responde que la métrica no está disponible.
 -   Profit Factor queda limitado a targets experimentales resueltos con pérdidas;

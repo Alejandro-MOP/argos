@@ -7,6 +7,7 @@ import {
 import type { Candle } from '../models/Candle';
 import type { MarketDataProvider } from '../ports/MarketDataProvider';
 import { InsufficientHistoricalDataError } from '../backtesting/BacktestEngine';
+import type { HistoricalCandlesOptions } from '../services/MarketDataService';
 
 const MINIMUM_PROVIDER_CANDLES = 60;
 const DAY_IN_MILLISECONDS = 86_400_000;
@@ -204,6 +205,7 @@ export class YahooFinanceClient implements MarketDataProvider {
     timeframe: string,
     from: Date,
     to: Date,
+    options: HistoricalCandlesOptions = {},
   ): Promise<Candle[]> {
     const parsedTimeframe = parseYahooTimeframe(timeframe);
     const normalizedTicker = ticker.toUpperCase();
@@ -233,7 +235,9 @@ export class YahooFinanceClient implements MarketDataProvider {
         lastTimestamp: candles.at(-1)?.timestamp.toISOString() ?? 'n/a',
       });
 
-      if (candles.length < MINIMUM_PROVIDER_CANDLES) {
+      const minimumCandles = options.minimumCandles ?? MINIMUM_PROVIDER_CANDLES;
+
+      if (candles.length < minimumCandles) {
         throw new InsufficientHistoricalDataError(
           normalizedTicker,
           timeframe,
