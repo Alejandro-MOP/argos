@@ -126,6 +126,7 @@ export async function marketScanHttp(
       })),
       skipped: result.skipped,
       errors: result.errors,
+      metrics: result.metrics,
     },
   };
 }

@@ -46,6 +46,8 @@ export class EngineConfigService {
       marketScanCandleLimit: this.getNumber(parsedValues, 'MARKET_SCAN_CANDLE_LIMIT', this.fallbackConfig.marketScanCandleLimit),
       marketDataMaxAgeMinutes: this.getNumber(parsedValues, 'MARKET_DATA_MAX_AGE_MINUTES', this.fallbackConfig.marketDataMaxAgeMinutes),
       marketDataRequestDelayMs: this.getNumber(parsedValues, 'MARKET_DATA_REQUEST_DELAY_MS', this.fallbackConfig.marketDataRequestDelayMs),
+      marketDataMaxConcurrency: this.getNumber(parsedValues, 'MARKET_DATA_MAX_CONCURRENCY', this.fallbackConfig.marketDataMaxConcurrency),
+      marketDataBatchDelayMs: this.getNumber(parsedValues, 'MARKET_DATA_BATCH_DELAY_MS', this.fallbackConfig.marketDataBatchDelayMs),
       marketDataMaxRetries: this.getNumber(parsedValues, 'MARKET_DATA_MAX_RETRIES', this.fallbackConfig.marketDataMaxRetries),
       marketDataRetryBaseDelayMs: this.getNumber(parsedValues, 'MARKET_DATA_RETRY_BASE_DELAY_MS', this.fallbackConfig.marketDataRetryBaseDelayMs),
       marketDataSequential: this.getBoolean(parsedValues, 'MARKET_DATA_SEQUENTIAL', this.fallbackConfig.marketDataSequential),
@@ -118,6 +120,7 @@ export class EngineConfigService {
   private validate(config: EngineRuntimeConfig): void {
     const positiveKeys: Array<[string, number]> = [
       ['MARKET_SCAN_CANDLE_LIMIT', config.marketScanCandleLimit],
+      ['MARKET_DATA_MAX_CONCURRENCY', config.marketDataMaxConcurrency],
       ['MARKET_DATA_MAX_RETRIES', config.marketDataMaxRetries],
       ['MARKET_DATA_RETRY_BASE_DELAY_MS', config.marketDataRetryBaseDelayMs],
       ['SCORING_MAX_ANALYZER_SCORE', config.scoring.maxAnalyzerScore],
@@ -132,6 +135,10 @@ export class EngineConfigService {
       ['BACKTEST_CONTEXT_MONTHS', config.signalIntelligence.backtestContextMonths],
       ['PERFORMANCE_MIN_SAMPLE_SIZE', config.signalIntelligence.performanceMinSampleSize],
     ];
+
+    if (!Number.isFinite(config.marketDataBatchDelayMs) || config.marketDataBatchDelayMs < 0) {
+      throw new Error('MARKET_DATA_BATCH_DELAY_MS must be greater than or equal to 0');
+    }
 
     for (const [key, value] of positiveKeys) {
       if (!Number.isFinite(value) || value <= 0) {

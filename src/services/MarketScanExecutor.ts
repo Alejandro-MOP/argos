@@ -21,10 +21,10 @@ import type { NotificationService } from './NotificationService';
 import type { OpportunityFilter } from './OpportunityFilter';
 import type { OpportunityService } from './OpportunityService';
 import type { RankingService } from './RankingService';
-import type { RateLimiterService } from './RateLimiterService';
 import type { RiskService } from './RiskService';
 import type { SignalContextService } from './SignalContextService';
 import type { WatchlistService } from './WatchlistService';
+import { runWithConcurrency } from '../utils/concurrencyPool';
 import { calculateTradePlan, type TradePlanConfig } from '../utils/tradeSizing.utils';
 
 const MINIMUM_PROVIDER_CANDLES = 60;
@@ -59,6 +59,17 @@ export interface MarketScanCombination {
   timeframe: string;
 }
 
+export interface MarketScanMetrics {
+  totalCombinations: number;
+  marketClosed: number;
+  marketDataRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  rateLimitedRequests: number;
+  retryAttempts: number;
+  durationMs: number;
+}
+
 export interface MarketScanResult {
   scannedTickers: string[];
   scanned: MarketScanCombination[];
@@ -86,7 +97,9 @@ export interface MarketScanResult {
     provider?: string;
     endpoint?: string;
     requestId?: string;
+    attempt?: number;
   }>;
+  metrics: MarketScanMetrics;
 }
 
 export interface MarketScanExecutorDependencies {
@@ -101,7 +114,6 @@ export interface MarketScanExecutorDependencies {
   forwardSignalRepository?: ForwardSignalRepository;
   notificationService: NotificationService;
   signalContextService?: SignalContextService;
-  rateLimiterService: RateLimiterService;
   engineConfigService?: EngineConfigService;
   marketUniverseService?: MarketUniverseService;
   marketSessionService?: MarketSessionService;
@@ -109,9 +121,10 @@ export interface MarketScanExecutorDependencies {
   opportunityFilterFactory?: (config: EngineRuntimeConfig) => OpportunityFilter;
   notificationServiceFactory?: (config: EngineRuntimeConfig) => NotificationService;
   signalContextServiceFactory?: (config: EngineRuntimeConfig) => SignalContextService;
-  rateLimiterServiceFactory?: (requestDelayMs: number) => RateLimiterService;
   debug?: boolean;
   marketDataMaxAgeMinutes: number;
+  marketDataMaxConcurrency: number;
+  marketDataBatchDelayMs: number;
   marketDataMaxRetries: number;
   marketDataRetryBaseDelayMs: number;
   marketDataSequential: boolean;
@@ -126,7 +139,6 @@ interface MarketScanRuntimeServices {
   opportunityFilter: OpportunityFilter;
   notificationService: NotificationService;
   signalContextService?: SignalContextService;
-  rateLimiterService: RateLimiterService;
 }
 
 interface ScanExecutionContext extends MarketScanRuntimeServices {
@@ -140,6 +152,7 @@ export class MarketScanExecutor {
     options: MarketScanOptions,
     logger: MarketScanLogger,
   ): Promise<MarketScanResult> {
+    const startedAt = Date.now();
     const runtimeServices = await this.resolveRuntimeServices(logger);
     const candleLimit = options.candleLimit ?? runtimeServices.config.marketScanCandleLimit;
     const candidates = await this.resolveScanCandidates(options, runtimeServices.config, logger);
@@ -152,6 +165,7 @@ export class MarketScanExecutor {
     const candlesBySignalKey = new Map<string, Candle[]>();
     const errors: MarketScanResult['errors'] = [];
     const skipped: MarketScanResult['skipped'] = [];
+    const metrics = this.createInitialMetrics(candidates.length);
 
     logger.log(
       `Iniciando escaneo de mercado tickers=${scannedTickers.length} timeframes=${new Set(candidates.map((candidate) => candidate.timeframe)).size} totalCombinations=${scanned.length}`,
@@ -163,15 +177,25 @@ export class MarketScanExecutor {
         `limiteVelas=${candleLimit}`,
         `notificar=${options.notify}`,
         `strategyVersion=${runtimeServices.config.strategyVersion}`,
+        `marketDataMaxConcurrency=${runtimeServices.config.marketDataMaxConcurrency}`,
+        `marketDataBatchDelayMs=${runtimeServices.config.marketDataBatchDelayMs}`,
         `opportunityMinScore=${this.getOpportunityMinScore(options, runtimeServices)}`,
         `telegramMinScore=${this.getTelegramMinScore(options, runtimeServices)}`,
       ].join(' '),
     );
 
+    const marketSessionFiltered = this.filterMarketClosedCandidates(candidates, logger, metrics);
+    skipped.push(...marketSessionFiltered.skipped);
+
     const executionContext: ScanExecutionContext = { ...runtimeServices, candleLimit };
-    const scanResults = runtimeServices.config.marketDataSequential
-      ? await this.scanCandidatesSequentially(candidates, executionContext, logger)
-      : await this.scanCandidatesInParallel(candidates, executionContext, logger);
+    const scanResults = await runWithConcurrency(
+      marketSessionFiltered.allowed,
+      (candidate) => this.scanCandidate(candidate, executionContext, logger, metrics),
+      {
+        concurrency: runtimeServices.config.marketDataMaxConcurrency,
+        batchDelayMs: runtimeServices.config.marketDataBatchDelayMs,
+      },
+    );
 
     for (const scanResult of scanResults) {
       analyzedOpportunities.push(...scanResult.opportunities);
@@ -279,6 +303,8 @@ export class MarketScanExecutor {
       logger.log(`Señal generada para ${signal.ticker} ${signal.timeframe}`);
     }
 
+    metrics.durationMs = Date.now() - startedAt;
+    this.logMetricsSummary(logger, metrics);
     logger.log('Escaneo de mercado finalizado');
 
     return {
@@ -289,6 +315,20 @@ export class MarketScanExecutor {
       notifiedSignals,
       skipped,
       errors,
+      metrics,
+    };
+  }
+
+  private createInitialMetrics(totalCombinations: number): MarketScanMetrics {
+    return {
+      totalCombinations,
+      marketClosed: 0,
+      marketDataRequests: 0,
+      successfulRequests: 0,
+      failedRequests: 0,
+      rateLimitedRequests: 0,
+      retryAttempts: 0,
+      durationMs: 0,
     };
   }
 
@@ -304,9 +344,6 @@ export class MarketScanExecutor {
       opportunityFilter: this.dependencies.opportunityFilterFactory?.(config) ?? this.dependencies.opportunityFilter,
       notificationService: this.dependencies.notificationServiceFactory?.(config) ?? this.dependencies.notificationService,
       signalContextService: this.dependencies.signalContextServiceFactory?.(config) ?? this.dependencies.signalContextService,
-      rateLimiterService:
-        this.dependencies.rateLimiterServiceFactory?.(config.marketDataRequestDelayMs) ??
-        this.dependencies.rateLimiterService,
     };
   }
 
@@ -316,6 +353,8 @@ export class MarketScanExecutor {
       marketScanCandleLimit: 80,
       marketDataMaxAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
       marketDataRequestDelayMs: 0,
+      marketDataMaxConcurrency: this.dependencies.marketDataMaxConcurrency,
+      marketDataBatchDelayMs: this.dependencies.marketDataBatchDelayMs,
       marketDataMaxRetries: this.dependencies.marketDataMaxRetries,
       marketDataRetryBaseDelayMs: this.dependencies.marketDataRetryBaseDelayMs,
       marketDataSequential: this.dependencies.marketDataSequential,
@@ -396,6 +435,39 @@ export class MarketScanExecutor {
         source: 'env-fallback' as const,
       })),
     );
+  }
+
+  private filterMarketClosedCandidates(
+    candidates: MarketScanCandidate[],
+    logger: MarketScanLogger,
+    metrics: MarketScanMetrics,
+  ): { allowed: MarketScanCandidate[]; skipped: MarketScanResult['skipped'] } {
+    const allowed: MarketScanCandidate[] = [];
+    const skipped: MarketScanResult['skipped'] = [];
+
+    for (const candidate of candidates) {
+      const sessionDecision = this.dependencies.marketSessionService?.canScan(
+        candidate.metadata,
+        candidate.timeframe,
+      );
+
+      if (sessionDecision && !sessionDecision.canScan) {
+        metrics.marketClosed += 1;
+        skipped.push({
+          ticker: candidate.symbol,
+          timeframe: candidate.timeframe,
+          score: 0,
+          reason: sessionDecision.reason ?? 'market-closed',
+        });
+        logger.log(`Omitiendo ${candidate.symbol} ${candidate.timeframe}: ${sessionDecision.reason ?? 'market-closed'}`);
+        this.debugLog(logger, `market-closed ticker=${candidate.symbol} timeframe=${candidate.timeframe}`);
+        continue;
+      }
+
+      allowed.push(candidate);
+    }
+
+    return { allowed, skipped };
   }
 
   private async persistForwardSignal(
@@ -491,40 +563,11 @@ export class MarketScanExecutor {
     return this.dependencies.watchlistService.getTickers();
   }
 
-  private async scanCandidatesSequentially(
-    candidates: MarketScanCandidate[],
-    context: ScanExecutionContext,
-    logger: MarketScanLogger,
-  ): Promise<TickerScanResult[]> {
-    const results: TickerScanResult[] = [];
-
-    for (const [index, candidate] of candidates.entries()) {
-      results.push(await this.scanCandidate(candidate, context, logger, index > 0));
-    }
-
-    return results;
-  }
-
-  private async scanCandidatesInParallel(
-    candidates: MarketScanCandidate[],
-    context: ScanExecutionContext,
-    logger: MarketScanLogger,
-  ): Promise<TickerScanResult[]> {
-    this.debugLog(
-      logger,
-      'MARKET_DATA_SEQUENTIAL=false; las llamadas paralelas pueden provocar 429 en planes gratuitos',
-    );
-
-    return Promise.all(
-      candidates.map((candidate) => this.scanCandidate(candidate, context, logger, false)),
-    );
-  }
-
   private async scanCandidate(
     candidate: MarketScanCandidate,
     context: ScanExecutionContext,
     logger: MarketScanLogger,
-    shouldWaitBeforeRequest: boolean,
+    metrics: MarketScanMetrics,
   ): Promise<TickerScanResult> {
     const result: TickerScanResult = {
       opportunities: [],
@@ -534,32 +577,15 @@ export class MarketScanExecutor {
     };
 
     try {
-      const sessionDecision = this.dependencies.marketSessionService?.canScan(
-        candidate.metadata,
-        candidate.timeframe,
-      );
-
-      if (sessionDecision && !sessionDecision.canScan) {
-        result.skipped.push({
-          ticker: candidate.symbol,
-          timeframe: candidate.timeframe,
-          score: 0,
-          reason: sessionDecision.reason ?? 'market-closed',
-        });
-        logger.log(`Omitiendo ${candidate.symbol} ${candidate.timeframe}: market-closed`);
-        return result;
-      }
-
-      if (shouldWaitBeforeRequest) {
-        await context.rateLimiterService.wait();
-      }
-
+      metrics.marketDataRequests += 1;
       const candles = await this.getCandlesWithRetry(
-        candidate.providerSymbol,
-        candidate.timeframe,
+        candidate,
         context.candleLimit,
         context.config,
+        logger,
+        metrics,
       );
+      metrics.successfulRequests += 1;
       logger.log(`Processing ${candidate.symbol} ${candidate.timeframe}`);
       this.logCandleSummary(candidate.symbol, candidate.timeframe, candles, logger);
 
@@ -609,6 +635,7 @@ export class MarketScanExecutor {
       result.opportunities.push(opportunity);
       result.candlesBySignalKey.set(this.buildSignalKey(candidate.symbol, candidate.timeframe), candles);
     } catch (error) {
+      metrics.failedRequests += 1;
       const scanError = this.buildScanError(candidate.symbol, candidate.timeframe, error);
       logger.error(`No se pudo escanear ${candidate.symbol} ${candidate.timeframe}`, scanError);
       result.errors.push(scanError);
@@ -618,26 +645,119 @@ export class MarketScanExecutor {
   }
 
   private async getCandlesWithRetry(
-    ticker: string,
-    timeframe: string,
+    candidate: MarketScanCandidate,
     candleLimit: number,
     config: EngineRuntimeConfig,
+    logger: MarketScanLogger,
+    metrics: MarketScanMetrics,
   ): Promise<Candle[]> {
-    let attempt = 0;
+    let retriesUsed = 0;
 
     while (true) {
       try {
-        return await this.dependencies.marketDataService.getCandles(ticker, timeframe, candleLimit);
+        return await this.dependencies.marketDataService.getCandles(
+          candidate.providerSymbol,
+          candidate.timeframe,
+          candleLimit,
+        );
       } catch (error) {
-        if (!(error instanceof MarketDataRateLimitError) || attempt >= config.marketDataMaxRetries) {
+        const attempt = retriesUsed + 1;
+        this.attachAttempt(error, attempt);
+
+        if (error instanceof MarketDataRateLimitError) {
+          metrics.rateLimitedRequests += 1;
+        }
+
+        if (!this.isRetryableMarketDataError(error) || retriesUsed >= config.marketDataMaxRetries) {
           throw error;
         }
 
-        const delayMs = config.marketDataRetryBaseDelayMs * 2 ** attempt;
-        attempt += 1;
+        const delayMs = config.marketDataRetryBaseDelayMs * 2 ** retriesUsed;
+        metrics.retryAttempts += 1;
+        this.debugLog(
+          logger,
+          [
+            `retrying-market-data ticker=${candidate.symbol}`,
+            `timeframe=${candidate.timeframe}`,
+            `providerSymbol=${candidate.providerSymbol}`,
+            `attempt=${attempt}`,
+            `nextDelayMs=${delayMs}`,
+            `message=${error instanceof Error ? error.message : 'unknown-error'}`,
+          ].join(' '),
+        );
+        retriesUsed += 1;
         await this.sleep(delayMs);
       }
     }
+  }
+
+  private isRetryableMarketDataError(error: unknown): boolean {
+    if (error instanceof MarketDataRateLimitError) {
+      return true;
+    }
+
+    if (error instanceof MarketDataProviderError) {
+      const status = error.details.status;
+      const message = error.message.toLowerCase();
+
+      if (status === 408 || status === 429 || (status !== undefined && status >= 500 && status <= 599)) {
+        return true;
+      }
+
+      if (status !== undefined && status >= 400 && status < 500) {
+        return false;
+      }
+
+      if (this.isClearlyNonRecoverableMessage(message)) {
+        return false;
+      }
+
+      return this.isRecoverableNetworkMessage(message);
+    }
+
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+
+      if (this.isClearlyNonRecoverableMessage(message)) {
+        return false;
+      }
+
+      return this.isRecoverableNetworkMessage(message) || this.isRecoverableErrorCode(error);
+    }
+
+    return false;
+  }
+
+  private isClearlyNonRecoverableMessage(message: string): boolean {
+    return ['invalid symbol', 'delisted', 'not found', 'no data found', 'unknown symbol'].some(
+      (pattern) => message.includes(pattern),
+    );
+  }
+
+  private isRecoverableNetworkMessage(message: string): boolean {
+    return ['timeout', 'timed out', 'econnreset', 'econnrefused', 'enotfound', 'network', 'socket'].some(
+      (pattern) => message.includes(pattern),
+    );
+  }
+
+  private isRecoverableErrorCode(error: Error): boolean {
+    const code = (error as Error & { code?: string }).code;
+
+    return Boolean(code && ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND'].includes(code));
+  }
+
+  private attachAttempt(error: unknown, attempt: number): void {
+    if (error && typeof error === 'object') {
+      (error as { attempt?: number }).attempt = attempt;
+    }
+  }
+
+  private getErrorAttempt(error: unknown): number | undefined {
+    if (error && typeof error === 'object') {
+      return (error as { attempt?: number }).attempt;
+    }
+
+    return undefined;
   }
 
   private logCandleSummary(
@@ -733,6 +853,22 @@ export class MarketScanExecutor {
     );
   }
 
+  private logMetricsSummary(logger: MarketScanLogger, metrics: MarketScanMetrics): void {
+    logger.log(
+      [
+        'Market scan completed',
+        `combinations=${metrics.totalCombinations}`,
+        `marketClosed=${metrics.marketClosed}`,
+        `requests=${metrics.marketDataRequests}`,
+        `success=${metrics.successfulRequests}`,
+        `failed=${metrics.failedRequests}`,
+        `rateLimited=${metrics.rateLimitedRequests}`,
+        `retries=${metrics.retryAttempts}`,
+        `durationMs=${metrics.durationMs}`,
+      ].join(' '),
+    );
+  }
+
   private getOpportunityMinScore(
     options: MarketScanOptions,
     runtimeServices: MarketScanRuntimeServices,
@@ -775,6 +911,8 @@ export class MarketScanExecutor {
     timeframe: string,
     error: unknown,
   ): MarketScanResult['errors'][number] {
+    const attempt = this.getErrorAttempt(error);
+
     if (error instanceof InsufficientCandlesError) {
       return {
         ticker: error.ticker,
@@ -783,6 +921,7 @@ export class MarketScanExecutor {
         candlesCount: error.candlesCount,
         requestedFrom: error.requestedFrom,
         requestedTo: error.requestedTo,
+        attempt,
       };
     }
 
@@ -796,6 +935,7 @@ export class MarketScanExecutor {
         provider: error.provider,
         endpoint: error.endpoint,
         requestId: error.requestId,
+        attempt,
       };
     }
 
@@ -809,6 +949,7 @@ export class MarketScanExecutor {
         provider: error.details.provider,
         endpoint: error.details.endpoint,
         requestId: error.details.requestId,
+        attempt,
       };
     }
 
@@ -816,6 +957,7 @@ export class MarketScanExecutor {
       ticker,
       timeframe,
       message: error instanceof Error ? error.message : 'Error desconocido',
+      attempt,
     };
   }
 

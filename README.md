@@ -440,15 +440,24 @@ La deduplicación y persistencia siguen separadas por `ticker + timeframe`, por 
 }
 ```
 
-Para proteger Yahoo Finance, el modo recomendado sigue siendo:
+Para proteger Yahoo Finance sin volver lentísimo el escaneo, el modo recomendado ahora es un pool de
+concurrencia controlada:
 
 ```text
-MARKET_DATA_SEQUENTIAL=true
+MARKET_DATA_MAX_CONCURRENCY=5
+MARKET_DATA_BATCH_DELAY_MS=250
+MARKET_DATA_MAX_RETRIES=3
+MARKET_DATA_RETRY_BASE_DELAY_MS=1000
 ```
 
-Con ese modo, el motor recorre la matriz `ticker × timeframe` de forma secuencial y aplica el delay de
-`MARKET_DATA_REQUEST_DELAY_MS` entre combinaciones. Con 20 tickers y 5 timeframes, el scan puede hacer
-hasta 100 requests de mercado antes de retries.
+Con ese modo, el motor no dispara toda la matriz `ticker × timeframe` al mismo tiempo. Procesa hasta
+`MARKET_DATA_MAX_CONCURRENCY` requests de datos de mercado en paralelo, aplica una pausa opcional entre
+jobs del pool con `MARKET_DATA_BATCH_DELAY_MS`, y reintenta solo errores recuperables con exponential
+backoff. Las combinaciones fuera de sesión se marcan como `market-closed` antes de llamar Yahoo, así que
+no consumen requests reales.
+
+`MARKET_DATA_SEQUENTIAL` y `MARKET_DATA_REQUEST_DELAY_MS` quedan deprecadas desde V1.1.1. Se conservan
+solo por compatibilidad/fallback, pero el escaneo vivo usa el pool controlado.
 
 ## RiskService
 
@@ -654,25 +663,56 @@ Para timeframes intradía, `MarketScanExecutor` valida frescura de datos con
 ## Rate limits y datos de mercado
 
 Aunque Yahoo no requiere API key, puede limitar o rechazar tráfico si se hacen demasiadas llamadas.
-Por eso el motor procesa tickers de forma secuencial por defecto, aplica un delay entre peticiones
-y reintenta errores 429 con backoff exponencial.
+Desde V1.1.1 el motor usa concurrencia controlada: avanza más rápido que un scan 100% secuencial, pero
+con un límite explícito para no golpear al proveedor con todos los símbolos a la vez.
 
 Configuración recomendada:
 
 ```text
-MARKET_DATA_SEQUENTIAL=true
-MARKET_DATA_REQUEST_DELAY_MS=13000
+MARKET_DATA_MAX_CONCURRENCY=5
+MARKET_DATA_BATCH_DELAY_MS=250
 MARKET_DATA_MAX_RETRIES=3
-MARKET_DATA_RETRY_BASE_DELAY_MS=30000
+MARKET_DATA_RETRY_BASE_DELAY_MS=1000
 ```
 
-Con esa configuración los reintentos esperan aproximadamente `30s`, `60s` y `120s`.
-Si usas `MARKET_DATA_SEQUENTIAL=false`, las llamadas al proveedor se ejecutan en paralelo y pueden
-provocar 429 con mayor facilidad.
+Los reintentos aplican exponential backoff para errores recuperables: `429`, `408`, `5xx`, timeouts y
+fallos temporales de red. Por ejemplo, con base `1000ms`, los intentos esperan aproximadamente `1s`,
+`2s` y `4s`. Errores no recuperables como símbolo inválido, delisted, not found o no data no se
+reintentan.
+
+Antes de pedir datos, el motor revisa sesión de mercado. Una acción/ETF intradía fuera de horario se
+omite con `market-closed` y Yahoo no recibe request. Crypto sigue operando 24/7, y temporalidades `1d` /
+`1w` de acciones/ETF se permiten fuera de sesión.
+
+El response manual y los logs incluyen métricas de throughput:
+
+```json
+{
+  "metrics": {
+    "totalCombinations": 305,
+    "marketClosed": 180,
+    "marketDataRequests": 125,
+    "successfulRequests": 122,
+    "failedRequests": 3,
+    "rateLimitedRequests": 1,
+    "retryAttempts": 2,
+    "durationMs": 274000
+  }
+}
+```
+
+Además se emite un resumen tipo:
+
+```text
+Market scan completed combinations=305 marketClosed=180 requests=125 success=122 failed=3 rateLimited=1 retries=2 durationMs=274000
+```
+
+`MARKET_DATA_SEQUENTIAL` y `MARKET_DATA_REQUEST_DELAY_MS` quedaron deprecadas desde V1.1.1. Si existen
+en ENV no rompen el arranque, pero ya no controlan el throughput principal del market scan.
 
 Los errores del proveedor se sanitizan antes de llegar a logs. No se imprime información sensible
 ni detalles ruidosos de request; solo status, statusText, provider, endpoint, ticker, requestId si
-existe y mensaje resumido.
+existe, intento y mensaje resumido.
 
 
 ## PostgreSQL local y migraciones
@@ -1249,10 +1289,12 @@ MARKET_SCAN_TIMEFRAME=15m
 MARKET_SCAN_TIMEFRAMES=1m,5m,15m,1d,1w
 MARKET_SCAN_CANDLE_LIMIT=80
 MARKET_DATA_MAX_AGE_MINUTES=30
-MARKET_DATA_REQUEST_DELAY_MS=13000
+MARKET_DATA_MAX_CONCURRENCY=5
+MARKET_DATA_BATCH_DELAY_MS=250
 MARKET_DATA_MAX_RETRIES=3
-MARKET_DATA_RETRY_BASE_DELAY_MS=30000
-MARKET_DATA_SEQUENTIAL=true
+MARKET_DATA_RETRY_BASE_DELAY_MS=1000
+MARKET_DATA_REQUEST_DELAY_MS=13000 # deprecated
+MARKET_DATA_SEQUENTIAL=true # deprecated
 OPPORTUNITY_MIN_SCORE=50
 TELEGRAM_NOTIFICATION_MIN_SCORE=80
 TRADE_STOP_LOSS_PERCENT=1
@@ -1285,10 +1327,12 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `MARKET_SCAN_WATCHLIST`                | Watchlist a usar: `custom`, `etfs`, `growth` o `dividends`.                                      |
 | `MARKET_SCAN_DEBUG`                    | Habilita logs debug seguros de escaneo y datos de mercado.                                       |
 | `MARKET_DATA_MAX_AGE_MINUTES`          | Edad máxima permitida para la última vela en timeframes intradía.                                |
-| `MARKET_DATA_REQUEST_DELAY_MS`         | Delay entre requests secuenciales al proveedor de mercado.                                       |
-| `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos cuando el proveedor responde 429.                                    |
-| `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para backoff exponencial de rate limit.                                               |
-| `MARKET_DATA_SEQUENTIAL`               | Si es `true`, escanea tickers uno por uno para reducir 429.                                      |
+| `MARKET_DATA_MAX_CONCURRENCY`          | Máximo de requests simultáneos al proveedor de datos durante el market scan.                     |
+| `MARKET_DATA_BATCH_DELAY_MS`           | Pausa opcional entre jobs del pool; `0` la desactiva.                                            |
+| `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos para errores recuperables del proveedor.                             |
+| `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para exponential backoff de rate limit, 5xx y timeouts.                               |
+| `MARKET_DATA_REQUEST_DELAY_MS`         | Deprecated: delay secuencial antiguo, conservado solo por compatibilidad.                        |
+| `MARKET_DATA_SEQUENTIAL`               | Deprecated: modo secuencial antiguo, conservado solo por compatibilidad.                         |
 | `ENGINE_STRATEGY_VERSION`               | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
 | `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                             |
 | `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.     |

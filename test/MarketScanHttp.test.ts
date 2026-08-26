@@ -1,3 +1,14 @@
+const defaultMetrics = {
+  totalCombinations: 0,
+  marketClosed: 0,
+  marketDataRequests: 0,
+  successfulRequests: 0,
+  failedRequests: 0,
+  rateLimitedRequests: 0,
+  retryAttempts: 0,
+  durationMs: 0,
+};
+
 const run = jest.fn().mockResolvedValue({
   scannedTickers: ['NVDA'],
   scanned: [],
@@ -6,6 +17,7 @@ const run = jest.fn().mockResolvedValue({
   notifiedSignals: [],
   skipped: [],
   errors: [],
+  metrics: defaultMetrics,
 });
 
 jest.mock('../src/config/container', () => ({
@@ -40,6 +52,7 @@ describe('marketScanHttp', () => {
       notifiedSignals: [],
       skipped: [],
       errors: [],
+      metrics: defaultMetrics,
     });
   });
 
@@ -69,6 +82,44 @@ describe('marketScanHttp', () => {
       context,
     );
     expect(response.jsonBody).toEqual(expect.objectContaining({ timeframes: ['1m', '5m'] }));
+  });
+
+  it('includes market scan throughput metrics in the manual response', async () => {
+    const { marketScanHttp } = await import('../src/functions/marketScanHttp');
+    const context = { log: jest.fn(), error: jest.fn() };
+
+    run.mockResolvedValue({
+      scannedTickers: ['NVDA'],
+      scanned: [{ ticker: 'NVDA', timeframe: '15m' }],
+      opportunities: [],
+      opportunitySignals: [],
+      notifiedSignals: [],
+      skipped: [],
+      errors: [],
+      metrics: {
+        totalCombinations: 1,
+        marketClosed: 0,
+        marketDataRequests: 1,
+        successfulRequests: 1,
+        failedRequests: 0,
+        rateLimitedRequests: 0,
+        retryAttempts: 0,
+        durationMs: 123,
+      },
+    });
+
+    const response = await marketScanHttp(buildRequest({ tickers: ['NVDA'] }) as never, context as never);
+
+    expect(response.jsonBody).toEqual(
+      expect.objectContaining({
+        metrics: expect.objectContaining({
+          totalCombinations: 1,
+          marketDataRequests: 1,
+          successfulRequests: 1,
+          durationMs: 123,
+        }),
+      }),
+    );
   });
 });
 

@@ -1,6 +1,6 @@
 import type { Candle } from '../src/models/Candle';
 import type { Opportunity } from '../src/models/Opportunity';
-import { MarketDataRateLimitError } from '../src/errors/MarketDataErrors';
+import { MarketDataProviderError, MarketDataRateLimitError } from '../src/errors/MarketDataErrors';
 import {
   MarketScanExecutor,
   type MarketScanExecutorDependencies,
@@ -83,10 +83,9 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
       shouldNotifyOpportunity: jest.fn((opportunity: Opportunity) => opportunity.score >= 80),
       getMinimumScore: jest.fn().mockReturnValue(80),
     },
-    rateLimiterService: {
-      wait: jest.fn().mockResolvedValue(undefined),
-    },
     marketDataMaxAgeMinutes: 30,
+    marketDataMaxConcurrency: 5,
+    marketDataBatchDelayMs: 0,
     marketDataMaxRetries: 3,
     marketDataRetryBaseDelayMs: 30_000,
     marketDataSequential: true,
@@ -667,30 +666,60 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false strategyVersion=v1 opportunityMinScore=50 telegramMinScore=80',
+      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false strategyVersion=v1 marketDataMaxConcurrency=5 marketDataBatchDelayMs=0 opportunityMinScore=50 telegramMinScore=80',
     );
   });
 
-  it('processes tickers sequentially and waits before each request after the first', async () => {
+  it('respects the configured market data max concurrency', async () => {
     const logger = buildLogger();
-    const calls: string[] = [];
-    const rateLimiterService = {
-      wait: jest.fn().mockImplementation(async () => {
-        calls.push('wait');
-      }),
-    };
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
     const executor = buildExecutor({
       marketDataService: {
-        getCandles: jest.fn().mockImplementation(async (ticker: string) => {
-          calls.push(`get:${ticker}`);
+        getCandles: jest.fn().mockImplementation(async () => {
+          activeRequests += 1;
+          maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 5);
+          });
+          activeRequests -= 1;
           return buildCandles(80);
         }),
       },
       opportunityService: {
         analyze: jest.fn((ticker: string) => buildOpportunity(ticker, 90)),
       },
-      rateLimiterService,
-      marketDataSequential: true,
+      marketDataMaxConcurrency: 2,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    await executor.run(
+      { tickers: ['SPY', 'QQQ', 'AMD', 'IWM', 'DIA'], timeframe: '15m', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(maxActiveRequests).toBeLessThanOrEqual(2);
+  });
+
+  it('allows multiple market data requests to run concurrently when configured', async () => {
+    const logger = buildLogger();
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockImplementation(async () => {
+          activeRequests += 1;
+          maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+          await new Promise((resolve) => {
+            setTimeout(resolve, 5);
+          });
+          activeRequests -= 1;
+          return buildCandles(80);
+        }),
+      },
+      opportunityService: {
+        analyze: jest.fn((ticker: string) => buildOpportunity(ticker, 90)),
+      },
+      marketDataMaxConcurrency: 3,
     } as unknown as Partial<MarketScanExecutorDependencies>);
 
     await executor.run(
@@ -698,11 +727,11 @@ describe('MarketScanExecutor', () => {
       logger,
     );
 
-    expect(calls).toEqual(['get:SPY', 'wait', 'get:QQQ', 'wait', 'get:AMD']);
-    expect(rateLimiterService.wait).toHaveBeenCalledTimes(2);
+    expect(maxActiveRequests).toBeGreaterThan(1);
+    expect(maxActiveRequests).toBeLessThanOrEqual(3);
   });
 
-  it('evaluates each ticker across all requested timeframes sequentially', async () => {
+  it('evaluates each ticker across all requested timeframes and preserves result order', async () => {
     const logger = buildLogger();
     const calls: string[] = [];
     const executor = buildExecutor({
@@ -718,7 +747,7 @@ describe('MarketScanExecutor', () => {
           timeframe,
         })),
       },
-      marketDataSequential: true,
+      marketDataMaxConcurrency: 1,
     } as unknown as Partial<MarketScanExecutorDependencies>);
 
     const result = await executor.run(
@@ -762,7 +791,7 @@ describe('MarketScanExecutor', () => {
           timeframe,
         })),
       },
-      marketDataSequential: true,
+      marketDataMaxConcurrency: 2,
     } as unknown as Partial<MarketScanExecutorDependencies>);
 
     const result = await executor.run(
@@ -771,9 +800,17 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(result.errors).toEqual([
-      expect.objectContaining({ ticker: 'SPY', timeframe: '1m', message: 'Yahoo failed' }),
+      expect.objectContaining({ ticker: 'SPY', timeframe: '1m', message: 'Yahoo failed', attempt: 1 }),
     ]);
     expect(result.opportunities).toEqual([expect.objectContaining({ ticker: 'SPY', timeframe: '5m' })]);
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        totalCombinations: 2,
+        marketDataRequests: 2,
+        successfulRequests: 1,
+        failedRequests: 1,
+      }),
+    );
   });
 
   it('persists opportunities and signals separately per ticker and timeframe', async () => {
@@ -880,8 +917,126 @@ describe('MarketScanExecutor', () => {
     expect(marketDataService.getCandles).toHaveBeenCalledTimes(3);
     expect(result.errors).toEqual([]);
     expect(result.opportunities).toHaveLength(1);
+    expect(result.metrics).toEqual(
+      expect.objectContaining({
+        rateLimitedRequests: 2,
+        retryAttempts: 2,
+        successfulRequests: 1,
+        failedRequests: 0,
+      }),
+    );
 
     jest.useRealTimers();
+  });
+
+  it('retries provider 5xx errors with exponential backoff', async () => {
+    jest.useFakeTimers();
+    const logger = buildLogger();
+    const marketDataService = {
+      getCandles: jest
+        .fn()
+        .mockRejectedValueOnce(
+          new MarketDataProviderError({
+            provider: 'yahoo',
+            endpoint: 'chart',
+            ticker: 'SPY',
+            status: 503,
+            statusText: 'Service Unavailable',
+            message: 'temporary provider failure',
+          }),
+        )
+        .mockResolvedValue(buildCandles(80)),
+    };
+    const executor = buildExecutor({
+      marketDataService,
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(buildOpportunity('SPY', 90)),
+      },
+      marketDataRetryBaseDelayMs: 10,
+      marketDataMaxRetries: 3,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const runPromise = executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    await jest.advanceTimersByTimeAsync(10);
+    const result = await runPromise;
+
+    expect(marketDataService.getCandles).toHaveBeenCalledTimes(2);
+    expect(result.errors).toEqual([]);
+    expect(result.metrics.retryAttempts).toBe(1);
+
+    jest.useRealTimers();
+  });
+
+  it('retries timeout and recoverable network errors', async () => {
+    jest.useFakeTimers();
+    const logger = buildLogger();
+    const timeoutError = Object.assign(new Error('socket timeout'), { code: 'ETIMEDOUT' });
+    const marketDataService = {
+      getCandles: jest.fn().mockRejectedValueOnce(timeoutError).mockResolvedValue(buildCandles(80)),
+    };
+    const executor = buildExecutor({
+      marketDataService,
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(buildOpportunity('SPY', 90)),
+      },
+      marketDataRetryBaseDelayMs: 10,
+      marketDataMaxRetries: 3,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const runPromise = executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    await jest.advanceTimersByTimeAsync(10);
+    const result = await runPromise;
+
+    expect(marketDataService.getCandles).toHaveBeenCalledTimes(2);
+    expect(result.errors).toEqual([]);
+    expect(result.metrics.retryAttempts).toBe(1);
+
+    jest.useRealTimers();
+  });
+
+  it('does not retry non-recoverable provider errors', async () => {
+    const logger = buildLogger();
+    const marketDataService = {
+      getCandles: jest.fn().mockRejectedValue(
+        new MarketDataProviderError({
+          provider: 'yahoo',
+          endpoint: 'chart',
+          ticker: 'SPY',
+          status: 404,
+          statusText: 'Not Found',
+          message: 'symbol not found',
+        }),
+      ),
+    };
+    const executor = buildExecutor({
+      marketDataService,
+      marketDataRetryBaseDelayMs: 10,
+      marketDataMaxRetries: 3,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(marketDataService.getCandles).toHaveBeenCalledTimes(1);
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        ticker: 'SPY',
+        timeframe: '15m',
+        status: 404,
+        attempt: 1,
+      }),
+    ]);
+    expect(result.metrics.retryAttempts).toBe(0);
   });
 
   it('returns clean rate-limit-exceeded errors after retries are exhausted', async () => {
@@ -925,6 +1080,7 @@ describe('MarketScanExecutor', () => {
         provider: 'polygon',
         endpoint: '/v2/aggs/ticker/SPY',
         requestId: 'request-final',
+        attempt: 2,
       },
     ]);
     expect(logger.error).toHaveBeenCalledWith('No se pudo escanear SPY 15m', result.errors[0]);

@@ -14,6 +14,8 @@ export interface EngineRuntimeConfig {
   marketScanCandleLimit: number;
   marketDataMaxAgeMinutes: number;
   marketDataRequestDelayMs: number;
+  marketDataMaxConcurrency: number;
+  marketDataBatchDelayMs: number;
   marketDataMaxRetries: number;
   marketDataRetryBaseDelayMs: number;
   marketDataSequential: boolean;

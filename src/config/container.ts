@@ -22,7 +22,6 @@ import { NotificationService } from '../services/NotificationService';
 import { OpportunityFilter } from '../services/OpportunityFilter';
 import { OpportunityService } from '../services/OpportunityService';
 import { RankingService } from '../services/RankingService';
-import { RateLimiterService } from '../services/RateLimiterService';
 import { RiskService } from '../services/RiskService';
 import { SignalContextService } from '../services/SignalContextService';
 import { WatchlistService } from '../services/WatchlistService';
@@ -117,7 +116,6 @@ export const forwardSignalEvaluator = new ForwardSignalEvaluator({
   forwardSignalRepository,
   signalEvaluationRepository,
   marketDataService,
-  rateLimiterService: new RateLimiterService(fallbackRuntimeConfig.marketDataRequestDelayMs),
 });
 
 export const marketScanExecutor = new MarketScanExecutor({
@@ -132,7 +130,6 @@ export const marketScanExecutor = new MarketScanExecutor({
   forwardSignalRepository,
   notificationService,
   signalContextService: createSignalContextService(fallbackRuntimeConfig),
-  rateLimiterService: new RateLimiterService(fallbackRuntimeConfig.marketDataRequestDelayMs),
   engineConfigService,
   marketUniverseService,
   marketSessionService,
@@ -140,9 +137,10 @@ export const marketScanExecutor = new MarketScanExecutor({
   opportunityFilterFactory: createOpportunityFilter,
   notificationServiceFactory: createNotificationService,
   signalContextServiceFactory: createSignalContextService,
-  rateLimiterServiceFactory: (requestDelayMs) => new RateLimiterService(requestDelayMs),
   debug: env.marketScanDebug,
   marketDataMaxAgeMinutes: fallbackRuntimeConfig.marketDataMaxAgeMinutes,
+  marketDataMaxConcurrency: fallbackRuntimeConfig.marketDataMaxConcurrency,
+  marketDataBatchDelayMs: fallbackRuntimeConfig.marketDataBatchDelayMs,
   marketDataMaxRetries: fallbackRuntimeConfig.marketDataMaxRetries,
   marketDataRetryBaseDelayMs: fallbackRuntimeConfig.marketDataRetryBaseDelayMs,
   marketDataSequential: fallbackRuntimeConfig.marketDataSequential,
