@@ -18,7 +18,10 @@ POST /api/backtest
       -> MomentumAnalyzer
       -> StructureAnalyzer
     -> RiskService.calculateRisk
-    -> Evaluación futura de SL / TP1 / TP2
+    -> TradeOutcomeEvaluator
+       -> Evaluación futura de SL / TP1 / TP2
+       -> MFE / MAE
+       -> candlesUntil / exitAt
     -> Summary + ventanas recientes
 ```
 
@@ -48,6 +51,24 @@ El `entry` sale del mismo criterio vigente de producción: `RiskService` usa el 
 vela de la ventana histórica. El stop técnico interno sigue siendo el `low` de esa vela, pero el
 backtest evalúa el stop financiero porcentual solicitado en el request.
 
+## Evaluación de outcomes
+
+La evaluación objetiva de qué ocurrió después de una señal vive en
+`src/services/TradeOutcomeEvaluator.ts`. Este servicio no genera señales, no calcula score, no consulta
+Yahoo, no persiste PostgreSQL y no envía Telegram. Su única responsabilidad es recibir un trade ya
+definido (`entry`, `stopLoss`, `TP1`, `TP2`, `signalAt`, `expiresAt`) junto con velas de mercado y
+determinar el resultado.
+
+El evaluator ordena las velas por timestamp y usa únicamente candles con:
+
+```text
+timestamp > signalAt
+timestamp <= expiresAt
+```
+
+La candle exactamente igual a `signalAt` no se usa como candle futura. Las candles posteriores a
+`expiresAt` también se ignoran.
+
 ## Evaluación de targets
 
 El engine evalúa dos targets independientes:
@@ -67,7 +88,32 @@ high >= target
 ```
 
 Con datos OHLC no sabemos si primero tocó el stop o el target dentro de esa vela, así que el motor
-no lo cuenta automáticamente como acierto ni como fallo.
+no lo cuenta automáticamente como acierto ni como fallo. Para `AMBIGUOUS`, `exitAt` apunta al timestamp
+de la candle ambigua. Para `EXPIRED`, `exitAt` queda vacío.
+
+`candlesUntil` usa una convención 1-based: la primera candle posterior a `signalAt` cuenta como `1`.
+TP1 y TP2 se evalúan de forma independiente, por lo que un mismo trade puede terminar, por ejemplo,
+con `TP1 = WIN` y `TP2 = LOSS` o `TP1 = WIN` y `TP2 = EXPIRED`.
+
+## MFE / MAE
+
+`maxFavorableExcursionPercent` mide el mayor avance porcentual por encima del `entry` mientras el
+trade estuvo en su vida relevante. Para LONG:
+
+```text
+MFE = ((maxHigh - entry) / entry) * 100
+```
+
+`maxAdverseExcursionPercent` mide la mayor caída porcentual debajo del `entry` y conserva signo
+negativo cuando el precio cae. Para LONG:
+
+```text
+MAE = ((minLow - entry) / entry) * 100
+```
+
+La vida relevante mantiene la semántica histórica del `BacktestEngine`: se mide desde la primera
+candle posterior a la señal hasta la candle terminal más tardía entre TP1 y TP2. Si ambos targets
+expiran, se usan todas las candles futuras hasta `expiresAt`.
 
 ## No overlapping trades
 

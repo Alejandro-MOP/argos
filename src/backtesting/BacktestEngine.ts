@@ -4,6 +4,7 @@ import type { Signal } from '../models/Signal';
 import type { BacktestOutcome, BacktestTrade } from '../models/BacktestTrade';
 import type { RiskService } from '../services/RiskService';
 import type { OpportunityService } from '../services/OpportunityService';
+import { TradeOutcomeEvaluator } from '../services/TradeOutcomeEvaluator';
 
 const DAY_IN_MILLISECONDS = 86_400_000;
 const MINIMUM_BACKTEST_CANDLES = 60;
@@ -105,21 +106,6 @@ export interface BacktestRunResult {
   errors: BacktestError[];
 }
 
-interface TargetEvaluation {
-  outcome: BacktestOutcome;
-  exitAt?: Date;
-  candlesUntil?: number;
-  exitIndex: number;
-}
-
-interface TradeEvaluation {
-  outcomeTp1: TargetEvaluation;
-  outcomeTp2: TargetEvaluation;
-  maxFavorableExcursionPercent: number;
-  maxAdverseExcursionPercent: number;
-  terminalIndex: number;
-}
-
 export const DEFAULT_BACKTEST_EXPIRATION_WINDOWS_DAYS: Record<string, number> = {
   '1m': 1,
   '5m': 2,
@@ -144,6 +130,7 @@ export class InsufficientHistoricalDataError extends Error {
 
 export class BacktestEngine {
   private readonly expirationWindows: Record<string, number>;
+  private readonly tradeOutcomeEvaluator = new TradeOutcomeEvaluator();
 
   public constructor(private readonly dependencies: BacktestEngineDependencies) {
     this.expirationWindows = {
@@ -261,10 +248,19 @@ export class BacktestEngine {
     const stopLoss = entry * (1 - request.stopLossPercent / 100);
     const takeProfit1 = entry * (1 + request.takeProfitMinPercent / 100);
     const takeProfit2 = entry * (1 + request.takeProfitMaxPercent / 100);
-    const evaluation = this.evaluateTrade(candles, signalIndex, entry, stopLoss, takeProfit1, takeProfit2, expiresAt);
+    const evaluation = this.tradeOutcomeEvaluator.evaluate({
+      entry,
+      stopLoss,
+      takeProfit1,
+      takeProfit2,
+      signalAt: signal.createdAt,
+      expiresAt,
+      candles,
+    });
+    const terminalIndex = this.resolveTerminalIndex(candles, signalIndex, evaluation.terminalTimestamp);
 
     return {
-      terminalIndex: evaluation.terminalIndex,
+      terminalIndex,
       trade: {
         ticker,
         timeframe: request.timeframe,
@@ -300,73 +296,20 @@ export class BacktestEngine {
     };
   }
 
-  private evaluateTrade(
+  private resolveTerminalIndex(
     candles: Candle[],
     signalIndex: number,
-    entry: number,
-    stopLoss: number,
-    takeProfit1: number,
-    takeProfit2: number,
-    expiresAt: Date,
-  ): TradeEvaluation {
-    const futureCandles = candles
-      .slice(signalIndex + 1)
-      .filter((candle) => candle.timestamp.getTime() <= expiresAt.getTime());
-    const outcomeTp1 = this.evaluateTarget(futureCandles, stopLoss, takeProfit1);
-    const outcomeTp2 = this.evaluateTarget(futureCandles, stopLoss, takeProfit2);
-    const terminalRelativeIndex = Math.max(outcomeTp1.exitIndex, outcomeTp2.exitIndex);
-    const mfeMaeCandles = terminalRelativeIndex >= 0 ? futureCandles.slice(0, terminalRelativeIndex + 1) : futureCandles;
-    const maxHigh = Math.max(entry, ...mfeMaeCandles.map((candle) => candle.high));
-    const minLow = Math.min(entry, ...mfeMaeCandles.map((candle) => candle.low));
-
-    return {
-      outcomeTp1,
-      outcomeTp2,
-      maxFavorableExcursionPercent: ((maxHigh - entry) / entry) * 100,
-      maxAdverseExcursionPercent: ((minLow - entry) / entry) * 100,
-      terminalIndex: terminalRelativeIndex >= 0 ? signalIndex + 1 + terminalRelativeIndex : signalIndex + futureCandles.length,
-    };
-  }
-
-  private evaluateTarget(candles: Candle[], stopLoss: number, takeProfit: number): TargetEvaluation {
-    for (let index = 0; index < candles.length; index += 1) {
-      const candle = candles[index];
-      const hitStop = candle.low <= stopLoss;
-      const hitTarget = candle.high >= takeProfit;
-
-      if (hitStop && hitTarget) {
-        return {
-          outcome: 'AMBIGUOUS',
-          exitAt: candle.timestamp,
-          candlesUntil: index + 1,
-          exitIndex: index,
-        };
-      }
-
-      if (hitTarget) {
-        return {
-          outcome: 'WIN',
-          exitAt: candle.timestamp,
-          candlesUntil: index + 1,
-          exitIndex: index,
-        };
-      }
-
-      if (hitStop) {
-        return {
-          outcome: 'LOSS',
-          exitAt: candle.timestamp,
-          candlesUntil: index + 1,
-          exitIndex: index,
-        };
-      }
+    terminalTimestamp: Date | undefined,
+  ): number {
+    if (!terminalTimestamp) {
+      return signalIndex;
     }
 
-    return {
-      outcome: 'EXPIRED',
-      candlesUntil: candles.length,
-      exitIndex: candles.length > 0 ? candles.length - 1 : -1,
-    };
+    const terminalIndex = candles.findIndex(
+      (candle) => candle.timestamp.getTime() === terminalTimestamp.getTime(),
+    );
+
+    return terminalIndex >= 0 ? terminalIndex : signalIndex;
   }
 
   private calculateExpiresAt(signalAt: Date, timeframe: string): Date {
