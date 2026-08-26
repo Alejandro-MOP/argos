@@ -11,6 +11,7 @@ import {
 } from '../performance/PerformanceProviders';
 import { createRepositories } from './repositories';
 import { MarketDataService } from '../services/MarketDataService';
+import { ForwardSignalEvaluator } from '../services/ForwardSignalEvaluator';
 import { MarketScanExecutor } from '../services/MarketScanExecutor';
 import { NotificationService } from '../services/NotificationService';
 import { OpportunityFilter } from '../services/OpportunityFilter';
@@ -25,9 +26,12 @@ import { env } from './env';
 const marketDataProvider = new YahooFinanceClient(undefined, env.marketScanDebug);
 const marketDataService = new MarketDataService(marketDataProvider);
 const rateLimiterService = new RateLimiterService(env.marketDataRequestDelayMs);
-const { opportunityRepository, signalRepository, forwardSignalRepository } = createRepositories(
-  env.databaseUrl,
-);
+const {
+  opportunityRepository,
+  signalRepository,
+  forwardSignalRepository,
+  signalEvaluationRepository,
+} = createRepositories(env.databaseUrl);
 const watchlistService = new WatchlistService(env.marketScanWatchlist, env.marketScanTickers);
 const opportunityService = new OpportunityService({
   trendAnalyzer: new TrendAnalyzer({
@@ -87,6 +91,13 @@ const signalContextService = new SignalContextService(
 export const notificationService = new NotificationService(telegramClient, {
   minimumScore: env.scoring.telegramNotificationMinScore,
   tradePlan: env.tradePlan,
+});
+
+export const forwardSignalEvaluator = new ForwardSignalEvaluator({
+  forwardSignalRepository,
+  signalEvaluationRepository,
+  marketDataService,
+  rateLimiterService,
 });
 
 export const marketScanExecutor = new MarketScanExecutor({

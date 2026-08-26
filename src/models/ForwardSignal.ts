@@ -1,3 +1,4 @@
+import type { BacktestOutcome } from './BacktestTrade';
 import type { SignalType } from './Signal';
 
 export interface ForwardSignalSnapshot {
@@ -22,13 +23,17 @@ export interface ForwardSignalSnapshot {
   telegramSent: boolean;
 }
 
+export interface PersistedForwardSignalSnapshot extends ForwardSignalSnapshot {
+  id: string;
+}
+
 export type SignalEvaluationStatus = 'OPEN' | 'PARTIALLY_RESOLVED' | 'CLOSED' | 'EXPIRED' | 'AMBIGUOUS';
 
 export interface SignalEvaluationSnapshot {
   id?: string;
   signalId: string;
-  outcomeTp1?: string;
-  outcomeTp2?: string;
+  outcomeTp1?: BacktestOutcome;
+  outcomeTp2?: BacktestOutcome;
   exitAtTp1?: Date;
   exitAtTp2?: Date;
   candlesUntilTp1?: number;

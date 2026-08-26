@@ -97,6 +97,8 @@ export const env = {
   telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
   telegramEnabled: parseBoolean(process.env.TELEGRAM_ENABLED, true),
   marketScanSchedule: process.env.MARKET_SCAN_SCHEDULE ?? '0 */15 14-21 * * 1-5',
+  forwardSignalEvaluationSchedule:
+    process.env.FORWARD_SIGNAL_EVALUATION_SCHEDULE ?? '0 0 * * * *',
   marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
   marketScanCandleLimit: parseInteger(process.env.MARKET_SCAN_CANDLE_LIMIT, 80),

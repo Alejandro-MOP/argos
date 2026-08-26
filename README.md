@@ -381,6 +381,7 @@ BACKTEST_CONTEXT_ENABLED=true
 BACKTEST_CONTEXT_MONTHS=24
 PERFORMANCE_MIN_SAMPLE_SIZE=20
 FORWARD_TEST_CONTEXT_ENABLED=true
+FORWARD_SIGNAL_EVALUATION_SCHEDULE=0 0 * * * *
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -531,11 +532,121 @@ Las tablas viven en el schema `market_signal_engine`, separado de `public`:
 
 - `market_signal_engine.opportunities`: auditoría y deduplicación persistente por ticker/timeframe.
 - `market_signal_engine.signals`: snapshot inmutable de cada señal real emitida para Telegram.
-- `market_signal_engine.signal_evaluations`: tabla preparada para outcomes futuros del Forward Evaluator.
+- `market_signal_engine.signal_evaluations`: outcomes de señales reales evaluadas automáticamente.
 - `market_signal_engine.schema_migrations`: historial de migraciones aplicadas.
+
+`signal_evaluations.signal_id` es único para que la evaluación sea idempotente: ejecutar el Timer varias
+veces actualiza la misma fila en lugar de duplicarla.
 
 El flujo de Telegram es resiliente: si PostgreSQL falla, se registra un error seguro y la alerta se
 sigue enviando.
+
+## Forward Signal Evaluation
+
+Una vez que una alerta real se guarda en `market_signal_engine.signals`, el sistema la evalúa de
+forma automática hasta conocer su resultado. El flujo normal no depende de un endpoint manual:
+
+```text
+Signal real generada
+  -> signals PostgreSQL
+  -> Timer forwardSignalEvaluation cada hora
+  -> Yahoo Finance candles posteriores a signalAt
+  -> TradeOutcomeEvaluator
+  -> signal_evaluations UPSERT
+```
+
+El Timer usa la variable:
+
+```text
+FORWARD_SIGNAL_EVALUATION_SCHEDULE=0 0 * * * *
+```
+
+En NCRONTAB de Azure Functions significa: segundo `0`, minuto `0`, cada hora.
+
+Signals pendientes:
+
+- señales sin fila en `signal_evaluations`;
+- señales con `status = OPEN`;
+- señales con `status = PARTIALLY_RESOLVED`.
+
+No se reevalúan señales terminales con `CLOSED`, `EXPIRED` o `AMBIGUOUS`.
+
+El evaluator usa siempre el snapshot inmutable guardado en `signals`; no recalcula score, entry, stop
+ni targets. Para V1 evalúa contra `financial_stop_price`, no contra `technical_stop_price`.
+
+Timeframe de seguimiento preferido:
+
+| Timeframe de señal | Seguimiento preferido | Fallbacks |
+| --- | --- | --- |
+| `1m` | `1m` | `5m`, `15m`, `1d` |
+| `5m` | `5m` | `15m`, `1d` |
+| `15m` | `15m` | `30m`, `1h`, `1d` |
+| `30m` | `15m` | `30m`, `1h`, `1d` |
+| `1h` | `15m` | `30m`, `1h`, `1d` |
+| `1d` | `15m` | `30m`, `1h`, `1d` |
+| `1w` | `1d` | `1w` |
+
+La intención es mejorar la precisión para saber qué ocurrió primero entre stop, TP1 y TP2. Si Yahoo
+no entrega datos suficientes en el timeframe preferido, se intenta el siguiente fallback. Si no hay
+datos posteriores reales, no se inventa resultado.
+
+Estados:
+
+- `OPEN`: no se resolvió TP1 ni TP2 y todavía no llegó `expiresAt`.
+- `PARTIALLY_RESOLVED`: un target ya tiene outcome y el otro sigue pendiente antes de expirar.
+- `CLOSED`: ambos targets resolvieron como `WIN`/`LOSS`.
+- `EXPIRED`: se alcanzó `expiresAt` y al menos un target pendiente expiró.
+- `AMBIGUOUS`: una candle OHLC tocó stop y target sin poder conocer el orden intravela.
+
+Endpoint manual de desarrollo/debug:
+
+```bash
+curl -X POST "http://localhost:7071/api/forward-evaluate" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Filtrar por ticker:
+
+```bash
+curl -X POST "http://localhost:7071/api/forward-evaluate" \
+  -H "Content-Type: application/json" \
+  -d '{"ticker":"UBER"}'
+```
+
+Filtrar por señal específica:
+
+```bash
+curl -X POST "http://localhost:7071/api/forward-evaluate" \
+  -H "Content-Type: application/json" \
+  -d '{"signalId":"00000000-0000-0000-0000-000000000000"}'
+```
+
+SQL útil:
+
+```sql
+SELECT
+  s.id,
+  s.ticker,
+  s.timeframe,
+  s.signal_at,
+  s.entry,
+  s.financial_stop_price,
+  s.tp1_price,
+  s.tp2_price,
+  e.status,
+  e.outcome_tp1,
+  e.outcome_tp2,
+  e.exit_at_tp1,
+  e.exit_at_tp2,
+  e.max_favorable_excursion_percent,
+  e.max_adverse_excursion_percent,
+  e.evaluated_until
+FROM market_signal_engine.signals s
+LEFT JOIN market_signal_engine.signal_evaluations e ON e.signal_id = s.id
+ORDER BY s.signal_at DESC
+LIMIT 50;
+```
 
 ## Persistencia
 
@@ -612,8 +723,9 @@ Cuando `FORWARD_TEST_CONTEXT_ENABLED=true`, Telegram reserva una tercera capa pa
 reales emitidas por el bot y evaluadas posteriormente. Esto no es backtesting: son alertas reales que el
 sistema habría guardado en operación viva.
 
-Como todavía no existe persistencia PostgreSQL para forward testing, V1 usa `ForwardPerformanceProvider`
-con una implementación `EmptyForwardPerformanceProvider`. Por eso hoy la sección muestra:
+Aunque las señales reales ya se guardan y se evalúan automáticamente en PostgreSQL, todavía no existe
+un `PostgresForwardPerformanceProvider` para convertir esas evaluaciones en métricas agregadas dentro
+del mensaje de Telegram. Por ahora la sección sigue usando `EmptyForwardPerformanceProvider` y muestra:
 
 ```text
 🧪 FORWARD TEST
@@ -974,6 +1086,7 @@ BACKTEST_CONTEXT_ENABLED=true
 BACKTEST_CONTEXT_MONTHS=24
 PERFORMANCE_MIN_SAMPLE_SIZE=20
 FORWARD_TEST_CONTEXT_ENABLED=true
+FORWARD_SIGNAL_EVALUATION_SCHEDULE=0 0 * * * *
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -983,11 +1096,12 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
 | `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
-| `DATABASE_URL`                         | URL de PostgreSQL reservada para futuras implementaciones persistentes.                          |
+| `DATABASE_URL`                         | URL de PostgreSQL para persistir señales reales y evaluaciones forward.                          |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |
 | `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                        |
 | `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                             |
+| `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.             |
 | `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                            |
 | `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                    |
 | `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que el motor espera analizar por ticker.                                  |

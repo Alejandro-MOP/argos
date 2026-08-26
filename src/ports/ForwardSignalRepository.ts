@@ -1,5 +1,12 @@
-import type { ForwardSignalSnapshot } from '../models/ForwardSignal';
+import type { ForwardSignalSnapshot, PersistedForwardSignalSnapshot } from '../models/ForwardSignal';
+
+export interface ForwardSignalFilters {
+  signalId?: string;
+  ticker?: string;
+  limit?: number;
+}
 
 export interface ForwardSignalRepository {
   save(signal: ForwardSignalSnapshot): Promise<void>;
+  findPending(filters?: ForwardSignalFilters): Promise<PersistedForwardSignalSnapshot[]>;
 }
