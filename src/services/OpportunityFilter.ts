@@ -19,8 +19,8 @@ export class OpportunityFilter {
     private readonly config: OpportunityFilterConfig,
   ) {}
 
-  public async shouldNotify(opportunity: Opportunity): Promise<boolean> {
-    const result = await this.evaluate(opportunity);
+  public async shouldNotify(opportunity: Opportunity, minimumScore?: number): Promise<boolean> {
+    const result = await this.evaluate(opportunity, minimumScore);
 
     return result.shouldNotify;
   }
@@ -29,8 +29,11 @@ export class OpportunityFilter {
     return this.config.minimumScore;
   }
 
-  public async evaluate(opportunity: Opportunity): Promise<OpportunityFilterResult> {
-    if (opportunity.score < this.config.minimumScore) {
+  public async evaluate(
+    opportunity: Opportunity,
+    minimumScore: number = this.config.minimumScore,
+  ): Promise<OpportunityFilterResult> {
+    if (opportunity.score < minimumScore) {
       return {
         shouldNotify: false,
         reason: 'below-threshold',

@@ -157,6 +157,12 @@ Parámetros:
 - `limit`: opcional. Por defecto usa `MARKET_SCAN_CANDLE_LIMIT`.
 - `notify`: opcional. Por defecto `true`.
 - `capital`: opcional. Monto disponible para calcular pérdida estimada y ganancia estimada por oportunidad.
+- `opportunityMinScore`: opcional. Override solo para ese request; si no viene, usa `OPPORTUNITY_MIN_SCORE`.
+- `telegramNotificationMinScore`: opcional. Override solo para ese request; si no viene, usa `TELEGRAM_NOTIFICATION_MIN_SCORE`.
+
+También se aceptan los nombres equivalentes `OPPORTUNITY_MIN_SCORE` y
+`TELEGRAM_NOTIFICATION_MIN_SCORE` dentro del body o query string, útil si quieres copiar exactamente
+el nombre de la variable de entorno.
 
 La respuesta HTTP incluye `opportunityType` en `opportunities` y `notifiedSignals` para interpretar
 el horizonte práctico de la señal según el `timeframe` solicitado. También incluye un `tradePlan`
@@ -170,6 +176,14 @@ Ejemplo:
 curl -X POST "http://localhost:7071/api/market-scan" \
   -H "Content-Type: application/json" \
   -d '{"tickers":["NVDA","MSFT"],"timeframe":"1d","limit":80,"notify":false,"capital":1000}'
+```
+
+Ejemplo con thresholds dinámicos solo para la corrida manual:
+
+```bash
+curl -X POST "http://localhost:7071/api/market-scan" \
+  -H "Content-Type: application/json" \
+  -d '{"tickers":["NVDA","MSFT"],"timeframe":"1d","limit":80,"notify":true,"capital":1000,"opportunityMinScore":90,"telegramNotificationMinScore":90}'
 ```
 
 Interpretación del tipo por temporalidad:
@@ -351,6 +365,10 @@ entrar a `notifiedSignals` y enviarse a Telegram:
 
 - `score >= TELEGRAM_NOTIFICATION_MIN_SCORE`
 
+En el endpoint manual `POST /api/market-scan`, ambos thresholds pueden sobreescribirse por request
+con `opportunityMinScore` y `telegramNotificationMinScore`. Ese override no cambia las variables de
+entorno ni afecta ejecuciones posteriores.
+
 Por defecto:
 
 ```text
@@ -496,7 +514,7 @@ docker compose up -d postgres
 URL local de ejemplo:
 
 ```text
-DATABASE_URL=postgres://market_signal_engine:market_signal_engine_dev_password@localhost:5432/market_signal_engine
+DATABASE_URL=postgres://market_signal_engine:market_signal_engine_dev_password@localhost:15432/market_signal_engine
 ```
 
 La contraseña anterior es solo de desarrollo local y no debe reutilizarse en producción.
@@ -509,9 +527,12 @@ npm run db:migrate
 
 Las migraciones crean:
 
-- `opportunities`: auditoría y deduplicación persistente por ticker/timeframe.
-- `signals`: snapshot inmutable de cada señal real emitida para Telegram.
-- `signal_evaluations`: tabla preparada para outcomes futuros del Forward Evaluator.
+Las tablas viven en el schema `market_signal_engine`, separado de `public`:
+
+- `market_signal_engine.opportunities`: auditoría y deduplicación persistente por ticker/timeframe.
+- `market_signal_engine.signals`: snapshot inmutable de cada señal real emitida para Telegram.
+- `market_signal_engine.signal_evaluations`: tabla preparada para outcomes futuros del Forward Evaluator.
+- `market_signal_engine.schema_migrations`: historial de migraciones aplicadas.
 
 El flujo de Telegram es resiliente: si PostgreSQL falla, se registra un error seguro y la alerta se
 sigue enviando.

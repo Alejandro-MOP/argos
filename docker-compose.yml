@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: market_signal_engine
       POSTGRES_PASSWORD: market_signal_engine_dev_password
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -8,6 +8,10 @@ interface MarketScanHttpBody {
   notify?: boolean | string;
   capital?: number | string;
   tradingCapital?: number | string;
+  opportunityMinScore?: number | string;
+  telegramNotificationMinScore?: number | string;
+  OPPORTUNITY_MIN_SCORE?: number | string;
+  TELEGRAM_NOTIFICATION_MIN_SCORE?: number | string;
   message?: string;
   Body?: string;
   text?: string;
@@ -54,6 +58,21 @@ export const parseCapital = (value: number | string | null | undefined): number 
   return undefined;
 };
 
+export const parseScoreThreshold = (
+  value: number | string | null | undefined,
+): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
 export const parseNotify = (value: boolean | string | null | undefined): boolean => {
   if (typeof value === 'boolean') {
     return value;
@@ -80,6 +99,10 @@ export const parseBody = async (request: HttpRequest): Promise<MarketScanHttpBod
       notify: params.get('notify') ?? undefined,
       capital: params.get('capital') ?? undefined,
       tradingCapital: params.get('tradingCapital') ?? undefined,
+      opportunityMinScore: params.get('opportunityMinScore') ?? undefined,
+      telegramNotificationMinScore: params.get('telegramNotificationMinScore') ?? undefined,
+      OPPORTUNITY_MIN_SCORE: params.get('OPPORTUNITY_MIN_SCORE') ?? undefined,
+      TELEGRAM_NOTIFICATION_MIN_SCORE: params.get('TELEGRAM_NOTIFICATION_MIN_SCORE') ?? undefined,
       message: params.get('message') ?? undefined,
       Body: params.get('Body') ?? undefined,
       text: params.get('text') ?? undefined,

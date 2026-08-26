@@ -1,6 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE SCHEMA IF NOT EXISTS market_signal_engine;
 
-CREATE TABLE IF NOT EXISTS opportunities (
+CREATE TABLE IF NOT EXISTS market_signal_engine.opportunities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticker TEXT NOT NULL,
   timeframe TEXT NOT NULL,
@@ -14,7 +15,7 @@ CREATE TABLE IF NOT EXISTS opportunities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS signals (
+CREATE TABLE IF NOT EXISTS market_signal_engine.signals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ticker TEXT NOT NULL,
   timeframe TEXT NOT NULL,
@@ -37,9 +38,9 @@ CREATE TABLE IF NOT EXISTS signals (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS signal_evaluations (
+CREATE TABLE IF NOT EXISTS market_signal_engine.signal_evaluations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  signal_id UUID NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
+  signal_id UUID NOT NULL REFERENCES market_signal_engine.signals(id) ON DELETE CASCADE,
   outcome_tp1 TEXT,
   outcome_tp2 TEXT,
   exit_at_tp1 TIMESTAMPTZ,
@@ -64,25 +65,25 @@ CREATE TABLE IF NOT EXISTS signal_evaluations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_opportunities_ticker_timeframe_detected_at
-  ON opportunities (ticker, timeframe, detected_at DESC);
+  ON market_signal_engine.opportunities (ticker, timeframe, detected_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_opportunities_score
-  ON opportunities (score);
+  ON market_signal_engine.opportunities (score);
 
 CREATE INDEX IF NOT EXISTS idx_signals_ticker_timeframe_signal_at
-  ON signals (ticker, timeframe, signal_at DESC);
+  ON market_signal_engine.signals (ticker, timeframe, signal_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_signals_score
-  ON signals (score);
+  ON market_signal_engine.signals (score);
 
 CREATE INDEX IF NOT EXISTS idx_signals_signal_at
-  ON signals (signal_at DESC);
+  ON market_signal_engine.signals (signal_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_signal_evaluations_signal_id
-  ON signal_evaluations (signal_id);
+  ON market_signal_engine.signal_evaluations (signal_id);
 
 CREATE INDEX IF NOT EXISTS idx_signal_evaluations_status
-  ON signal_evaluations (status);
+  ON market_signal_engine.signal_evaluations (status);
 
 CREATE INDEX IF NOT EXISTS idx_forward_performance_lookup
-  ON signals (ticker, timeframe, score, signal_at DESC);
+  ON market_signal_engine.signals (ticker, timeframe, score, signal_at DESC);

@@ -35,6 +35,8 @@ export interface MarketScanOptions {
   candleLimit: number;
   notify: boolean;
   capital?: number;
+  opportunityMinScore?: number;
+  telegramNotificationMinScore?: number;
 }
 
 export type MarketScanSkippedReason =
@@ -109,7 +111,13 @@ export class MarketScanExecutor {
     logger.log(`Iniciando escaneo de mercado para ${tickers.length} tickers`);
     this.debugLog(
       logger,
-      `Debug de escaneo habilitado. temporalidad=${options.timeframe} limiteVelas=${options.candleLimit} notificar=${options.notify}`,
+      [
+        `Debug de escaneo habilitado. temporalidad=${options.timeframe}`,
+        `limiteVelas=${options.candleLimit}`,
+        `notificar=${options.notify}`,
+        `opportunityMinScore=${this.getOpportunityMinScore(options)}`,
+        `telegramMinScore=${this.getTelegramMinScore(options)}`,
+      ].join(' '),
     );
 
     const scanResults = this.dependencies.marketDataSequential
@@ -143,7 +151,10 @@ export class MarketScanExecutor {
         continue;
       }
 
-      const filterResult = await this.dependencies.opportunityFilter.evaluate(opportunity);
+      const filterResult = await this.dependencies.opportunityFilter.evaluate(
+        opportunity,
+        options.opportunityMinScore,
+      );
 
       if (!filterResult.shouldNotify) {
         const reason = filterResult.reason ?? 'below-threshold';
@@ -173,8 +184,11 @@ export class MarketScanExecutor {
 
       opportunitySignals.push(signal);
 
-      const willNotify = this.dependencies.notificationService.shouldNotifyOpportunity(opportunity);
-      this.logNotificationDecisionDebug(opportunity, willNotify, logger);
+      const willNotify = this.dependencies.notificationService.shouldNotifyOpportunity(
+        opportunity,
+        options.telegramNotificationMinScore,
+      );
+      this.logNotificationDecisionDebug(opportunity, willNotify, logger, options);
 
       if (!willNotify) {
         await this.dependencies.opportunityRepository.save(opportunity);
@@ -512,17 +526,27 @@ export class MarketScanExecutor {
     opportunity: Opportunity,
     willNotify: boolean,
     logger: MarketScanLogger,
+    options: MarketScanOptions,
   ): void {
     this.debugLog(
       logger,
       [
         `decisionNotificacion ticker=${opportunity.ticker}`,
         `score=${opportunity.score}`,
-        `opportunityMinScore=${this.dependencies.opportunityFilter.getMinimumScore()}`,
-        `telegramMinScore=${this.dependencies.notificationService.getMinimumScore()}`,
+        `opportunityMinScore=${this.getOpportunityMinScore(options)}`,
+        `telegramMinScore=${this.getTelegramMinScore(options)}`,
         `willNotify=${willNotify}`,
       ].join(' '),
     );
+  }
+
+
+  private getOpportunityMinScore(options: MarketScanOptions): number {
+    return options.opportunityMinScore ?? this.dependencies.opportunityFilter.getMinimumScore();
+  }
+
+  private getTelegramMinScore(options: MarketScanOptions): number {
+    return options.telegramNotificationMinScore ?? this.dependencies.notificationService.getMinimumScore();
   }
 
   private buildScanError(ticker: string, error: unknown): MarketScanResult['errors'][number] {

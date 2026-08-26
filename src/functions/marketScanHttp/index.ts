@@ -11,6 +11,7 @@ import {
   parseCapital,
   parseLimit,
   parseNotify,
+  parseScoreThreshold,
   parseTickers,
   parseTickersFromMessage,
   parseWhatsAppText,
@@ -38,6 +39,18 @@ export async function marketScanHttp(
       request.query.get('capital') ??
       request.query.get('tradingCapital'),
   );
+  const opportunityMinScore = parseScoreThreshold(
+    body.opportunityMinScore ??
+      body.OPPORTUNITY_MIN_SCORE ??
+      request.query.get('opportunityMinScore') ??
+      request.query.get('OPPORTUNITY_MIN_SCORE'),
+  );
+  const telegramNotificationMinScore = parseScoreThreshold(
+    body.telegramNotificationMinScore ??
+      body.TELEGRAM_NOTIFICATION_MIN_SCORE ??
+      request.query.get('telegramNotificationMinScore') ??
+      request.query.get('TELEGRAM_NOTIFICATION_MIN_SCORE'),
+  );
 
   context.log(
     whatsAppText
@@ -52,6 +65,8 @@ export async function marketScanHttp(
       candleLimit,
       notify,
       capital,
+      opportunityMinScore,
+      telegramNotificationMinScore,
     },
     context,
   );
@@ -70,6 +85,11 @@ export async function marketScanHttp(
       mode: 'manual',
       scannedTickers: result.scannedTickers,
       capital,
+      thresholds: {
+        opportunityMinScore: opportunityMinScore ?? env.scoring.opportunityMinScore,
+        telegramNotificationMinScore:
+          telegramNotificationMinScore ?? env.scoring.telegramNotificationMinScore,
+      },
       opportunities: result.opportunities.map((opportunity) => {
         const signal = signalByOpportunity.get(
           buildSignalKey(opportunity.ticker, opportunity.timeframe),

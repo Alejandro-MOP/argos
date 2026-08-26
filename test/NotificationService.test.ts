@@ -280,4 +280,13 @@ describe('NotificationService', () => {
     expect(service.shouldNotifyOpportunity({ ...opportunity, score: 80 })).toBe(true);
     expect(service.getMinimumScore()).toBe(80);
   });
+
+  it('can override its minimum score for a single notification decision', () => {
+    const service = new NotificationService(undefined, { minimumScore: 80 });
+    const opportunity = buildOpportunity();
+
+    expect(service.shouldNotifyOpportunity({ ...opportunity, score: 85 }, 90)).toBe(false);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, score: 85 }, 80)).toBe(true);
+    expect(service.getMinimumScore()).toBe(80);
+  });
 });

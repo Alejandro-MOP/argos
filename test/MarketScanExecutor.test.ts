@@ -263,6 +263,94 @@ describe('MarketScanExecutor', () => {
 
 
 
+  it('uses request opportunity minimum score override for a single scan', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 85);
+    const opportunityFilter = {
+      shouldNotify: jest.fn(),
+      evaluate: jest.fn(async (candidate: Opportunity, minimumScore = 50) => ({
+        shouldNotify: candidate.score >= minimumScore,
+        reason: candidate.score >= minimumScore ? undefined : 'below-threshold',
+      })),
+      getMinimumScore: jest.fn().mockReturnValue(50),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      opportunityFilter,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      {
+        tickers: ['SPY'],
+        timeframe: '15m',
+        candleLimit: 80,
+        notify: true,
+        opportunityMinScore: 90,
+      },
+      logger,
+    );
+
+    expect(opportunityFilter.evaluate).toHaveBeenCalledWith(opportunity, 90);
+    expect(result.opportunities).toEqual([]);
+    expect(result.skipped).toContainEqual({
+      ticker: 'SPY',
+      score: 85,
+      reason: 'below-threshold',
+    });
+  });
+
+  it('uses request Telegram minimum score override for a single scan', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 85);
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn(
+        (candidate: Opportunity, minimumScore = 80) => candidate.score >= minimumScore,
+      ),
+      getMinimumScore: jest.fn().mockReturnValue(80),
+    };
+    const executor = buildExecutor({
+      debug: true,
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      {
+        tickers: ['SPY'],
+        timeframe: '15m',
+        candleLimit: 80,
+        notify: true,
+        telegramNotificationMinScore: 90,
+      },
+      logger,
+    );
+
+    expect(notificationService.shouldNotifyOpportunity).toHaveBeenCalledWith(opportunity, 90);
+    expect(result.opportunities).toEqual([opportunity]);
+    expect(result.notifiedSignals).toEqual([]);
+    expect(result.skipped).toContainEqual({
+      ticker: 'SPY',
+      score: 85,
+      reason: 'below-telegram-threshold',
+    });
+    expect(notificationService.sendSignal).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      '[debug] decisionNotificacion ticker=SPY score=85 opportunityMinScore=50 telegramMinScore=90 willNotify=false',
+    );
+  });
+
+
   it('persists a complete forward signal snapshot before sending Telegram', async () => {
     const logger = buildLogger();
     const detectedAt = new Date('2026-08-24T12:00:00.000Z');
@@ -538,7 +626,7 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] Debug de escaneo habilitado. temporalidad=15m limiteVelas=80 notificar=false',
+      '[debug] Debug de escaneo habilitado. temporalidad=15m limiteVelas=80 notificar=false opportunityMinScore=50 telegramMinScore=80',
     );
   });
 

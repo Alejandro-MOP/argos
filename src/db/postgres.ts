@@ -1,5 +1,7 @@
 import { Pool, type PoolConfig, type QueryResult, type QueryResultRow } from 'pg';
 
+export const DATABASE_SCHEMA = 'market_signal_engine';
+
 export interface Queryable {
   query<T extends QueryResultRow = QueryResultRow>(
     text: string,
@@ -10,6 +12,7 @@ export interface Queryable {
 export const createPostgresPool = (databaseUrl: string): Pool => {
   const config: PoolConfig = {
     connectionString: databaseUrl,
+    options: `-c search_path=${DATABASE_SCHEMA},public`,
   };
 
   return new Pool(config);

@@ -34,8 +34,8 @@ export class NotificationService {
     };
   }
 
-  public shouldNotifyOpportunity(opportunity: Opportunity): boolean {
-    return opportunity.score >= this.config.minimumScore;
+  public shouldNotifyOpportunity(opportunity: Opportunity, minimumScore = this.config.minimumScore): boolean {
+    return opportunity.score >= minimumScore;
   }
 
   public getMinimumScore(): number {
