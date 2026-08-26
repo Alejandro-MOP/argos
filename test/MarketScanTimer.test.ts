@@ -13,7 +13,7 @@ jest.mock('../src/config/env', () => ({
 }));
 
 describe('marketScan timer function', () => {
-  it('uses all configured market scan timeframes', async () => {
+  it('delegates scan matrix resolution to dynamic configuration and market universe', async () => {
     const { marketScan } = await import('../src/functions/marketScan');
     const context = { log: jest.fn(), error: jest.fn() };
 
@@ -21,8 +21,6 @@ describe('marketScan timer function', () => {
 
     expect(run).toHaveBeenCalledWith(
       {
-        timeframes: ['1m', '5m', '15m', '1d', '1w'],
-        candleLimit: 80,
         notify: true,
       },
       context,

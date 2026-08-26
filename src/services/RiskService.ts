@@ -45,6 +45,10 @@ export class RiskService {
         'detectedAt' in opportunityOrCandidate
           ? opportunityOrCandidate.detectedAt
           : opportunityOrCandidate.createdAt,
+      strategyVersion:
+        'strategyVersion' in opportunityOrCandidate
+          ? opportunityOrCandidate.strategyVersion
+          : undefined,
     };
   }
 }

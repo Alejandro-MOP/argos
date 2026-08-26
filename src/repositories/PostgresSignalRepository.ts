@@ -29,10 +29,11 @@ export class PostgresSignalRepository implements ForwardSignalRepository {
         tp1_price,
         tp2_percent,
         tp2_price,
-        telegram_sent
+        telegram_sent,
+        strategy_version
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
       )`,
       [
         id,
@@ -54,6 +55,7 @@ export class PostgresSignalRepository implements ForwardSignalRepository {
         signal.tp2Percent,
         signal.tp2Price,
         signal.telegramSent,
+        signal.strategyVersion ?? 'legacy',
       ],
     );
   }
@@ -97,7 +99,8 @@ export class PostgresSignalRepository implements ForwardSignalRepository {
         signal.tp1_price,
         signal.tp2_percent,
         signal.tp2_price,
-        signal.telegram_sent
+        signal.telegram_sent,
+        signal.strategy_version
       FROM signals signal
       LEFT JOIN signal_evaluations evaluation ON evaluation.signal_id = signal.id
       WHERE ${conditions.join(' AND ')}
@@ -132,6 +135,7 @@ interface ForwardSignalRow {
   tp2_percent: string | number;
   tp2_price: string | number;
   telegram_sent: boolean;
+  strategy_version: string | null;
 }
 
 const mapForwardSignalRow = (row: ForwardSignalRow): PersistedForwardSignalSnapshot => ({
@@ -154,4 +158,5 @@ const mapForwardSignalRow = (row: ForwardSignalRow): PersistedForwardSignalSnaps
   tp2Percent: Number(row.tp2_percent),
   tp2Price: Number(row.tp2_price),
   telegramSent: row.telegram_sent,
+  strategyVersion: row.strategy_version ?? 'legacy',
 });

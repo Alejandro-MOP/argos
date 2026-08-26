@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import type { WatchlistName } from '../services/WatchlistService';
+import type { EngineRuntimeConfig } from '../models/EngineConfig';
 import type { TradePlanConfig } from '../utils/tradeSizing.utils';
 
 dotenv.config();
@@ -130,6 +131,44 @@ const parseWatchlistName = (value: string | undefined): WatchlistName => {
   return 'custom';
 };
 
+export const buildEnvRuntimeConfig = (values: NodeJS.ProcessEnv = process.env): EngineRuntimeConfig => ({
+  strategyVersion: values.ENGINE_STRATEGY_VERSION ?? 'v1',
+  marketScanCandleLimit: parseInteger(values.MARKET_SCAN_CANDLE_LIMIT, 80),
+  marketDataMaxAgeMinutes: parseInteger(values.MARKET_DATA_MAX_AGE_MINUTES, 30),
+  marketDataRequestDelayMs: parseInteger(values.MARKET_DATA_REQUEST_DELAY_MS, 13_000),
+  marketDataMaxRetries: parseInteger(values.MARKET_DATA_MAX_RETRIES, 3),
+  marketDataRetryBaseDelayMs: parseInteger(values.MARKET_DATA_RETRY_BASE_DELAY_MS, 30_000),
+  marketDataSequential: parseBoolean(values.MARKET_DATA_SEQUENTIAL, true),
+  tradePlan: parseTradePlanConfig(values),
+  signalIntelligence: {
+    backtestContextEnabled: parseBoolean(values.BACKTEST_CONTEXT_ENABLED, true),
+    backtestContextMonths: parseInteger(values.BACKTEST_CONTEXT_MONTHS, 24),
+    performanceMinSampleSize: parseInteger(values.PERFORMANCE_MIN_SAMPLE_SIZE, 20),
+    forwardTestContextEnabled: parseBoolean(values.FORWARD_TEST_CONTEXT_ENABLED, true),
+  },
+  scoring: {
+    maxAnalyzerScore: parseInteger(values.SCORING_MAX_ANALYZER_SCORE, 25),
+    opportunityMinScore: parseInteger(values.OPPORTUNITY_MIN_SCORE, 50),
+    telegramNotificationMinScore: parseInteger(values.TELEGRAM_NOTIFICATION_MIN_SCORE, 80),
+    duplicateWindowMinutes: parseInteger(values.OPPORTUNITY_DUPLICATE_WINDOW_MINUTES, 60),
+    emaFastPeriod: parseInteger(values.TREND_EMA_FAST_PERIOD, 20),
+    emaSlowPeriod: parseInteger(values.TREND_EMA_SLOW_PERIOD, 50),
+    volumeLookbackPeriod: parseInteger(values.VOLUME_LOOKBACK_PERIOD, 20),
+    volumeStrongRatio: parseNumber(values.VOLUME_STRONG_RATIO, 1.5),
+    volumeModerateRatio: parseNumber(values.VOLUME_MODERATE_RATIO, 1.3),
+    volumeWeakRatio: parseNumber(values.VOLUME_WEAK_RATIO, 1.1),
+    rsiPeriod: parseInteger(values.MOMENTUM_RSI_PERIOD, 14),
+    rsiIdealMin: parseNumber(values.MOMENTUM_RSI_IDEAL_MIN, 55),
+    rsiIdealMax: parseNumber(values.MOMENTUM_RSI_IDEAL_MAX, 70),
+    rsiNeutralMin: parseNumber(values.MOMENTUM_RSI_NEUTRAL_MIN, 45),
+    rsiNeutralMax: parseNumber(values.MOMENTUM_RSI_NEUTRAL_MAX, 55),
+    rsiExtendedMax: parseNumber(values.MOMENTUM_RSI_EXTENDED_MAX, 80),
+    structureLookbackPeriod: parseInteger(values.STRUCTURE_LOOKBACK_PERIOD, 20),
+  },
+});
+
+const runtimeConfig = buildEnvRuntimeConfig();
+
 export const env = {
   databaseUrl: process.env.DATABASE_URL ?? '',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
@@ -141,38 +180,16 @@ export const env = {
   marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
   marketScanTimeframes: parseMarketScanTimeframes(),
-  marketScanCandleLimit: parseInteger(process.env.MARKET_SCAN_CANDLE_LIMIT, 80),
+  marketScanCandleLimit: runtimeConfig.marketScanCandleLimit,
   marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
   marketScanDebug: parseBoolean(process.env.MARKET_SCAN_DEBUG, false),
-  marketDataMaxAgeMinutes: parseInteger(process.env.MARKET_DATA_MAX_AGE_MINUTES, 30),
-  marketDataRequestDelayMs: parseInteger(process.env.MARKET_DATA_REQUEST_DELAY_MS, 13_000),
-  marketDataMaxRetries: parseInteger(process.env.MARKET_DATA_MAX_RETRIES, 3),
-  marketDataRetryBaseDelayMs: parseInteger(process.env.MARKET_DATA_RETRY_BASE_DELAY_MS, 30_000),
-  marketDataSequential: parseBoolean(process.env.MARKET_DATA_SEQUENTIAL, true),
-  tradePlan: parseTradePlanConfig(),
-  signalIntelligence: {
-    backtestContextEnabled: parseBoolean(process.env.BACKTEST_CONTEXT_ENABLED, true),
-    backtestContextMonths: parseInteger(process.env.BACKTEST_CONTEXT_MONTHS, 24),
-    performanceMinSampleSize: parseInteger(process.env.PERFORMANCE_MIN_SAMPLE_SIZE, 20),
-    forwardTestContextEnabled: parseBoolean(process.env.FORWARD_TEST_CONTEXT_ENABLED, true),
-  },
-  scoring: {
-    maxAnalyzerScore: parseInteger(process.env.SCORING_MAX_ANALYZER_SCORE, 25),
-    opportunityMinScore: parseInteger(process.env.OPPORTUNITY_MIN_SCORE, 50),
-    telegramNotificationMinScore: parseInteger(process.env.TELEGRAM_NOTIFICATION_MIN_SCORE, 80),
-    duplicateWindowMinutes: parseInteger(process.env.OPPORTUNITY_DUPLICATE_WINDOW_MINUTES, 60),
-    emaFastPeriod: parseInteger(process.env.TREND_EMA_FAST_PERIOD, 20),
-    emaSlowPeriod: parseInteger(process.env.TREND_EMA_SLOW_PERIOD, 50),
-    volumeLookbackPeriod: parseInteger(process.env.VOLUME_LOOKBACK_PERIOD, 20),
-    volumeStrongRatio: parseNumber(process.env.VOLUME_STRONG_RATIO, 1.5),
-    volumeModerateRatio: parseNumber(process.env.VOLUME_MODERATE_RATIO, 1.3),
-    volumeWeakRatio: parseNumber(process.env.VOLUME_WEAK_RATIO, 1.1),
-    rsiPeriod: parseInteger(process.env.MOMENTUM_RSI_PERIOD, 14),
-    rsiIdealMin: parseNumber(process.env.MOMENTUM_RSI_IDEAL_MIN, 55),
-    rsiIdealMax: parseNumber(process.env.MOMENTUM_RSI_IDEAL_MAX, 70),
-    rsiNeutralMin: parseNumber(process.env.MOMENTUM_RSI_NEUTRAL_MIN, 45),
-    rsiNeutralMax: parseNumber(process.env.MOMENTUM_RSI_NEUTRAL_MAX, 55),
-    rsiExtendedMax: parseNumber(process.env.MOMENTUM_RSI_EXTENDED_MAX, 80),
-    structureLookbackPeriod: parseInteger(process.env.STRUCTURE_LOOKBACK_PERIOD, 20),
-  },
+  marketDataMaxAgeMinutes: runtimeConfig.marketDataMaxAgeMinutes,
+  marketDataRequestDelayMs: runtimeConfig.marketDataRequestDelayMs,
+  marketDataMaxRetries: runtimeConfig.marketDataMaxRetries,
+  marketDataRetryBaseDelayMs: runtimeConfig.marketDataRetryBaseDelayMs,
+  marketDataSequential: runtimeConfig.marketDataSequential,
+  tradePlan: runtimeConfig.tradePlan,
+  signalIntelligence: runtimeConfig.signalIntelligence,
+  scoring: runtimeConfig.scoring,
+  strategyVersion: runtimeConfig.strategyVersion,
 };

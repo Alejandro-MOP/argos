@@ -12,6 +12,7 @@ interface OpportunityRow {
   momentum_score: string | number;
   structure_score: string | number;
   reasons: string[];
+  strategy_version: string | null;
 }
 
 export class PostgresOpportunityRepository implements OpportunityRepository {
@@ -28,8 +29,9 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         volume_score,
         momentum_score,
         structure_score,
-        reasons
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+        reasons,
+        strategy_version
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)`,
       [
         opportunity.ticker,
         opportunity.timeframe,
@@ -40,6 +42,7 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         opportunity.momentumScore,
         opportunity.structureScore,
         JSON.stringify(opportunity.reasons),
+        opportunity.strategyVersion ?? 'legacy',
       ],
     );
   }
@@ -55,7 +58,8 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         volume_score,
         momentum_score,
         structure_score,
-        reasons
+        reasons,
+        strategy_version
       FROM opportunities
       ORDER BY detected_at DESC`,
     );
@@ -78,7 +82,8 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         volume_score,
         momentum_score,
         structure_score,
-        reasons
+        reasons,
+        strategy_version
       FROM opportunities
       WHERE ticker = $1
         AND timeframe = $2
@@ -101,4 +106,5 @@ const mapOpportunityRow = (row: OpportunityRow): Opportunity => ({
   momentumScore: Number(row.momentum_score),
   structureScore: Number(row.structure_score),
   reasons: Array.isArray(row.reasons) ? row.reasons : [],
+  strategyVersion: row.strategy_version ?? 'legacy',
 });

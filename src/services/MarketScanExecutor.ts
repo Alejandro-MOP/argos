@@ -1,17 +1,22 @@
 import type { Candle } from '../models/Candle';
+import type { EngineRuntimeConfig } from '../models/EngineConfig';
+import type { ForwardSignalSnapshot } from '../models/ForwardSignal';
+import type { MarketScanCandidate } from '../models/MarketSymbol';
 import type { Opportunity } from '../models/Opportunity';
 import type { Signal } from '../models/Signal';
-import type { ForwardSignalSnapshot } from '../models/ForwardSignal';
 import type { SignalContext } from '../models/SignalContext';
 import {
   InsufficientCandlesError,
   MarketDataProviderError,
   MarketDataRateLimitError,
 } from '../errors/MarketDataErrors';
-import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { ForwardSignalRepository } from '../ports/ForwardSignalRepository';
+import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { SignalRepository } from '../ports/SignalRepository';
 import type { MarketDataService } from './MarketDataService';
+import type { EngineConfigService } from './EngineConfigService';
+import type { MarketSessionService } from './MarketSessionService';
+import type { MarketUniverseService } from './MarketUniverseService';
 import type { NotificationService } from './NotificationService';
 import type { OpportunityFilter } from './OpportunityFilter';
 import type { OpportunityService } from './OpportunityService';
@@ -33,7 +38,7 @@ export interface MarketScanOptions {
   tickers?: string[];
   timeframe?: string;
   timeframes?: string[];
-  candleLimit: number;
+  candleLimit?: number;
   notify: boolean;
   capital?: number;
   opportunityMinScore?: number;
@@ -46,6 +51,7 @@ export type MarketScanSkippedReason =
   | 'duplicate-window'
   | 'insufficient-data'
   | 'invalid-risk'
+  | 'market-closed'
   | 'stale-market-data';
 
 export interface MarketScanCombination {
@@ -96,12 +102,35 @@ export interface MarketScanExecutorDependencies {
   notificationService: NotificationService;
   signalContextService?: SignalContextService;
   rateLimiterService: RateLimiterService;
+  engineConfigService?: EngineConfigService;
+  marketUniverseService?: MarketUniverseService;
+  marketSessionService?: MarketSessionService;
+  opportunityServiceFactory?: (config: EngineRuntimeConfig) => OpportunityService;
+  opportunityFilterFactory?: (config: EngineRuntimeConfig) => OpportunityFilter;
+  notificationServiceFactory?: (config: EngineRuntimeConfig) => NotificationService;
+  signalContextServiceFactory?: (config: EngineRuntimeConfig) => SignalContextService;
+  rateLimiterServiceFactory?: (requestDelayMs: number) => RateLimiterService;
   debug?: boolean;
   marketDataMaxAgeMinutes: number;
   marketDataMaxRetries: number;
   marketDataRetryBaseDelayMs: number;
   marketDataSequential: boolean;
   tradePlan?: TradePlanConfig;
+  strategyVersion?: string;
+  defaultTimeframes?: string[];
+}
+
+interface MarketScanRuntimeServices {
+  config: EngineRuntimeConfig;
+  opportunityService: OpportunityService;
+  opportunityFilter: OpportunityFilter;
+  notificationService: NotificationService;
+  signalContextService?: SignalContextService;
+  rateLimiterService: RateLimiterService;
+}
+
+interface ScanExecutionContext extends MarketScanRuntimeServices {
+  candleLimit: number;
 }
 
 export class MarketScanExecutor {
@@ -111,31 +140,38 @@ export class MarketScanExecutor {
     options: MarketScanOptions,
     logger: MarketScanLogger,
   ): Promise<MarketScanResult> {
-    const tickers = this.resolveTickers(options.tickers);
-    const timeframes = this.resolveTimeframes(options);
-    const scanned = this.buildScanCombinations(tickers, timeframes);
+    const runtimeServices = await this.resolveRuntimeServices(logger);
+    const candleLimit = options.candleLimit ?? runtimeServices.config.marketScanCandleLimit;
+    const candidates = await this.resolveScanCandidates(options, runtimeServices.config, logger);
+    const scanned = candidates.map((candidate) => ({
+      ticker: candidate.symbol,
+      timeframe: candidate.timeframe,
+    }));
+    const scannedTickers = [...new Set(candidates.map((candidate) => candidate.symbol))];
     const analyzedOpportunities: Opportunity[] = [];
     const candlesBySignalKey = new Map<string, Candle[]>();
     const errors: MarketScanResult['errors'] = [];
     const skipped: MarketScanResult['skipped'] = [];
 
     logger.log(
-      `Iniciando escaneo de mercado tickers=${tickers.length} timeframes=${timeframes.length} totalCombinations=${scanned.length}`,
+      `Iniciando escaneo de mercado tickers=${scannedTickers.length} timeframes=${new Set(candidates.map((candidate) => candidate.timeframe)).size} totalCombinations=${scanned.length}`,
     );
     this.debugLog(
       logger,
       [
-        `Debug de escaneo habilitado. temporalidades=${timeframes.join(',')}`,
-        `limiteVelas=${options.candleLimit}`,
+        `Debug de escaneo habilitado. temporalidades=${[...new Set(candidates.map((candidate) => candidate.timeframe))].join(',')}`,
+        `limiteVelas=${candleLimit}`,
         `notificar=${options.notify}`,
-        `opportunityMinScore=${this.getOpportunityMinScore(options)}`,
-        `telegramMinScore=${this.getTelegramMinScore(options)}`,
+        `strategyVersion=${runtimeServices.config.strategyVersion}`,
+        `opportunityMinScore=${this.getOpportunityMinScore(options, runtimeServices)}`,
+        `telegramMinScore=${this.getTelegramMinScore(options, runtimeServices)}`,
       ].join(' '),
     );
 
-    const scanResults = this.dependencies.marketDataSequential
-      ? await this.scanTickersSequentially(tickers, options, logger)
-      : await this.scanTickersInParallel(tickers, options, logger);
+    const executionContext: ScanExecutionContext = { ...runtimeServices, candleLimit };
+    const scanResults = runtimeServices.config.marketDataSequential
+      ? await this.scanCandidatesSequentially(candidates, executionContext, logger)
+      : await this.scanCandidatesInParallel(candidates, executionContext, logger);
 
     for (const scanResult of scanResults) {
       analyzedOpportunities.push(...scanResult.opportunities);
@@ -167,7 +203,7 @@ export class MarketScanExecutor {
         continue;
       }
 
-      const filterResult = await this.dependencies.opportunityFilter.evaluate(
+      const filterResult = await runtimeServices.opportunityFilter.evaluate(
         opportunity,
         options.opportunityMinScore,
       );
@@ -200,13 +236,14 @@ export class MarketScanExecutor {
         continue;
       }
 
+      signal.strategyVersion = runtimeServices.config.strategyVersion;
       opportunitySignals.push(signal);
 
-      const willNotify = this.dependencies.notificationService.shouldNotifyOpportunity(
+      const willNotify = runtimeServices.notificationService.shouldNotifyOpportunity(
         opportunity,
         options.telegramNotificationMinScore,
       );
-      this.logNotificationDecisionDebug(opportunity, willNotify, logger, options);
+      this.logNotificationDecisionDebug(opportunity, willNotify, logger, options, runtimeServices);
 
       if (!willNotify) {
         await this.dependencies.opportunityRepository.save(opportunity);
@@ -223,9 +260,14 @@ export class MarketScanExecutor {
       await this.dependencies.signalRepository.save(signal);
 
       if (options.notify) {
-        await this.persistForwardSignal(signal, opportunity, logger, true);
-        const signalContext = await this.buildSignalContext(signal, opportunity, logger);
-        await this.dependencies.notificationService.sendSignal(
+        await this.persistForwardSignal(signal, opportunity, logger, runtimeServices.config, true);
+        const signalContext = await this.buildSignalContext(
+          signal,
+          opportunity,
+          logger,
+          runtimeServices.signalContextService,
+        );
+        await runtimeServices.notificationService.sendSignal(
           signal,
           opportunity,
           options.capital,
@@ -240,7 +282,7 @@ export class MarketScanExecutor {
     logger.log('Escaneo de mercado finalizado');
 
     return {
-      scannedTickers: tickers,
+      scannedTickers,
       scanned,
       opportunities: validOpportunities,
       opportunitySignals,
@@ -250,23 +292,124 @@ export class MarketScanExecutor {
     };
   }
 
+  private async resolveRuntimeServices(logger: MarketScanLogger): Promise<MarketScanRuntimeServices> {
+    const configSnapshot = this.dependencies.engineConfigService
+      ? await this.dependencies.engineConfigService.loadSnapshot(logger)
+      : { source: 'env-fallback' as const, values: this.buildFallbackRuntimeConfig() };
+    const config = configSnapshot.values;
+
+    return {
+      config,
+      opportunityService: this.dependencies.opportunityServiceFactory?.(config) ?? this.dependencies.opportunityService,
+      opportunityFilter: this.dependencies.opportunityFilterFactory?.(config) ?? this.dependencies.opportunityFilter,
+      notificationService: this.dependencies.notificationServiceFactory?.(config) ?? this.dependencies.notificationService,
+      signalContextService: this.dependencies.signalContextServiceFactory?.(config) ?? this.dependencies.signalContextService,
+      rateLimiterService:
+        this.dependencies.rateLimiterServiceFactory?.(config.marketDataRequestDelayMs) ??
+        this.dependencies.rateLimiterService,
+    };
+  }
+
+  private buildFallbackRuntimeConfig(): EngineRuntimeConfig {
+    return {
+      strategyVersion: this.dependencies.strategyVersion ?? 'v1',
+      marketScanCandleLimit: 80,
+      marketDataMaxAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
+      marketDataRequestDelayMs: 0,
+      marketDataMaxRetries: this.dependencies.marketDataMaxRetries,
+      marketDataRetryBaseDelayMs: this.dependencies.marketDataRetryBaseDelayMs,
+      marketDataSequential: this.dependencies.marketDataSequential,
+      tradePlan: this.dependencies.tradePlan ?? {
+        stopLossPercent: 1,
+        targetMinPercent: 2,
+        targetMaxPercent: 3,
+      },
+      signalIntelligence: {
+        backtestContextEnabled: true,
+        backtestContextMonths: 24,
+        performanceMinSampleSize: 20,
+        forwardTestContextEnabled: true,
+      },
+      scoring: {
+        maxAnalyzerScore: 25,
+        opportunityMinScore: this.dependencies.opportunityFilter.getMinimumScore(),
+        telegramNotificationMinScore: this.dependencies.notificationService.getMinimumScore(),
+        duplicateWindowMinutes: 60,
+        emaFastPeriod: 20,
+        emaSlowPeriod: 50,
+        volumeLookbackPeriod: 20,
+        volumeStrongRatio: 1.5,
+        volumeModerateRatio: 1.3,
+        volumeWeakRatio: 1.1,
+        rsiPeriod: 14,
+        rsiIdealMin: 55,
+        rsiIdealMax: 70,
+        rsiNeutralMin: 45,
+        rsiNeutralMax: 55,
+        rsiExtendedMax: 80,
+        structureLookbackPeriod: 20,
+      },
+    };
+  }
+
+  private async resolveScanCandidates(
+    options: MarketScanOptions,
+    config: EngineRuntimeConfig,
+    logger: MarketScanLogger,
+  ): Promise<MarketScanCandidate[]> {
+    if (this.dependencies.marketUniverseService) {
+      const universeSnapshot = await this.dependencies.marketUniverseService.loadSnapshot(logger);
+      return this.dependencies.marketUniverseService.buildScanCandidates(
+        universeSnapshot,
+        {
+          tickers: options.tickers,
+          timeframe: options.timeframe,
+          timeframes: options.timeframes,
+          fallbackTimeframes: this.resolveFallbackTimeframes(options),
+        },
+        logger,
+      );
+    }
+
+    const tickers = this.resolveTickers(options.tickers);
+    const timeframes = this.resolveTimeframes(options);
+
+    void config;
+
+    return tickers.flatMap((ticker) =>
+      timeframes.map((timeframe) => ({
+        symbol: ticker,
+        providerSymbol: ticker,
+        timeframe,
+        metadata: {
+          symbol: ticker,
+          providerSymbol: ticker,
+          displayName: ticker,
+          assetType: ticker.endsWith('-USD') ? 'CRYPTO' : 'STOCK',
+          market: ticker.endsWith('-USD') ? 'Crypto' : 'US',
+          timezone: ticker.endsWith('-USD') ? 'UTC' : 'America/New_York',
+          sessionType: ticker.endsWith('-USD') ? 'TWENTY_FOUR_SEVEN' : 'US_REGULAR',
+          supportsIntraday: true,
+          isActive: true,
+          timeframes,
+        },
+        source: 'env-fallback' as const,
+      })),
+    );
+  }
 
   private async persistForwardSignal(
     signal: Signal,
     opportunity: Opportunity,
     logger: MarketScanLogger,
+    config: EngineRuntimeConfig,
     telegramSent: boolean,
   ): Promise<void> {
-    if (!this.dependencies.forwardSignalRepository || !this.dependencies.tradePlan) {
+    if (!this.dependencies.forwardSignalRepository) {
       return;
     }
 
-    const snapshot = this.buildForwardSignalSnapshot(
-      signal,
-      opportunity,
-      this.dependencies.tradePlan,
-      telegramSent,
-    );
+    const snapshot = this.buildForwardSignalSnapshot(signal, opportunity, config, telegramSent);
 
     if (!snapshot) {
       return;
@@ -286,10 +429,10 @@ export class MarketScanExecutor {
   private buildForwardSignalSnapshot(
     signal: Signal,
     opportunity: Opportunity,
-    tradePlanConfig: TradePlanConfig,
+    config: EngineRuntimeConfig,
     telegramSent: boolean,
   ): ForwardSignalSnapshot | undefined {
-    const tradePlan = calculateTradePlan(signal, tradePlanConfig);
+    const tradePlan = calculateTradePlan(signal, config.tradePlan);
 
     if (!tradePlan) {
       return undefined;
@@ -314,21 +457,22 @@ export class MarketScanExecutor {
       tp2Percent: tradePlan.targets.max.percent,
       tp2Price: tradePlan.targets.max.price,
       telegramSent,
+      strategyVersion: config.strategyVersion,
     };
   }
-
 
   private async buildSignalContext(
     signal: Signal,
     opportunity: Opportunity,
     logger: MarketScanLogger,
+    signalContextService?: SignalContextService,
   ): Promise<SignalContext | undefined> {
-    if (!this.dependencies.signalContextService) {
+    if (!signalContextService) {
       return undefined;
     }
 
     try {
-      return await this.dependencies.signalContextService.buildContext(signal, opportunity);
+      return await signalContextService.buildContext(signal, opportunity);
     } catch (error) {
       logger.error(`No se pudo construir contexto de señal para ${signal.ticker}`, {
         ticker: signal.ticker,
@@ -347,30 +491,23 @@ export class MarketScanExecutor {
     return this.dependencies.watchlistService.getTickers();
   }
 
-  private async scanTickersSequentially(
-    tickers: string[],
-    options: MarketScanOptions,
+  private async scanCandidatesSequentially(
+    candidates: MarketScanCandidate[],
+    context: ScanExecutionContext,
     logger: MarketScanLogger,
   ): Promise<TickerScanResult[]> {
     const results: TickerScanResult[] = [];
-    const timeframes = this.resolveTimeframes(options);
-    let combinationIndex = 0;
 
-    for (const ticker of tickers) {
-      for (const timeframe of timeframes) {
-        results.push(
-          await this.scanTickerTimeframe(ticker, timeframe, options, logger, combinationIndex > 0),
-        );
-        combinationIndex += 1;
-      }
+    for (const [index, candidate] of candidates.entries()) {
+      results.push(await this.scanCandidate(candidate, context, logger, index > 0));
     }
 
     return results;
   }
 
-  private async scanTickersInParallel(
-    tickers: string[],
-    options: MarketScanOptions,
+  private async scanCandidatesInParallel(
+    candidates: MarketScanCandidate[],
+    context: ScanExecutionContext,
     logger: MarketScanLogger,
   ): Promise<TickerScanResult[]> {
     this.debugLog(
@@ -378,20 +515,14 @@ export class MarketScanExecutor {
       'MARKET_DATA_SEQUENTIAL=false; las llamadas paralelas pueden provocar 429 en planes gratuitos',
     );
 
-    const timeframes = this.resolveTimeframes(options);
-    const combinations = this.buildScanCombinations(tickers, timeframes);
-
     return Promise.all(
-      combinations.map((combination) =>
-        this.scanTickerTimeframe(combination.ticker, combination.timeframe, options, logger, false),
-      ),
+      candidates.map((candidate) => this.scanCandidate(candidate, context, logger, false)),
     );
   }
 
-  private async scanTickerTimeframe(
-    ticker: string,
-    timeframe: string,
-    options: MarketScanOptions,
+  private async scanCandidate(
+    candidate: MarketScanCandidate,
+    context: ScanExecutionContext,
     logger: MarketScanLogger,
     shouldWaitBeforeRequest: boolean,
   ): Promise<TickerScanResult> {
@@ -403,29 +534,46 @@ export class MarketScanExecutor {
     };
 
     try {
+      const sessionDecision = this.dependencies.marketSessionService?.canScan(
+        candidate.metadata,
+        candidate.timeframe,
+      );
+
+      if (sessionDecision && !sessionDecision.canScan) {
+        result.skipped.push({
+          ticker: candidate.symbol,
+          timeframe: candidate.timeframe,
+          score: 0,
+          reason: sessionDecision.reason ?? 'market-closed',
+        });
+        logger.log(`Omitiendo ${candidate.symbol} ${candidate.timeframe}: market-closed`);
+        return result;
+      }
+
       if (shouldWaitBeforeRequest) {
-        await this.dependencies.rateLimiterService.wait();
+        await context.rateLimiterService.wait();
       }
 
       const candles = await this.getCandlesWithRetry(
-        ticker,
-        timeframe,
-        options.candleLimit,
+        candidate.providerSymbol,
+        candidate.timeframe,
+        context.candleLimit,
+        context.config,
       );
-      logger.log(`Processing ${ticker} ${timeframe}`);
-      this.logCandleSummary(ticker, timeframe, candles, logger);
+      logger.log(`Processing ${candidate.symbol} ${candidate.timeframe}`);
+      this.logCandleSummary(candidate.symbol, candidate.timeframe, candles, logger);
 
       if (candles.length < MINIMUM_PROVIDER_CANDLES) {
-        throw new InsufficientCandlesError(ticker, candles.length, 'n/a', 'n/a');
+        throw new InsufficientCandlesError(candidate.symbol, candles.length, 'n/a', 'n/a');
       }
 
-      if (candles.length < options.candleLimit) {
+      if (candles.length < context.candleLimit) {
         logger.log(
-          `Omitiendo ${ticker} ${timeframe}: datos insuficientes velas=${candles.length} esperado=${options.candleLimit}`,
+          `Omitiendo ${candidate.symbol} ${candidate.timeframe}: datos insuficientes velas=${candles.length} esperado=${context.candleLimit}`,
         );
         result.skipped.push({
-          ticker,
-          timeframe,
+          ticker: candidate.symbol,
+          timeframe: candidate.timeframe,
           score: 0,
           reason: 'insufficient-data',
         });
@@ -433,35 +581,36 @@ export class MarketScanExecutor {
       }
 
       const freshness = this.calculateDataFreshness(candles);
-      this.logFreshnessDebug(ticker, freshness, logger);
+      this.logFreshnessDebug(candidate.symbol, freshness, logger, context.config);
 
       if (
-        this.isIntradayTimeframe(timeframe) &&
-        freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes
+        this.isIntradayTimeframe(candidate.timeframe) &&
+        freshness.dataAgeMinutes > context.config.marketDataMaxAgeMinutes
       ) {
         result.skipped.push({
-          ticker,
-          timeframe,
+          ticker: candidate.symbol,
+          timeframe: candidate.timeframe,
           score: 0,
           reason: 'stale-market-data',
           lastTimestamp: freshness.lastTimestamp,
           dataAgeMinutes: freshness.dataAgeMinutes,
-          maxAllowedAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
+          maxAllowedAgeMinutes: context.config.marketDataMaxAgeMinutes,
         });
         return result;
       }
 
-      const opportunity = this.dependencies.opportunityService.analyze(
-        ticker,
-        timeframe,
+      const opportunity = context.opportunityService.analyze(
+        candidate.symbol,
+        candidate.timeframe,
         candles,
       );
+      opportunity.strategyVersion = context.config.strategyVersion;
 
       result.opportunities.push(opportunity);
-      result.candlesBySignalKey.set(this.buildSignalKey(ticker, timeframe), candles);
+      result.candlesBySignalKey.set(this.buildSignalKey(candidate.symbol, candidate.timeframe), candles);
     } catch (error) {
-      const scanError = this.buildScanError(ticker, timeframe, error);
-      logger.error(`No se pudo escanear ${ticker} ${timeframe}`, scanError);
+      const scanError = this.buildScanError(candidate.symbol, candidate.timeframe, error);
+      logger.error(`No se pudo escanear ${candidate.symbol} ${candidate.timeframe}`, scanError);
       result.errors.push(scanError);
     }
 
@@ -472,6 +621,7 @@ export class MarketScanExecutor {
     ticker: string,
     timeframe: string,
     candleLimit: number,
+    config: EngineRuntimeConfig,
   ): Promise<Candle[]> {
     let attempt = 0;
 
@@ -479,14 +629,11 @@ export class MarketScanExecutor {
       try {
         return await this.dependencies.marketDataService.getCandles(ticker, timeframe, candleLimit);
       } catch (error) {
-        if (
-          !(error instanceof MarketDataRateLimitError) ||
-          attempt >= this.dependencies.marketDataMaxRetries
-        ) {
+        if (!(error instanceof MarketDataRateLimitError) || attempt >= config.marketDataMaxRetries) {
           throw error;
         }
 
-        const delayMs = this.dependencies.marketDataRetryBaseDelayMs * 2 ** attempt;
+        const delayMs = config.marketDataRetryBaseDelayMs * 2 ** attempt;
         attempt += 1;
         await this.sleep(delayMs);
       }
@@ -551,8 +698,9 @@ export class MarketScanExecutor {
       dataAgeMinutes: number;
     },
     logger: MarketScanLogger,
+    config: EngineRuntimeConfig,
   ): void {
-    const isStale = freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes;
+    const isStale = freshness.dataAgeMinutes > config.marketDataMaxAgeMinutes;
 
     this.debugLog(
       logger,
@@ -571,42 +719,51 @@ export class MarketScanExecutor {
     willNotify: boolean,
     logger: MarketScanLogger,
     options: MarketScanOptions,
+    runtimeServices: MarketScanRuntimeServices,
   ): void {
     this.debugLog(
       logger,
       [
         `decisionNotificacion ticker=${opportunity.ticker}`,
         `score=${opportunity.score}`,
-        `opportunityMinScore=${this.getOpportunityMinScore(options)}`,
-        `telegramMinScore=${this.getTelegramMinScore(options)}`,
+        `opportunityMinScore=${this.getOpportunityMinScore(options, runtimeServices)}`,
+        `telegramMinScore=${this.getTelegramMinScore(options, runtimeServices)}`,
         `willNotify=${willNotify}`,
       ].join(' '),
     );
   }
 
-
-  private getOpportunityMinScore(options: MarketScanOptions): number {
-    return options.opportunityMinScore ?? this.dependencies.opportunityFilter.getMinimumScore();
+  private getOpportunityMinScore(
+    options: MarketScanOptions,
+    runtimeServices: MarketScanRuntimeServices,
+  ): number {
+    return options.opportunityMinScore ?? runtimeServices.opportunityFilter.getMinimumScore();
   }
 
-  private getTelegramMinScore(options: MarketScanOptions): number {
-    return (
-      options.telegramNotificationMinScore ?? this.dependencies.notificationService.getMinimumScore()
-    );
+  private getTelegramMinScore(
+    options: MarketScanOptions,
+    runtimeServices: MarketScanRuntimeServices,
+  ): number {
+    return options.telegramNotificationMinScore ?? runtimeServices.notificationService.getMinimumScore();
   }
-
 
   private resolveTimeframes(options: MarketScanOptions): string[] {
     const configuredTimeframes =
       options.timeframes && options.timeframes.length > 0
         ? options.timeframes
-        : [options.timeframe ?? '15m'];
+        : [options.timeframe ?? this.dependencies.defaultTimeframes?.[0] ?? '15m'];
 
     return [...new Set(configuredTimeframes.map((timeframe) => timeframe.trim().toLowerCase()))];
   }
 
-  private buildScanCombinations(tickers: string[], timeframes: string[]): MarketScanCombination[] {
-    return tickers.flatMap((ticker) => timeframes.map((timeframe) => ({ ticker, timeframe })));
+  private resolveFallbackTimeframes(options: MarketScanOptions): string[] {
+    if (options.timeframes?.length || options.timeframe) {
+      return this.resolveTimeframes(options);
+    }
+
+    return this.dependencies.defaultTimeframes?.length
+      ? this.dependencies.defaultTimeframes
+      : this.resolveTimeframes(options);
   }
 
   private buildSignalKey(ticker: string, timeframe: string): string {

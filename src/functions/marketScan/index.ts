@@ -5,8 +5,6 @@ import { env } from '../../config/env';
 export async function marketScan(_timer: Timer, context: InvocationContext): Promise<void> {
   await marketScanExecutor.run(
     {
-      timeframes: env.marketScanTimeframes,
-      candleLimit: env.marketScanCandleLimit,
       notify: true,
     },
     context,

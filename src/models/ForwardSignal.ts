@@ -21,6 +21,7 @@ export interface ForwardSignalSnapshot {
   tp2Percent: number;
   tp2Price: number;
   telegramSent: boolean;
+  strategyVersion?: string;
 }
 
 export interface PersistedForwardSignalSnapshot extends ForwardSignalSnapshot {

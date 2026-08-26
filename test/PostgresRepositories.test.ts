@@ -45,6 +45,7 @@ const buildForwardSignal = (): ForwardSignalSnapshot => ({
   tp2Percent: 3,
   tp2Price: 185.4,
   telegramSent: true,
+  strategyVersion: 'v1',
 });
 
 describe('Postgres repositories', () => {
@@ -75,6 +76,7 @@ describe('Postgres repositories', () => {
       snapshot.tp2Percent,
       snapshot.tp2Price,
       snapshot.telegramSent,
+      snapshot.strategyVersion,
     ]);
   });
 
@@ -219,6 +221,7 @@ describe('Postgres repositories', () => {
       opportunity.momentumScore,
       opportunity.structureScore,
       JSON.stringify(opportunity.reasons),
+      'legacy',
     ]);
   });
 

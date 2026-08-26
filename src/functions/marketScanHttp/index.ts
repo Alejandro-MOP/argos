@@ -31,13 +31,14 @@ export async function marketScanHttp(
     parseTickers(request.query.get('tickers')) ??
     parseTickersFromMessage(whatsAppText) ??
     undefined;
-  const timeframes =
+  const explicitTimeframes =
     parseTimeframes(body.timeframes) ??
-    parseTimeframes(request.query.get('timeframes')) ??
-    parseTimeframes(body.timeframe ?? request.query.get('timeframe')) ??
-    env.marketScanTimeframes;
-  const timeframe = timeframes[0] ?? env.marketScanTimeframe;
-  const candleLimit = parseLimit(body.limit ?? request.query.get('limit'));
+    parseTimeframes(request.query.get('timeframes'));
+  const explicitSingleTimeframe = parseTimeframes(body.timeframe ?? request.query.get('timeframe'));
+  const timeframes = explicitTimeframes ?? explicitSingleTimeframe;
+  const timeframe = timeframes?.[0];
+  const rawLimit = body.limit ?? request.query.get('limit');
+  const candleLimit = rawLimit === undefined || rawLimit === null ? undefined : parseLimit(rawLimit);
   const notify = parseNotify(body.notify ?? request.query.get('notify'));
   const capital = parseCapital(
     body.capital ??
@@ -92,7 +93,7 @@ export async function marketScanHttp(
       mode: 'manual',
       scannedTickers: result.scannedTickers,
       scanned: result.scanned,
-      timeframes,
+      timeframes: timeframes ?? [...new Set(result.scanned.map((item) => item.timeframe))],
       capital,
       thresholds: {
         opportunityMinScore: opportunityMinScore ?? env.scoring.opportunityMinScore,

@@ -163,6 +163,46 @@ El backtest incluye:
 Esto permite ver no solo si algo funcionó en el pasado lejano, sino si sigue funcionando en condiciones
 recientes.
 
+
+## Configuración dinámica y universo de mercado
+
+El motor ya cuenta con una capa de configuración dinámica en PostgreSQL. Esto reduce la dependencia de
+variables de entorno para la operación diaria y permite ajustar parámetros sin redeploy cuando la base de
+datos está disponible.
+
+La separación es intencional:
+
+| Componente | Vive en | Motivo |
+| --- | --- | --- |
+| Secretos y bootstrap | Variables de entorno | No deben guardarse tokens ni credenciales en base de datos. |
+| Configuración funcional | PostgreSQL | Permite ajustar scoring, riesgo, retries y parámetros del motor con trazabilidad. |
+| Universo de mercado | PostgreSQL | Permite activar/desactivar símbolos y timeframes por símbolo sin tocar código. |
+
+El universo ahora incluye símbolos, tipo de activo, sector, industria, mercado, exchange, timezone,
+sesión de mercado y `provider_symbol`. Esto último desacopla el ticker lógico del engine del ticker que
+se manda al proveedor de datos.
+
+## Conciencia de horario de mercado
+
+Antes, un ticker intradía fuera de sesión podía aparecer como `stale-market-data`. Ahora el motor separa
+los casos:
+
+- `market-closed`: el mercado regular está cerrado y no conviene llamar a Yahoo.
+- `stale-market-data`: el mercado debería estar disponible, pero la última vela llegó vieja.
+
+Para acciones y ETFs estadounidenses, los timeframes intradía solo se consultan durante la sesión regular
+09:30-16:00 en `America/New_York`. Las velas `1d` y `1w` siguen permitidas fuera de sesión. Crypto se
+mantiene 24/7.
+
+## Versionado de estrategia
+
+Las señales reales y oportunidades se guardan con `strategy_version`. Esto permite comparar en el futuro
+la eficacia de señales generadas por `v1` contra señales generadas después de cambiar scoring, stop loss,
+take profits o reglas de oportunidad.
+
+El siguiente paso natural será guardar también un `config_snapshot` completo por señal para auditoría más
+fina.
+
 ## Límites actuales
 
 El proyecto todavía tiene límites importantes:
@@ -172,7 +212,7 @@ El proyecto todavía tiene límites importantes:
 - Usa datos de Yahoo Finance, que pueden tener retrasos, huecos o restricciones históricas.
 - No modela fills intravela; si una vela toca stop y target, el resultado queda `AMBIGUOUS`.
 - No hace optimización automática de parámetros.
-- No tiene persistencia real de señales en base de datos para forward testing.
+- La persistencia en PostgreSQL ya existe, pero las métricas ejecutivas de forward performance todavía están en evolución.
 - No reemplaza criterio humano ni gestión de riesgo profesional.
 
 ## Riesgos principales

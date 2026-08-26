@@ -98,6 +98,37 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
 };
 
 describe('MarketScanExecutor', () => {
+
+  it('skips market-closed candidates before calling the market data provider', async () => {
+    const logger = buildLogger();
+    const marketDataService = {
+      getCandles: jest.fn(),
+    };
+    const marketSessionService = {
+      canScan: jest.fn().mockReturnValue({ canScan: false, reason: 'market-closed' }),
+    };
+    const executor = buildExecutor({
+      marketDataService,
+      marketSessionService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['NVDA'], timeframe: '1m', candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(result.skipped).toEqual([
+      {
+        ticker: 'NVDA',
+        timeframe: '1m',
+        score: 0,
+        reason: 'market-closed',
+      },
+    ]);
+    expect(marketDataService.getCandles).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith('Omitiendo NVDA 1m: market-closed');
+  });
+
   it('marks provider responses below 60 candles as insufficient-candles errors', async () => {
     const logger = buildLogger();
     const marketDataService = {
@@ -424,6 +455,7 @@ describe('MarketScanExecutor', () => {
       tp2Percent: 3,
       tp2Price: 103,
       telegramSent: true,
+      strategyVersion: 'v1',
     });
     expect(notificationService.sendSignal).toHaveBeenCalled();
   });
@@ -635,7 +667,7 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false opportunityMinScore=50 telegramMinScore=80',
+      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false strategyVersion=v1 opportunityMinScore=50 telegramMinScore=80',
     );
   });
 

@@ -473,6 +473,121 @@ Las estrategias y analyzers no crean `Signal` directamente. El score responde �
 el setup técnico”; el `tradePlan` responde “qué pasa con mi capital si el precio cae/sube ciertos
 porcentajes”.
 
+
+## Configuración dinámica y universo de mercado
+
+El motor ya no depende únicamente de variables de entorno para decidir qué analizar ni con qué
+parámetros funcionales operar. Cuando `DATABASE_URL` está configurado y las migraciones fueron
+ejecutadas, PostgreSQL se vuelve la fuente primaria para:
+
+- configuración funcional del engine en `market_signal_engine.engine_config`;
+- catálogo de símbolos en `market_signal_engine.market_symbols`;
+- timeframes activos por símbolo en `market_signal_engine.symbol_timeframes`;
+- versión funcional de estrategia mediante `ENGINE_STRATEGY_VERSION` / `engine_config`.
+
+Las variables de entorno siguen existiendo como fallback y bootstrap. La separación queda así:
+
+| Fuente | Responsabilidad |
+| --- | --- |
+| ENV | Secretos, infraestructura, schedules y fallback local. |
+| PostgreSQL | Configuración funcional, universo de mercado, símbolos activos y timeframes por símbolo. |
+
+No se guardan secretos en PostgreSQL. `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `DATABASE_URL`,
+`AzureWebJobsStorage` y `FUNCTIONS_WORKER_RUNTIME` permanecen en variables de entorno.
+
+Al inicio de cada scan el flujo conceptual es:
+
+```text
+scan starts
+  -> load engine config snapshot
+  -> load market universe snapshot
+  -> build symbol/timeframe matrix
+  -> skip market-closed combinations
+  -> call Yahoo only when it makes sense
+  -> analyze opportunities
+```
+
+El snapshot de configuración se carga una sola vez por ejecución; no se consulta `engine_config` por
+ticker. Lo mismo aplica al universo de mercado.
+
+### `engine_config`
+
+Cada fila tiene una descripción humana para poder entenderla desde DBeaver sin abrir el código:
+
+```sql
+SELECT key, value, value_type, category, description
+FROM market_signal_engine.engine_config
+WHERE is_active = true
+ORDER BY category, key;
+```
+
+Ejemplo para cambiar el score mínimo de oportunidades:
+
+```sql
+UPDATE market_signal_engine.engine_config
+SET value = '85', updated_at = now()
+WHERE key = 'OPPORTUNITY_MIN_SCORE';
+```
+
+### Universo de mercado
+
+`market_symbols` guarda el ticker lógico del engine y `provider_symbol` guarda el símbolo que se manda
+al proveedor de datos. Por ahora Yahoo es el proveedor principal y normalmente ambos valores son iguales,
+pero el diseño ya permite desacoplarlos.
+
+Ejemplo:
+
+```sql
+SELECT symbol, provider_symbol, asset_type, sector, industry, market, exchange, session_type
+FROM market_signal_engine.market_symbols
+WHERE is_active = true
+ORDER BY symbol;
+```
+
+Para activar o desactivar un símbolo:
+
+```sql
+UPDATE market_signal_engine.market_symbols
+SET is_active = false, updated_at = now()
+WHERE symbol = 'NVDA';
+```
+
+Para activar o desactivar un timeframe específico:
+
+```sql
+UPDATE market_signal_engine.symbol_timeframes timeframe
+SET is_active = false, updated_at = now()
+FROM market_signal_engine.market_symbols symbol
+WHERE timeframe.symbol_id = symbol.id
+  AND symbol.symbol = 'KO'
+  AND timeframe.timeframe = '1m';
+```
+
+### Market hours awareness
+
+El motor separa `market-closed` de `stale-market-data`:
+
+- `STOCK`/`ETF` con `session_type=US_REGULAR` en `1m`, `5m`, `15m`, `30m` o `1h` solo consultan Yahoo
+  durante sesión regular de Estados Unidos: lunes a viernes, 09:30-16:00, `America/New_York`.
+- `STOCK`/`ETF` en `1d` o `1w` sí pueden analizarse fuera de sesión usando la última vela cerrada.
+- `CRYPTO` con `session_type=TWENTY_FOUR_SEVEN` puede analizarse 24/7; si la última vela intradía está
+  vieja, seguirá apareciendo como `stale-market-data`.
+
+Limitación actual: todavía no hay calendario bursátil completo para feriados, early close, pre-market o
+after-hours. La arquitectura queda preparada para agregar un `MarketCalendarProvider` más adelante.
+
+### Strategy version
+
+Las señales reales y oportunidades se etiquetan con `strategy_version`. Esto permite distinguir señales
+históricas generadas con reglas anteriores de señales futuras cuando cambien scoring, TP/SL u otros
+parámetros.
+
+Registros previos a esta migración quedan con `legacy` por compatibilidad. Las nuevas señales usan el
+valor activo de `ENGINE_STRATEGY_VERSION`, actualmente `v1`.
+
+Próxima evolución documentada: además de `strategy_version`, guardar un `config_version` o
+`config_snapshot` completo por señal para auditoría exacta.
+
 ## Watchlists
 
 Watchlists disponibles:
@@ -1174,6 +1289,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos cuando el proveedor responde 429.                                    |
 | `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para backoff exponencial de rate limit.                                               |
 | `MARKET_DATA_SEQUENTIAL`               | Si es `true`, escanea tickers uno por uno para reducir 429.                                      |
+| `ENGINE_STRATEGY_VERSION`               | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
 | `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                             |
 | `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.     |
 | `TRADE_STOP_LOSS_PERCENT`             | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.             |
@@ -1182,7 +1298,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `BACKTEST_CONTEXT_ENABLED`             | Activa/desactiva la sección `📊 BACKTEST` en alertas Telegram.                                   |
 | `BACKTEST_CONTEXT_MONTHS`              | Meses de historia usados para buscar setups comparables en el contexto histórico.                 |
 | `PERFORMANCE_MIN_SAMPLE_SIZE`          | Muestra mínima esperada antes de advertir `⚠️ Muestra pequeña`.                                  |
-| `FORWARD_TEST_CONTEXT_ENABLED`         | Activa/desactiva la sección `🧪 FORWARD TEST`; hoy queda pendiente hasta tener persistencia real. |
+| `FORWARD_TEST_CONTEXT_ENABLED`         | Activa/desactiva la sección `🧪 FORWARD TEST` en el mensaje enriquecido.                         |
 | `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                             |
 | `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                              |
 | `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                      |
