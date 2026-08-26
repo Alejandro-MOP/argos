@@ -13,6 +13,7 @@ import {
   parseNotify,
   parseScoreThreshold,
   parseTickers,
+  parseTimeframes,
   parseTickersFromMessage,
   parseWhatsAppText,
 } from '../../utils/parse.utils';
@@ -30,7 +31,12 @@ export async function marketScanHttp(
     parseTickers(request.query.get('tickers')) ??
     parseTickersFromMessage(whatsAppText) ??
     undefined;
-  const timeframe = body.timeframe ?? request.query.get('timeframe') ?? env.marketScanTimeframe;
+  const timeframes =
+    parseTimeframes(body.timeframes) ??
+    parseTimeframes(request.query.get('timeframes')) ??
+    parseTimeframes(body.timeframe ?? request.query.get('timeframe')) ??
+    env.marketScanTimeframes;
+  const timeframe = timeframes[0] ?? env.marketScanTimeframe;
   const candleLimit = parseLimit(body.limit ?? request.query.get('limit'));
   const notify = parseNotify(body.notify ?? request.query.get('notify'));
   const capital = parseCapital(
@@ -62,6 +68,7 @@ export async function marketScanHttp(
     {
       tickers,
       timeframe,
+      timeframes,
       candleLimit,
       notify,
       capital,
@@ -84,6 +91,8 @@ export async function marketScanHttp(
       ok: true,
       mode: 'manual',
       scannedTickers: result.scannedTickers,
+      scanned: result.scanned,
+      timeframes,
       capital,
       thresholds: {
         opportunityMinScore: opportunityMinScore ?? env.scoring.opportunityMinScore,

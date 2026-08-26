@@ -31,7 +31,8 @@ export interface MarketScanLogger {
 
 export interface MarketScanOptions {
   tickers?: string[];
-  timeframe: string;
+  timeframe?: string;
+  timeframes?: string[];
   candleLimit: number;
   notify: boolean;
   capital?: number;
@@ -47,13 +48,20 @@ export type MarketScanSkippedReason =
   | 'invalid-risk'
   | 'stale-market-data';
 
+export interface MarketScanCombination {
+  ticker: string;
+  timeframe: string;
+}
+
 export interface MarketScanResult {
   scannedTickers: string[];
+  scanned: MarketScanCombination[];
   opportunities: Opportunity[];
   opportunitySignals: Signal[];
   notifiedSignals: Signal[];
   skipped: Array<{
     ticker: string;
+    timeframe?: string;
     score: number;
     reason: MarketScanSkippedReason;
     lastTimestamp?: Date;
@@ -62,6 +70,7 @@ export interface MarketScanResult {
   }>;
   errors: Array<{
     ticker: string;
+    timeframe?: string;
     message: string;
     candlesCount?: number;
     requestedFrom?: string;
@@ -103,16 +112,20 @@ export class MarketScanExecutor {
     logger: MarketScanLogger,
   ): Promise<MarketScanResult> {
     const tickers = this.resolveTickers(options.tickers);
+    const timeframes = this.resolveTimeframes(options);
+    const scanned = this.buildScanCombinations(tickers, timeframes);
     const analyzedOpportunities: Opportunity[] = [];
-    const candlesByTicker = new Map<string, Candle[]>();
+    const candlesBySignalKey = new Map<string, Candle[]>();
     const errors: MarketScanResult['errors'] = [];
     const skipped: MarketScanResult['skipped'] = [];
 
-    logger.log(`Iniciando escaneo de mercado para ${tickers.length} tickers`);
+    logger.log(
+      `Iniciando escaneo de mercado tickers=${tickers.length} timeframes=${timeframes.length} totalCombinations=${scanned.length}`,
+    );
     this.debugLog(
       logger,
       [
-        `Debug de escaneo habilitado. temporalidad=${options.timeframe}`,
+        `Debug de escaneo habilitado. temporalidades=${timeframes.join(',')}`,
         `limiteVelas=${options.candleLimit}`,
         `notificar=${options.notify}`,
         `opportunityMinScore=${this.getOpportunityMinScore(options)}`,
@@ -129,8 +142,8 @@ export class MarketScanExecutor {
       skipped.push(...scanResult.skipped);
       errors.push(...scanResult.errors);
 
-      for (const [ticker, candles] of scanResult.candlesByTicker) {
-        candlesByTicker.set(ticker, candles);
+      for (const [signalKey, candles] of scanResult.candlesBySignalKey) {
+        candlesBySignalKey.set(signalKey, candles);
       }
     }
 
@@ -140,11 +153,14 @@ export class MarketScanExecutor {
     const notifiedSignals: Signal[] = [];
 
     for (const opportunity of rankedOpportunities) {
-      const candles = candlesByTicker.get(opportunity.ticker);
+      const candles = candlesBySignalKey.get(
+        this.buildSignalKey(opportunity.ticker, opportunity.timeframe),
+      );
 
       if (!candles) {
         skipped.push({
           ticker: opportunity.ticker,
+          timeframe: opportunity.timeframe,
           score: opportunity.score,
           reason: 'insufficient-data',
         });
@@ -163,6 +179,7 @@ export class MarketScanExecutor {
         );
         skipped.push({
           ticker: opportunity.ticker,
+          timeframe: opportunity.timeframe,
           score: opportunity.score,
           reason,
         });
@@ -176,6 +193,7 @@ export class MarketScanExecutor {
       if (!signal) {
         skipped.push({
           ticker: opportunity.ticker,
+          timeframe: opportunity.timeframe,
           score: opportunity.score,
           reason: 'invalid-risk',
         });
@@ -194,6 +212,7 @@ export class MarketScanExecutor {
         await this.dependencies.opportunityRepository.save(opportunity);
         skipped.push({
           ticker: opportunity.ticker,
+          timeframe: opportunity.timeframe,
           score: opportunity.score,
           reason: 'below-telegram-threshold',
         });
@@ -222,6 +241,7 @@ export class MarketScanExecutor {
 
     return {
       scannedTickers: tickers,
+      scanned,
       opportunities: validOpportunities,
       opportunitySignals,
       notifiedSignals,
@@ -333,9 +353,16 @@ export class MarketScanExecutor {
     logger: MarketScanLogger,
   ): Promise<TickerScanResult[]> {
     const results: TickerScanResult[] = [];
+    const timeframes = this.resolveTimeframes(options);
+    let combinationIndex = 0;
 
-    for (const [index, ticker] of tickers.entries()) {
-      results.push(await this.scanTicker(ticker, options, logger, index > 0));
+    for (const ticker of tickers) {
+      for (const timeframe of timeframes) {
+        results.push(
+          await this.scanTickerTimeframe(ticker, timeframe, options, logger, combinationIndex > 0),
+        );
+        combinationIndex += 1;
+      }
     }
 
     return results;
@@ -351,11 +378,19 @@ export class MarketScanExecutor {
       'MARKET_DATA_SEQUENTIAL=false; las llamadas paralelas pueden provocar 429 en planes gratuitos',
     );
 
-    return Promise.all(tickers.map((ticker) => this.scanTicker(ticker, options, logger, false)));
+    const timeframes = this.resolveTimeframes(options);
+    const combinations = this.buildScanCombinations(tickers, timeframes);
+
+    return Promise.all(
+      combinations.map((combination) =>
+        this.scanTickerTimeframe(combination.ticker, combination.timeframe, options, logger, false),
+      ),
+    );
   }
 
-  private async scanTicker(
+  private async scanTickerTimeframe(
     ticker: string,
+    timeframe: string,
     options: MarketScanOptions,
     logger: MarketScanLogger,
     shouldWaitBeforeRequest: boolean,
@@ -364,7 +399,7 @@ export class MarketScanExecutor {
       opportunities: [],
       skipped: [],
       errors: [],
-      candlesByTicker: new Map<string, Candle[]>(),
+      candlesBySignalKey: new Map<string, Candle[]>(),
     };
 
     try {
@@ -374,10 +409,11 @@ export class MarketScanExecutor {
 
       const candles = await this.getCandlesWithRetry(
         ticker,
-        options.timeframe,
+        timeframe,
         options.candleLimit,
       );
-      this.logCandleSummary(ticker, candles, logger);
+      logger.log(`Processing ${ticker} ${timeframe}`);
+      this.logCandleSummary(ticker, timeframe, candles, logger);
 
       if (candles.length < MINIMUM_PROVIDER_CANDLES) {
         throw new InsufficientCandlesError(ticker, candles.length, 'n/a', 'n/a');
@@ -385,10 +421,11 @@ export class MarketScanExecutor {
 
       if (candles.length < options.candleLimit) {
         logger.log(
-          `Omitiendo ${ticker}: datos insuficientes velas=${candles.length} esperado=${options.candleLimit}`,
+          `Omitiendo ${ticker} ${timeframe}: datos insuficientes velas=${candles.length} esperado=${options.candleLimit}`,
         );
         result.skipped.push({
           ticker,
+          timeframe,
           score: 0,
           reason: 'insufficient-data',
         });
@@ -399,11 +436,12 @@ export class MarketScanExecutor {
       this.logFreshnessDebug(ticker, freshness, logger);
 
       if (
-        this.isIntradayTimeframe(options.timeframe) &&
+        this.isIntradayTimeframe(timeframe) &&
         freshness.dataAgeMinutes > this.dependencies.marketDataMaxAgeMinutes
       ) {
         result.skipped.push({
           ticker,
+          timeframe,
           score: 0,
           reason: 'stale-market-data',
           lastTimestamp: freshness.lastTimestamp,
@@ -415,15 +453,15 @@ export class MarketScanExecutor {
 
       const opportunity = this.dependencies.opportunityService.analyze(
         ticker,
-        options.timeframe,
+        timeframe,
         candles,
       );
 
       result.opportunities.push(opportunity);
-      result.candlesByTicker.set(ticker, candles);
+      result.candlesBySignalKey.set(this.buildSignalKey(ticker, timeframe), candles);
     } catch (error) {
-      const scanError = this.buildScanError(ticker, error);
-      logger.error(`No se pudo escanear ${ticker}`, scanError);
+      const scanError = this.buildScanError(ticker, timeframe, error);
+      logger.error(`No se pudo escanear ${ticker} ${timeframe}`, scanError);
       result.errors.push(scanError);
     }
 
@@ -455,13 +493,19 @@ export class MarketScanExecutor {
     }
   }
 
-  private logCandleSummary(ticker: string, candles: Candle[], logger: MarketScanLogger): void {
+  private logCandleSummary(
+    ticker: string,
+    timeframe: string,
+    candles: Candle[],
+    logger: MarketScanLogger,
+  ): void {
     const firstCandle = candles.at(0);
     const lastCandle = candles.at(-1);
 
     logger.log(
       [
         `Datos de mercado ticker=${ticker}`,
+        `timeframe=${timeframe}`,
         `velas=${candles.length}`,
         `primerTimestamp=${firstCandle?.timestamp.toISOString() ?? 'n/a'}`,
         `ultimoTimestamp=${lastCandle?.timestamp.toISOString() ?? 'n/a'}`,
@@ -546,13 +590,38 @@ export class MarketScanExecutor {
   }
 
   private getTelegramMinScore(options: MarketScanOptions): number {
-    return options.telegramNotificationMinScore ?? this.dependencies.notificationService.getMinimumScore();
+    return (
+      options.telegramNotificationMinScore ?? this.dependencies.notificationService.getMinimumScore()
+    );
   }
 
-  private buildScanError(ticker: string, error: unknown): MarketScanResult['errors'][number] {
+
+  private resolveTimeframes(options: MarketScanOptions): string[] {
+    const configuredTimeframes =
+      options.timeframes && options.timeframes.length > 0
+        ? options.timeframes
+        : [options.timeframe ?? '15m'];
+
+    return [...new Set(configuredTimeframes.map((timeframe) => timeframe.trim().toLowerCase()))];
+  }
+
+  private buildScanCombinations(tickers: string[], timeframes: string[]): MarketScanCombination[] {
+    return tickers.flatMap((ticker) => timeframes.map((timeframe) => ({ ticker, timeframe })));
+  }
+
+  private buildSignalKey(ticker: string, timeframe: string): string {
+    return `${ticker}:${timeframe}`;
+  }
+
+  private buildScanError(
+    ticker: string,
+    timeframe: string,
+    error: unknown,
+  ): MarketScanResult['errors'][number] {
     if (error instanceof InsufficientCandlesError) {
       return {
         ticker: error.ticker,
+        timeframe,
         message: error.message,
         candlesCount: error.candlesCount,
         requestedFrom: error.requestedFrom,
@@ -563,6 +632,7 @@ export class MarketScanExecutor {
     if (error instanceof MarketDataRateLimitError) {
       return {
         ticker,
+        timeframe,
         message: error.message,
         status: error.status,
         statusText: error.statusText,
@@ -575,6 +645,7 @@ export class MarketScanExecutor {
     if (error instanceof MarketDataProviderError) {
       return {
         ticker,
+        timeframe,
         message: error.message,
         status: error.details.status,
         statusText: error.details.statusText,
@@ -586,6 +657,7 @@ export class MarketScanExecutor {
 
     return {
       ticker,
+      timeframe,
       message: error instanceof Error ? error.message : 'Error desconocido',
     };
   }
@@ -605,5 +677,5 @@ interface TickerScanResult {
   opportunities: Opportunity[];
   skipped: MarketScanResult['skipped'];
   errors: MarketScanResult['errors'];
-  candlesByTicker: Map<string, Candle[]>;
+  candlesBySignalKey: Map<string, Candle[]>;
 }

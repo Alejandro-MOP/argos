@@ -153,7 +153,8 @@ curl -X POST "http://localhost:7071/api/market-scan" \
 Parámetros:
 
 - `tickers`: lista opcional. Si no se manda, usa la watchlist configurada.
-- `timeframe`: opcional. Por defecto usa `MARKET_SCAN_TIMEFRAME`.
+- `timeframe`: opcional. Ejecuta un scan manual de una sola temporalidad. Por defecto usa `MARKET_SCAN_TIMEFRAMES` o fallback a `MARKET_SCAN_TIMEFRAME`.
+- `timeframes`: opcional. Lista o string CSV para ejecutar varias temporalidades en el mismo request. Si viene junto con `timeframe`, `timeframes` tiene prioridad.
 - `limit`: opcional. Por defecto usa `MARKET_SCAN_CANDLE_LIMIT`.
 - `notify`: opcional. Por defecto `true`.
 - `capital`: opcional. Monto disponible para calcular pérdida estimada y ganancia estimada por oportunidad.
@@ -184,6 +185,14 @@ Ejemplo con thresholds dinámicos solo para la corrida manual:
 curl -X POST "http://localhost:7071/api/market-scan" \
   -H "Content-Type: application/json" \
   -d '{"tickers":["NVDA","MSFT"],"timeframe":"1d","limit":80,"notify":true,"capital":1000,"opportunityMinScore":90,"telegramNotificationMinScore":90}'
+```
+
+Ejemplo multi-timeframe manual:
+
+```bash
+curl -X POST "http://localhost:7071/api/market-scan" \
+  -H "Content-Type: application/json" \
+  -d '{"tickers":["NVDA"],"timeframes":["1m","5m","15m"],"limit":80,"notify":true,"capital":1000}'
 ```
 
 Interpretación del tipo por temporalidad:
@@ -389,6 +398,57 @@ Ejemplo: con `OPPORTUNITY_MIN_SCORE=50` y `TELEGRAM_NOTIFICATION_MIN_SCORE=80`,
 una oportunidad con score `55` aparece en `opportunities`, no aparece en `notifiedSignals`
 y se reporta en `skipped` con `reason: "below-telegram-threshold"`. Una oportunidad con
 score `85` aparece en ambos y, si `notify=true`, se envía por Telegram.
+
+
+## Market scan multi-timeframe
+
+El scan vivo puede recopilar evidencia real de varias temporalidades en paralelo lógico sin mezclar
+candles ni scores entre ellas. La configuración nueva es:
+
+```text
+MARKET_SCAN_TIMEFRAMES=1m,5m,15m,1d,1w
+```
+
+Compatibilidad:
+
+- si `MARKET_SCAN_TIMEFRAMES` existe, se usa esa lista;
+- si no existe, se usa `MARKET_SCAN_TIMEFRAME` como antes;
+- `MARKET_SCAN_TIMEFRAME` no se elimina para no romper configuraciones existentes.
+
+Cada combinación `ticker + timeframe` se evalúa de forma independiente:
+
+```text
+NVDA 1m
+NVDA 5m
+NVDA 15m
+NVDA 1d
+NVDA 1w
+```
+
+La deduplicación y persistencia siguen separadas por `ticker + timeframe`, por lo que `NVDA 1m` y
+`NVDA 15m` pueden producir oportunidades/señales distintas. El response HTTP conserva
+`scannedTickers` y agrega `scanned`:
+
+```json
+{
+  "scannedTickers": ["NVDA"],
+  "scanned": [
+    { "ticker": "NVDA", "timeframe": "1m" },
+    { "ticker": "NVDA", "timeframe": "15m" }
+  ],
+  "timeframes": ["1m", "15m"]
+}
+```
+
+Para proteger Yahoo Finance, el modo recomendado sigue siendo:
+
+```text
+MARKET_DATA_SEQUENTIAL=true
+```
+
+Con ese modo, el motor recorre la matriz `ticker × timeframe` de forma secuencial y aplica el delay de
+`MARKET_DATA_REQUEST_DELAY_MS` entre combinaciones. Con 20 tickers y 5 timeframes, el scan puede hacer
+hasta 100 requests de mercado antes de retries.
 
 ## RiskService
 
@@ -1071,6 +1131,7 @@ MARKET_SCAN_SCHEDULE=0 */15 14-21 * * 1-5
 MARKET_SCAN_WATCHLIST=custom
 MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
 MARKET_SCAN_TIMEFRAME=15m
+MARKET_SCAN_TIMEFRAMES=1m,5m,15m,1d,1w
 MARKET_SCAN_CANDLE_LIMIT=80
 MARKET_DATA_MAX_AGE_MINUTES=30
 MARKET_DATA_REQUEST_DELAY_MS=13000
@@ -1101,6 +1162,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |
 | `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                        |
 | `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                             |
+| `MARKET_SCAN_TIMEFRAMES`               | Lista CSV de temporalidades para el scan vivo; si no existe, se usa `MARKET_SCAN_TIMEFRAME`.     |
 | `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.             |
 | `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                            |
 | `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                    |

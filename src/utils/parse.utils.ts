@@ -4,6 +4,7 @@ import { env } from '../config/env';
 interface MarketScanHttpBody {
   tickers?: string[] | string;
   timeframe?: string;
+  timeframes?: string[] | string;
   limit?: number | string;
   notify?: boolean | string;
   capital?: number | string;
@@ -16,6 +17,10 @@ interface MarketScanHttpBody {
   Body?: string;
   text?: string;
 }
+
+export const SUPPORTED_MARKET_SCAN_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '1d', '1w'] as const;
+
+export type MarketScanTimeframe = (typeof SUPPORTED_MARKET_SCAN_TIMEFRAMES)[number];
 
 export const parseTickers = (value: string[] | string | null | undefined): string[] | undefined => {
   if (!value) {
@@ -31,6 +36,40 @@ export const parseTickers = (value: string[] | string | null | undefined): strin
     .map((ticker) => ticker.trim().toUpperCase())
     .filter(Boolean);
 };
+
+
+export const parseTimeframes = (
+  value: string[] | string | null | undefined,
+): string[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const rawTimeframes = Array.isArray(value) ? value : value.split(',');
+  const normalized = rawTimeframes
+    .map((timeframe) => timeframe.trim().toLowerCase())
+    .filter(Boolean);
+  const uniqueTimeframes = [...new Set(normalized)];
+
+  if (uniqueTimeframes.length === 0) {
+    return undefined;
+  }
+
+  const invalidTimeframes = uniqueTimeframes.filter(
+    (timeframe) => !isSupportedMarketScanTimeframe(timeframe),
+  );
+
+  if (invalidTimeframes.length > 0) {
+    throw new Error(
+      `Unsupported market scan timeframe(s): ${invalidTimeframes.join(', ')}. Supported: ${SUPPORTED_MARKET_SCAN_TIMEFRAMES.join(', ')}`,
+    );
+  }
+
+  return uniqueTimeframes;
+};
+
+const isSupportedMarketScanTimeframe = (timeframe: string): timeframe is MarketScanTimeframe =>
+  SUPPORTED_MARKET_SCAN_TIMEFRAMES.includes(timeframe as MarketScanTimeframe);
 
 export const parseLimit = (value: number | string | null | undefined): number => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -95,6 +134,7 @@ export const parseBody = async (request: HttpRequest): Promise<MarketScanHttpBod
     return {
       tickers: params.get('tickers') ?? undefined,
       timeframe: params.get('timeframe') ?? undefined,
+      timeframes: params.get('timeframes') ?? undefined,
       limit: params.get('limit') ?? undefined,
       notify: params.get('notify') ?? undefined,
       capital: params.get('capital') ?? undefined,

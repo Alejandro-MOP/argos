@@ -115,6 +115,7 @@ describe('MarketScanExecutor', () => {
     expect(result.errors).toEqual([
       {
         ticker: 'SPY',
+        timeframe: '15m',
         message: 'insufficient-candles',
         candlesCount: 59,
         requestedFrom: 'n/a',
@@ -123,7 +124,7 @@ describe('MarketScanExecutor', () => {
     ]);
     expect(result.opportunities).toEqual([]);
     expect(logger.log).toHaveBeenCalledWith(
-      expect.stringContaining('Datos de mercado ticker=SPY velas=59'),
+      expect.stringContaining('Datos de mercado ticker=SPY timeframe=15m velas=59'),
     );
   });
 
@@ -145,7 +146,9 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(result.errors).toEqual([]);
-    expect(result.skipped).toEqual([{ ticker: 'SPY', score: 0, reason: 'insufficient-data' }]);
+    expect(result.skipped).toEqual([
+      { ticker: 'SPY', timeframe: '15m', score: 0, reason: 'insufficient-data' },
+    ]);
     expect(opportunityService.analyze).not.toHaveBeenCalled();
   });
 
@@ -178,8 +181,8 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(result.skipped).toEqual([
-      { ticker: 'SPY', score: 70, reason: 'below-threshold' },
-      { ticker: 'QQQ', score: 90, reason: 'duplicate-window' },
+      { ticker: 'SPY', timeframe: '15m', score: 70, reason: 'below-threshold' },
+      { ticker: 'QQQ', timeframe: '15m', score: 90, reason: 'duplicate-window' },
     ]);
     expect(result.opportunities).toEqual([]);
   });
@@ -203,7 +206,9 @@ describe('MarketScanExecutor', () => {
       logger,
     );
 
-    expect(result.skipped).toEqual([{ ticker: 'SPY', score: 90, reason: 'invalid-risk' }]);
+    expect(result.skipped).toEqual([
+      { ticker: 'SPY', timeframe: '15m', score: 90, reason: 'invalid-risk' },
+    ]);
     expect(result.opportunities).toEqual([expect.objectContaining({ ticker: 'SPY', score: 90 })]);
   });
 
@@ -250,6 +255,7 @@ describe('MarketScanExecutor', () => {
     );
     expect(result.skipped).toContainEqual({
       ticker: 'SPY',
+      timeframe: '15m',
       score: 55,
       reason: 'below-telegram-threshold',
     });
@@ -299,6 +305,7 @@ describe('MarketScanExecutor', () => {
     expect(result.opportunities).toEqual([]);
     expect(result.skipped).toContainEqual({
       ticker: 'SPY',
+      timeframe: '15m',
       score: 85,
       reason: 'below-threshold',
     });
@@ -341,6 +348,7 @@ describe('MarketScanExecutor', () => {
     expect(result.notifiedSignals).toEqual([]);
     expect(result.skipped).toContainEqual({
       ticker: 'SPY',
+      timeframe: '15m',
       score: 85,
       reason: 'below-telegram-threshold',
     });
@@ -563,6 +571,7 @@ describe('MarketScanExecutor', () => {
     expect(result.skipped).toEqual([
       {
         ticker: 'SPY',
+        timeframe: '15m',
         score: 0,
         reason: 'stale-market-data',
         lastTimestamp: staleLastTimestamp,
@@ -626,7 +635,7 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] Debug de escaneo habilitado. temporalidad=15m limiteVelas=80 notificar=false opportunityMinScore=50 telegramMinScore=80',
+      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false opportunityMinScore=50 telegramMinScore=80',
     );
   });
 
@@ -660,6 +669,137 @@ describe('MarketScanExecutor', () => {
     expect(calls).toEqual(['get:SPY', 'wait', 'get:QQQ', 'wait', 'get:AMD']);
     expect(rateLimiterService.wait).toHaveBeenCalledTimes(2);
   });
+
+  it('evaluates each ticker across all requested timeframes sequentially', async () => {
+    const logger = buildLogger();
+    const calls: string[] = [];
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockImplementation(async (ticker: string, timeframe: string) => {
+          calls.push(`${ticker}:${timeframe}`);
+          return buildCandles(80);
+        }),
+      },
+      opportunityService: {
+        analyze: jest.fn((ticker: string, timeframe: string) => ({
+          ...buildOpportunity(ticker, 85),
+          timeframe,
+        })),
+      },
+      marketDataSequential: true,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      {
+        tickers: ['SPY'],
+        timeframes: ['1m', '5m', '15m'],
+        candleLimit: 80,
+        notify: false,
+      },
+      logger,
+    );
+
+    expect(calls).toEqual(['SPY:1m', 'SPY:5m', 'SPY:15m']);
+    expect(result.scanned).toEqual([
+      { ticker: 'SPY', timeframe: '1m' },
+      { ticker: 'SPY', timeframe: '5m' },
+      { ticker: 'SPY', timeframe: '15m' },
+    ]);
+    expect(result.opportunities.map((opportunity) => opportunity.timeframe)).toEqual([
+      '1m',
+      '5m',
+      '15m',
+    ]);
+  });
+
+  it('continues scanning other timeframes when one timeframe fails', async () => {
+    const logger = buildLogger();
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockImplementation(async (_ticker: string, timeframe: string) => {
+          if (timeframe === '1m') {
+            throw new Error('Yahoo failed');
+          }
+
+          return buildCandles(80);
+        }),
+      },
+      opportunityService: {
+        analyze: jest.fn((ticker: string, timeframe: string) => ({
+          ...buildOpportunity(ticker, 85),
+          timeframe,
+        })),
+      },
+      marketDataSequential: true,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframes: ['1m', '5m'], candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(result.errors).toEqual([
+      expect.objectContaining({ ticker: 'SPY', timeframe: '1m', message: 'Yahoo failed' }),
+    ]);
+    expect(result.opportunities).toEqual([expect.objectContaining({ ticker: 'SPY', timeframe: '5m' })]);
+  });
+
+  it('persists opportunities and signals separately per ticker and timeframe', async () => {
+    const logger = buildLogger();
+    const opportunityRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+      findRecentByTicker: jest.fn(),
+    };
+    const signalRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn((ticker: string, timeframe: string) => ({
+          ...buildOpportunity(ticker, 85),
+          timeframe,
+        })),
+      },
+      riskService: {
+        calculateRisk: jest.fn((opportunity) => ({
+          ticker: opportunity.ticker,
+          timeframe: opportunity.timeframe,
+          entry: 100,
+          stop: 95,
+          target: 110,
+          score: opportunity.score,
+          signalType: 'LONG',
+          createdAt: new Date(),
+        })),
+      },
+      opportunityRepository,
+      signalRepository,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    await executor.run(
+      { tickers: ['SPY'], timeframes: ['1m', '15m'], candleLimit: 80, notify: false },
+      logger,
+    );
+
+    expect(opportunityRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'SPY', timeframe: '1m' }),
+    );
+    expect(opportunityRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'SPY', timeframe: '15m' }),
+    );
+    expect(signalRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'SPY', timeframe: '1m' }),
+    );
+    expect(signalRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ ticker: 'SPY', timeframe: '15m' }),
+    );
+  });
+
 
   it('retries rate limit errors with exponential backoff', async () => {
     jest.useFakeTimers();
@@ -746,6 +886,7 @@ describe('MarketScanExecutor', () => {
     expect(result.errors).toEqual([
       {
         ticker: 'SPY',
+        timeframe: '15m',
         message: 'rate-limit-exceeded',
         status: 429,
         statusText: 'Too Many Requests',
@@ -754,7 +895,7 @@ describe('MarketScanExecutor', () => {
         requestId: 'request-final',
       },
     ]);
-    expect(logger.error).toHaveBeenCalledWith('No se pudo escanear SPY', result.errors[0]);
+    expect(logger.error).toHaveBeenCalledWith('No se pudo escanear SPY 15m', result.errors[0]);
 
     jest.useRealTimers();
   });

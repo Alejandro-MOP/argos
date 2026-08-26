@@ -1,4 +1,4 @@
-import { parseCapital, parseScoreThreshold } from '../src/utils/parse.utils';
+import { parseCapital, parseScoreThreshold, parseTimeframes } from '../src/utils/parse.utils';
 
 describe('parseCapital', () => {
   it('parses positive numeric capital values', () => {
@@ -29,5 +29,22 @@ describe('parseScoreThreshold', () => {
     expect(parseScoreThreshold('')).toBeUndefined();
     expect(parseScoreThreshold('abc')).toBeUndefined();
     expect(parseScoreThreshold('-1')).toBeUndefined();
+  });
+});
+
+
+describe('parseTimeframes', () => {
+  it('parses and deduplicates supported timeframes', () => {
+    expect(parseTimeframes('1m,5m,15m,1m')).toEqual(['1m', '5m', '15m']);
+    expect(parseTimeframes(['1D', '1w', '1d'])).toEqual(['1d', '1w']);
+  });
+
+  it('returns undefined for empty values', () => {
+    expect(parseTimeframes(undefined)).toBeUndefined();
+    expect(parseTimeframes('')).toBeUndefined();
+  });
+
+  it('rejects unsupported timeframes', () => {
+    expect(() => parseTimeframes('1m,4h')).toThrow('Unsupported market scan timeframe');
   });
 });

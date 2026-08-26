@@ -36,6 +36,45 @@ const parseRequiredPositiveNumber = (
   return parsed;
 };
 
+const SUPPORTED_MARKET_SCAN_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '1d', '1w'];
+
+export const parseMarketScanTimeframes = (values: NodeJS.ProcessEnv = process.env): string[] => {
+  const configuredTimeframes = parseTimeframeList(values.MARKET_SCAN_TIMEFRAMES);
+
+  if (configuredTimeframes.length > 0) {
+    return configuredTimeframes;
+  }
+
+  return parseTimeframeList(values.MARKET_SCAN_TIMEFRAME ?? '15m');
+};
+
+const parseTimeframeList = (value: string | undefined): string[] => {
+  if (!value) {
+    return [];
+  }
+
+  const timeframes = [
+    ...new Set(
+      value
+        .split(',')
+        .map((timeframe) => timeframe.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+
+  const invalidTimeframes = timeframes.filter(
+    (timeframe) => !SUPPORTED_MARKET_SCAN_TIMEFRAMES.includes(timeframe),
+  );
+
+  if (invalidTimeframes.length > 0) {
+    throw new Error(
+      `Unsupported MARKET_SCAN_TIMEFRAMES value(s): ${invalidTimeframes.join(', ')}. Supported: ${SUPPORTED_MARKET_SCAN_TIMEFRAMES.join(', ')}`,
+    );
+  }
+
+  return timeframes;
+};
+
 export const parseTradePlanConfig = (values: NodeJS.ProcessEnv = process.env): TradePlanConfig => {
   const stopLossPercent = parseRequiredPositiveNumber(
     values.TRADE_STOP_LOSS_PERCENT,
@@ -101,6 +140,7 @@ export const env = {
     process.env.FORWARD_SIGNAL_EVALUATION_SCHEDULE ?? '0 0 * * * *',
   marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
+  marketScanTimeframes: parseMarketScanTimeframes(),
   marketScanCandleLimit: parseInteger(process.env.MARKET_SCAN_CANDLE_LIMIT, 80),
   marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
   marketScanDebug: parseBoolean(process.env.MARKET_SCAN_DEBUG, false),

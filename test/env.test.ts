@@ -1,4 +1,34 @@
-import { parseTradePlanConfig } from '../src/config/env';
+import { parseMarketScanTimeframes, parseTradePlanConfig } from '../src/config/env';
+
+describe('parseMarketScanTimeframes', () => {
+  it('uses MARKET_SCAN_TIMEFRAMES when configured', () => {
+    expect(parseMarketScanTimeframes({ MARKET_SCAN_TIMEFRAMES: '1m,5m,15m,1d,1w' })).toEqual([
+      '1m',
+      '5m',
+      '15m',
+      '1d',
+      '1w',
+    ]);
+  });
+
+  it('falls back to MARKET_SCAN_TIMEFRAME when MARKET_SCAN_TIMEFRAMES is absent', () => {
+    expect(parseMarketScanTimeframes({ MARKET_SCAN_TIMEFRAME: '1d' })).toEqual(['1d']);
+  });
+
+  it('deduplicates configured timeframes', () => {
+    expect(parseMarketScanTimeframes({ MARKET_SCAN_TIMEFRAMES: '1m,15m,1m,15m' })).toEqual([
+      '1m',
+      '15m',
+    ]);
+  });
+
+  it('rejects invalid configured timeframes', () => {
+    expect(() => parseMarketScanTimeframes({ MARKET_SCAN_TIMEFRAMES: '1m,4h' })).toThrow(
+      'Unsupported MARKET_SCAN_TIMEFRAMES',
+    );
+  });
+});
+
 
 describe('parseTradePlanConfig', () => {
   it('uses default trade plan percentages', () => {
