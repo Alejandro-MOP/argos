@@ -187,6 +187,8 @@ después.**
 Lo que falta para considerar V1 completa es convertir las evaluaciones
 individuales en evidencia estadística agregada. El siguiente hito funcional sigue siendo V1.2 Evidence.
 
+La validación empírica histórica se documenta de forma incremental en `EXPERIMENT_LOG.md`, separado del roadmap para no mezclar backlog técnico con observaciones e hipótesis experimentales.
+
 ## 7. V1.2 --- Evidence 🔥
 
 ### Objetivo

@@ -412,6 +412,8 @@ Evidence es el dataset de investigación del motor. A diferencia de `opportuniti
 representa necesariamente algo que quieras operar; representa algo que el engine observó antes de
 conocer el futuro y que vale la pena medir.
 
+La interpretación histórica de estos cortes vive en [`EXPERIMENT_LOG.md`](./EXPERIMENT_LOG.md). Cuando una tarea futura produzca nueva evidencia experimental, cambie métricas relevantes o genere un nuevo corte de Forward Performance, revisar si corresponde agregar una nueva entrada fechada a esa bitácora. No modificar entradas históricas para hacerlas coincidir con resultados nuevos.
+
 Flujo conceptual:
 
 ```text
