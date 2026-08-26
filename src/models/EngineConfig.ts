@@ -34,6 +34,7 @@ export interface EngineRuntimeConfig {
     maxAnalyzerScore: number;
     opportunityMinScore: number;
     telegramNotificationMinScore: number;
+    evidenceMinScore: number;
     duplicateWindowMinutes: number;
     emaFastPeriod: number;
     emaSlowPeriod: number;

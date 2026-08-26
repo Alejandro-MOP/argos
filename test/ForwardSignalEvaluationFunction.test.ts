@@ -1,7 +1,9 @@
 const execute = jest.fn().mockResolvedValue({ ok: true });
+const executeEvidence = jest.fn().mockResolvedValue({ ok: true });
 
 jest.mock('../src/config/container', () => ({
   forwardSignalEvaluator: { execute },
+  evidenceSignalEvaluator: { execute: executeEvidence },
 }));
 
 jest.mock('../src/config/env', () => ({
@@ -16,5 +18,6 @@ describe('forwardSignalEvaluation timer function', () => {
     await forwardSignalEvaluation({} as never, context as never);
 
     expect(execute).toHaveBeenCalledWith({}, context);
+    expect(executeEvidence).toHaveBeenCalledWith({}, context);
   });
 });

@@ -4,7 +4,7 @@ import {
   type HttpResponseInit,
   type InvocationContext,
 } from '@azure/functions';
-import { forwardSignalEvaluator } from '../../config/container';
+import { evidenceSignalEvaluator, forwardSignalEvaluator } from '../../config/container';
 import { parseBody } from '../../utils/parse.utils';
 
 interface ForwardEvaluateHttpBody {
@@ -33,18 +33,32 @@ export async function forwardEvaluateHttp(
   const ticker = body.ticker ?? request.query.get('ticker') ?? undefined;
   const limit = parseLimit(body.limit ?? request.query.get('limit'));
 
-  const result = await forwardSignalEvaluator.execute(
-    {
-      signalId,
-      ticker,
-      limit,
-    },
-    context,
-  );
+  const [forward, evidence] = await Promise.all([
+    forwardSignalEvaluator.execute(
+      {
+        signalId,
+        ticker,
+        limit,
+      },
+      context,
+    ),
+    evidenceSignalEvaluator.execute(
+      {
+        evidenceSignalId: signalId,
+        ticker,
+        limit,
+      },
+      context,
+    ),
+  ]);
 
   return {
     status: 200,
-    jsonBody: result,
+    jsonBody: {
+      ok: forward.ok && evidence.ok,
+      forward,
+      evidence,
+    },
   };
 }
 

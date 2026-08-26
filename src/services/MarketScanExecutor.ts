@@ -1,5 +1,6 @@
 import type { Candle } from '../models/Candle';
 import type { EngineRuntimeConfig } from '../models/EngineConfig';
+import type { EvidenceSignalSnapshot } from '../models/EvidenceSignal';
 import type { ForwardSignalSnapshot } from '../models/ForwardSignal';
 import type { MarketScanCandidate } from '../models/MarketSymbol';
 import type { Opportunity } from '../models/Opportunity';
@@ -10,6 +11,7 @@ import {
   MarketDataProviderError,
   MarketDataRateLimitError,
 } from '../errors/MarketDataErrors';
+import type { EvidenceSignalRepository } from '../ports/EvidenceSignalRepository';
 import type { ForwardSignalRepository } from '../ports/ForwardSignalRepository';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { SignalRepository } from '../ports/SignalRepository';
@@ -112,6 +114,7 @@ export interface MarketScanExecutorDependencies {
   opportunityRepository: OpportunityRepository;
   signalRepository: SignalRepository;
   forwardSignalRepository?: ForwardSignalRepository;
+  evidenceSignalRepository?: EvidenceSignalRepository;
   notificationService: NotificationService;
   signalContextService?: SignalContextService;
   engineConfigService?: EngineConfigService;
@@ -163,6 +166,7 @@ export class MarketScanExecutor {
     const scannedTickers = [...new Set(candidates.map((candidate) => candidate.symbol))];
     const analyzedOpportunities: Opportunity[] = [];
     const candlesBySignalKey = new Map<string, Candle[]>();
+    const candidatesBySignalKey = new Map<string, MarketScanCandidate>();
     const errors: MarketScanResult['errors'] = [];
     const skipped: MarketScanResult['skipped'] = [];
     const metrics = this.createInitialMetrics(candidates.length);
@@ -181,6 +185,7 @@ export class MarketScanExecutor {
         `marketDataBatchDelayMs=${runtimeServices.config.marketDataBatchDelayMs}`,
         `opportunityMinScore=${this.getOpportunityMinScore(options, runtimeServices)}`,
         `telegramMinScore=${this.getTelegramMinScore(options, runtimeServices)}`,
+        `evidenceMinScore=${runtimeServices.config.scoring.evidenceMinScore}`,
       ].join(' '),
     );
 
@@ -204,6 +209,10 @@ export class MarketScanExecutor {
 
       for (const [signalKey, candles] of scanResult.candlesBySignalKey) {
         candlesBySignalKey.set(signalKey, candles);
+      }
+
+      for (const [signalKey, candidate] of scanResult.candidatesBySignalKey) {
+        candidatesBySignalKey.set(signalKey, candidate);
       }
     }
 
@@ -231,6 +240,25 @@ export class MarketScanExecutor {
         opportunity,
         options.opportunityMinScore,
       );
+      const shouldCaptureEvidence = opportunity.score >= runtimeServices.config.scoring.evidenceMinScore;
+      const signal = filterResult.shouldNotify || shouldCaptureEvidence
+        ? this.dependencies.riskService.calculateRisk(opportunity, candles)
+        : undefined;
+
+      if (signal) {
+        signal.strategyVersion = runtimeServices.config.strategyVersion;
+      }
+
+      if (signal && shouldCaptureEvidence) {
+        await this.persistEvidenceSignal(
+          opportunity,
+          signal,
+          candidatesBySignalKey.get(this.buildSignalKey(opportunity.ticker, opportunity.timeframe)),
+          runtimeServices.config,
+          filterResult.shouldNotify,
+          logger,
+        );
+      }
 
       if (!filterResult.shouldNotify) {
         const reason = filterResult.reason ?? 'below-threshold';
@@ -248,8 +276,6 @@ export class MarketScanExecutor {
 
       validOpportunities.push(opportunity);
 
-      const signal = this.dependencies.riskService.calculateRisk(opportunity, candles);
-
       if (!signal) {
         skipped.push({
           ticker: opportunity.ticker,
@@ -260,7 +286,6 @@ export class MarketScanExecutor {
         continue;
       }
 
-      signal.strategyVersion = runtimeServices.config.strategyVersion;
       opportunitySignals.push(signal);
 
       const willNotify = runtimeServices.notificationService.shouldNotifyOpportunity(
@@ -387,6 +412,7 @@ export class MarketScanExecutor {
         rsiNeutralMax: 55,
         rsiExtendedMax: 80,
         structureLookbackPeriod: 20,
+        evidenceMinScore: 80,
       },
     };
   }
@@ -468,6 +494,92 @@ export class MarketScanExecutor {
     }
 
     return { allowed, skipped };
+  }
+
+  private async persistEvidenceSignal(
+    opportunity: Opportunity,
+    signal: Signal,
+    candidate: MarketScanCandidate | undefined,
+    config: EngineRuntimeConfig,
+    isOperationalOpportunity: boolean,
+    logger: MarketScanLogger,
+  ): Promise<void> {
+    if (!this.dependencies.evidenceSignalRepository) {
+      return;
+    }
+
+    const snapshot = this.buildEvidenceSignalSnapshot(
+      opportunity,
+      signal,
+      candidate,
+      config,
+      isOperationalOpportunity,
+    );
+
+    if (!snapshot) {
+      return;
+    }
+
+    try {
+      const captured = await this.dependencies.evidenceSignalRepository.saveIfNotDuplicate(
+        snapshot,
+        config.scoring.duplicateWindowMinutes,
+      );
+
+      if (captured) {
+        logger.log(
+          `Evidence captured ticker=${snapshot.ticker} timeframe=${snapshot.timeframe} score=${snapshot.score} operational=${snapshot.isOperationalOpportunity}`,
+        );
+      }
+    } catch (error) {
+      logger.error(`No se pudo persistir evidence signal para ${signal.ticker}`, {
+        ticker: signal.ticker,
+        timeframe: signal.timeframe,
+        message: error instanceof Error ? error.message : 'evidence-signal-persistence-failed',
+      });
+    }
+  }
+
+  private buildEvidenceSignalSnapshot(
+    opportunity: Opportunity,
+    signal: Signal,
+    candidate: MarketScanCandidate | undefined,
+    config: EngineRuntimeConfig,
+    isOperationalOpportunity: boolean,
+  ): EvidenceSignalSnapshot | undefined {
+    const tradePlan = calculateTradePlan(signal, config.tradePlan);
+
+    if (!tradePlan) {
+      return undefined;
+    }
+
+    return {
+      ticker: signal.ticker,
+      providerSymbol: candidate?.providerSymbol ?? signal.ticker,
+      timeframe: signal.timeframe,
+      detectedAt: opportunity.detectedAt,
+      signalType: signal.signalType,
+      score: opportunity.score,
+      trendScore: opportunity.trendScore,
+      volumeScore: opportunity.volumeScore,
+      momentumScore: opportunity.momentumScore,
+      structureScore: opportunity.structureScore,
+      reasons: opportunity.reasons,
+      entry: tradePlan.entry,
+      technicalStopPrice: tradePlan.technicalStop.price,
+      financialStopPercent: tradePlan.financialStop.percent,
+      financialStopPrice: tradePlan.financialStop.price,
+      tp1Percent: tradePlan.targets.min.percent,
+      tp1Price: tradePlan.targets.min.price,
+      tp2Percent: tradePlan.targets.max.percent,
+      tp2Price: tradePlan.targets.max.price,
+      strategyVersion: config.strategyVersion,
+      assetType: candidate?.metadata.assetType,
+      sector: candidate?.metadata.sector,
+      industry: candidate?.metadata.industry,
+      market: candidate?.metadata.market,
+      isOperationalOpportunity,
+    };
   }
 
   private async persistForwardSignal(
@@ -574,6 +686,7 @@ export class MarketScanExecutor {
       skipped: [],
       errors: [],
       candlesBySignalKey: new Map<string, Candle[]>(),
+      candidatesBySignalKey: new Map<string, MarketScanCandidate>(),
     };
 
     try {
@@ -634,6 +747,7 @@ export class MarketScanExecutor {
 
       result.opportunities.push(opportunity);
       result.candlesBySignalKey.set(this.buildSignalKey(candidate.symbol, candidate.timeframe), candles);
+      result.candidatesBySignalKey.set(this.buildSignalKey(candidate.symbol, candidate.timeframe), candidate);
     } catch (error) {
       metrics.failedRequests += 1;
       const scanError = this.buildScanError(candidate.symbol, candidate.timeframe, error);
@@ -977,4 +1091,5 @@ interface TickerScanResult {
   skipped: MarketScanResult['skipped'];
   errors: MarketScanResult['errors'];
   candlesBySignalKey: Map<string, Candle[]>;
+  candidatesBySignalKey: Map<string, MarketScanCandidate>;
 }

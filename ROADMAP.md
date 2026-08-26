@@ -3,8 +3,8 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio
 > relevante.
 >
-> **Estado actual:** `v1.1.1 — Market Data Throughput` **Próximo hito:**
-> `v1.2 — Evidence`
+> **Estado actual:** `v0.9 — Pre-V1 / Evidence Build` **Próximo hito:**
+> `v1.0.0 — Detection & Evidence`
 
 ## 1. Objetivo
 
@@ -27,36 +27,36 @@ configuración.
   Versión                 Objetivo                Estado
   ----------------------- ----------------------- -----------------------
   V0 --- Core             Núcleo cuantitativo     ✅ Completado
-                          desacoplado             
+                          desacoplado
 
   V1 --- Signal Engine    Detectar, persistir,    ✅ Funcional
-                          notificar y evaluar señales                 
+                          notificar y evaluar señales
 
   V1.1 --- Dynamic        Configuración, universo ✅ Completado
-  Configuration           y sesiones desde PostgreSQL              
+  Configuration           y sesiones desde PostgreSQL
 
   V1.1.1 --- Market       Concurrencia controlada ✅ Completado
-  Data Throughput         y retries seguros                         
+  Data Throughput         y retries seguros
 
-  **V1.2 --- Evidence**   Demostrar               🔥 Siguiente
-                          estadísticamente la     
-                          calidad de las señales  
+  **V1.2 --- Evidence**   Demostrar               ✅ Implementado
+                          estadísticamente la     pendiente de validar
+                          calidad de las señales  con muestra real
 
   V2 --- Calibration      Mejorar estrategia      📋 Backlog
-                          utilizando evidencia    
+                          utilizando evidencia
 
   V3 --- Trade Companion  Seguimiento de trades   📋 Backlog
-                          realmente tomados       
+                          realmente tomados
 
   V3.1 --- Trading        Medir decisiones y      📋 Backlog
-  Journal                 resultados reales       
+  Journal                 resultados reales
 
   V4 --- Product          Dashboard y             🌱 Futuro
-                          administración visual   
+                          administración visual
 
   V5 --- Platform         Usuarios, preferencias  💭 Futuro
-                          y posible               
-                          comercialización        
+                          y posible
+                          comercialización
   -----------------------------------------------------------------------
 
 ## 3. V0 --- Core
@@ -177,7 +177,7 @@ Outcome + MFE / MAE
 -   Deduplicación de requests por símbolo/timeframe.
 
 
-## 6. Estado actual --- v1.1.1 Market Data Throughput
+## 6. Estado actual --- v0.9 Pre-V1 / Evidence Build
 
 El motor ya puede:
 
@@ -195,23 +195,61 @@ Responder con datos:
 
 > ¿Las alertas del motor realmente identifican oportunidades útiles?
 
-### Backlog
+### Implementado en V1.2
 
--   Forward Performance agregado.
--   Score buckets: `80-84`, `85-89`, `90-94`, `95-100`.
--   Performance por timeframe.
--   Performance por ticker.
--   Performance por asset type.
--   Performance por sector.
--   Performance por industry.
--   Separación por `strategy_version`.
--   Win rate TP1 / TP2.
--   Loss / Expired / Ambiguous rate.
--   MFE promedio y mediano.
--   MAE promedio y mediano.
--   Expectancy.
--   Profit Factor cuando la información lo permita.
--   Tamaño de muestra y advertencias por muestra pequeña.
+-   `EVIDENCE_MIN_SCORE=80` como configuración funcional independiente.
+-   Dataset dedicado `evidence_signals` para capturar setups observados por
+    investigación sin convertirlos necesariamente en Opportunities operativas.
+-   Separación explícita:
+    `EVIDENCE_MIN_SCORE` != `OPPORTUNITY_MIN_SCORE` !=
+    `TELEGRAM_NOTIFICATION_MIN_SCORE`.
+-   Score `80-89` → Evidence-only, sin Opportunity ni Telegram.
+-   Score `90+` con configuración operativa actual → Evidence + Opportunity +
+    Signal/Telegram según `notify` y threshold de Telegram.
+-   Deduplicación Evidence por `ticker + timeframe + strategy_version` dentro
+    de la ventana `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`.
+-   Snapshot inmutable con score, sub-scores, reasons, entry, stop técnico,
+    stop financiero, TP1/TP2, metadata de mercado y `strategy_version`.
+-   `EvidenceSignalEvaluator` reutilizando `TradeOutcomeEvaluator`.
+-   Evaluación con estados `OPEN`, `PARTIALLY_RESOLVED`, `CLOSED`, `EXPIRED`,
+    `AMBIGUOUS` y outcomes `WIN`, `LOSS`, `EXPIRED`, `AMBIGUOUS`.
+-   MFE/MAE con la misma semántica existente.
+-   Target Ladder experimental normalizado: `0.50`, `0.75`, `1.00`, `1.25`,
+    `1.50`, `2.00`, `3.00`, `5.00`.
+-   Tabla normalizada `evidence_target_evaluations` para poder agregar nuevos
+    niveles en V2 sin migraciones destructivas.
+-   `PostgresForwardPerformanceProvider` para consultar evidencia real
+    observada por el engine, separado del Backtest.
+-   Endpoint `GET /api/forward-performance` con filtros por ticker, timeframe,
+    score, bucket, asset type, sector, industry, strategy version y fechas.
+-   Score buckets exactos: `80-84`, `85-89`, `90-94`, `95-100`.
+-   Performance por timeframe, ticker, asset type, sector, industry y
+    `strategy_version`.
+-   `sampleSize`, `smallSample`, win rate TP1/TP2, expired/ambiguous rate,
+    promedio/mediana MFE/MAE.
+-   `historicalForwardExpectancyPercent` para targets experimentales, excluyendo
+    EXPIRED/AMBIGUOUS del cálculo principal.
+-   Profit Factor experimental solo cuando hay pérdidas resueltas suficientes;
+    si no, se devuelve `null` para no inventar una métrica falsa.
+
+### Pendiente antes de tag `v1.0.0`
+
+-   Ejecutar varios ciclos reales hasta acumular muestra suficiente.
+-   Validar manualmente que `evidence_signals` y evaluaciones crezcan con datos
+    reales.
+-   Decidir si el mensaje Telegram debe consumir `PostgresForwardPerformanceProvider`.
+    En este commit se dejó intencionalmente sin cambios.
+-   Evaluar si hace falta cache compartido de velas entre ForwardSignalEvaluator
+    y EvidenceSignalEvaluator para evitar requests duplicados en evaluación.
+
+### Deuda técnica nueva
+
+-   El timer reutiliza infraestructura y ejecuta Forward + Evidence, pero todavía
+    no comparte cache de velas entre ambos evaluadores.
+-   El endpoint de performance trabaja sobre PostgreSQL; sin `DATABASE_URL`
+    responde que la métrica no está disponible.
+-   Profit Factor queda limitado a targets experimentales resueltos con pérdidas;
+    no se fuerza cuando la muestra no permite cálculo riguroso.
 
 ### Preguntas clave
 

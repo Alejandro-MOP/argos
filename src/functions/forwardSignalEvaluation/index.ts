@@ -1,5 +1,5 @@
 import { app, type InvocationContext, type Timer } from '@azure/functions';
-import { forwardSignalEvaluator } from '../../config/container';
+import { evidenceSignalEvaluator, forwardSignalEvaluator } from '../../config/container';
 import { env } from '../../config/env';
 
 export async function forwardSignalEvaluation(
@@ -7,6 +7,7 @@ export async function forwardSignalEvaluation(
   context: InvocationContext,
 ): Promise<void> {
   await forwardSignalEvaluator.execute({}, context);
+  await evidenceSignalEvaluator.execute({}, context);
 }
 
 app.timer('forwardSignalEvaluation', {

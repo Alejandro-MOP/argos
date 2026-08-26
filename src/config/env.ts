@@ -152,6 +152,7 @@ export const buildEnvRuntimeConfig = (values: NodeJS.ProcessEnv = process.env): 
     maxAnalyzerScore: parseInteger(values.SCORING_MAX_ANALYZER_SCORE, 25),
     opportunityMinScore: parseInteger(values.OPPORTUNITY_MIN_SCORE, 50),
     telegramNotificationMinScore: parseInteger(values.TELEGRAM_NOTIFICATION_MIN_SCORE, 80),
+    evidenceMinScore: parseInteger(values.EVIDENCE_MIN_SCORE, 80),
     duplicateWindowMinutes: parseInteger(values.OPPORTUNITY_DUPLICATE_WINDOW_MINUTES, 60),
     emaFastPeriod: parseInteger(values.TREND_EMA_FAST_PERIOD, 20),
     emaSlowPeriod: parseInteger(values.TREND_EMA_SLOW_PERIOD, 50),

@@ -1,16 +1,23 @@
 import { createPostgresPool, hasDatabaseUrl } from '../db/postgres';
+import type { Queryable } from '../db/postgres';
 import type { EngineConfigRepository } from '../ports/EngineConfigRepository';
+import type { EvidenceSignalEvaluationRepository } from '../ports/EvidenceSignalEvaluationRepository';
+import type { EvidenceSignalRepository } from '../ports/EvidenceSignalRepository';
 import type { ForwardSignalRepository } from '../ports/ForwardSignalRepository';
 import type { MarketSymbolRepository } from '../ports/MarketSymbolRepository';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
 import type { SignalRepository as SignalRepositoryPort } from '../ports/SignalRepository';
 import type { SignalEvaluationRepository } from '../ports/SignalEvaluationRepository';
 import { MemoryEngineConfigRepository } from '../repositories/MemoryEngineConfigRepository';
+import { MemoryEvidenceSignalEvaluationRepository } from '../repositories/MemoryEvidenceSignalEvaluationRepository';
+import { MemoryEvidenceSignalRepository } from '../repositories/MemoryEvidenceSignalRepository';
 import { MemoryForwardSignalRepository } from '../repositories/MemoryForwardSignalRepository';
 import { MemoryMarketSymbolRepository } from '../repositories/MemoryMarketSymbolRepository';
 import { MemorySignalEvaluationRepository } from '../repositories/MemorySignalEvaluationRepository';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
 import { PostgresEngineConfigRepository } from '../repositories/PostgresEngineConfigRepository';
+import { PostgresEvidenceSignalEvaluationRepository } from '../repositories/PostgresEvidenceSignalEvaluationRepository';
+import { PostgresEvidenceSignalRepository } from '../repositories/PostgresEvidenceSignalRepository';
 import { PostgresMarketSymbolRepository } from '../repositories/PostgresMarketSymbolRepository';
 import { PostgresOpportunityRepository } from '../repositories/PostgresOpportunityRepository';
 import { PostgresSignalEvaluationRepository } from '../repositories/PostgresSignalEvaluationRepository';
@@ -24,6 +31,9 @@ export interface RepositorySet {
   signalEvaluationRepository: SignalEvaluationRepository;
   engineConfigRepository: EngineConfigRepository;
   marketSymbolRepository: MarketSymbolRepository;
+  evidenceSignalRepository: EvidenceSignalRepository;
+  evidenceSignalEvaluationRepository: EvidenceSignalEvaluationRepository;
+  database?: Queryable;
 }
 
 export const createRepositories = (databaseUrl: string): RepositorySet => {
@@ -37,6 +47,8 @@ export const createRepositories = (databaseUrl: string): RepositorySet => {
       signalEvaluationRepository: new MemorySignalEvaluationRepository(),
       engineConfigRepository: new MemoryEngineConfigRepository(),
       marketSymbolRepository: new MemoryMarketSymbolRepository(),
+      evidenceSignalRepository: new MemoryEvidenceSignalRepository(),
+      evidenceSignalEvaluationRepository: new MemoryEvidenceSignalEvaluationRepository(),
     };
   }
 
@@ -49,5 +61,8 @@ export const createRepositories = (databaseUrl: string): RepositorySet => {
     signalEvaluationRepository: new PostgresSignalEvaluationRepository(postgresPool),
     engineConfigRepository: new PostgresEngineConfigRepository(postgresPool),
     marketSymbolRepository: new PostgresMarketSymbolRepository(postgresPool),
+    evidenceSignalRepository: new PostgresEvidenceSignalRepository(postgresPool),
+    evidenceSignalEvaluationRepository: new PostgresEvidenceSignalEvaluationRepository(postgresPool),
+    database: postgresPool,
   };
 };

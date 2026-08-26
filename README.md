@@ -308,9 +308,15 @@ independientes antes de llamar algo oportunidad:
 3. `Momentum`: que el RSI esté constructivo, evitando zonas demasiado débiles o excesivamente extendidas.
 4. `Structure`: que el precio esté rompiendo o respetando una estructura alcista reciente.
 
-El score total máximo es `100`. `OPPORTUNITY_MIN_SCORE` decide si la oportunidad entra al response
-`opportunities`; `TELEGRAM_NOTIFICATION_MIN_SCORE` decide si además pasa a `notifiedSignals` y puede
-ser enviada por Telegram.
+El score total máximo es `100`. A partir de V1.2 hay tres thresholds separados:
+
+- `EVIDENCE_MIN_SCORE`: decide si el setup se guarda para investigación forward.
+- `OPPORTUNITY_MIN_SCORE`: decide si entra al response `opportunities`.
+- `TELEGRAM_NOTIFICATION_MIN_SCORE`: decide si además pasa a `notifiedSignals` y puede enviarse por Telegram.
+
+La operación puede mantenerse estricta, por ejemplo `OPPORTUNITY_MIN_SCORE=90` y
+`TELEGRAM_NOTIFICATION_MIN_SCORE=90`, mientras Evidence guarda silenciosamente desde `80` para poder
+comparar si 80-89, 90-94 y 95-100 se comportan distinto.
 
 ## Analyzers
 
@@ -381,6 +387,7 @@ entorno ni afecta ejecuciones posteriores.
 Por defecto:
 
 ```text
+EVIDENCE_MIN_SCORE=80
 OPPORTUNITY_MIN_SCORE=50
 TELEGRAM_NOTIFICATION_MIN_SCORE=80
 TRADE_STOP_LOSS_PERCENT=1
@@ -398,6 +405,149 @@ Ejemplo: con `OPPORTUNITY_MIN_SCORE=50` y `TELEGRAM_NOTIFICATION_MIN_SCORE=80`,
 una oportunidad con score `55` aparece en `opportunities`, no aparece en `notifiedSignals`
 y se reporta en `skipped` con `reason: "below-telegram-threshold"`. Una oportunidad con
 score `85` aparece en ambos y, si `notify=true`, se envía por Telegram.
+
+## Evidence / Forward Performance V1.2
+
+Evidence es el dataset de investigación del motor. A diferencia de `opportunities` y `signals`, no
+representa necesariamente algo que quieras operar; representa algo que el engine observó antes de
+conocer el futuro y que vale la pena medir.
+
+Flujo conceptual:
+
+```text
+score < EVIDENCE_MIN_SCORE
+  -> no Evidence
+  -> no Opportunity
+  -> no Telegram
+
+EVIDENCE_MIN_SCORE <= score < OPPORTUNITY_MIN_SCORE
+  -> Evidence-only
+  -> no Opportunity
+  -> no Telegram
+
+score >= OPPORTUNITY_MIN_SCORE
+  -> Evidence
+  -> Opportunity
+  -> Signal/Telegram si también pasa TELEGRAM_NOTIFICATION_MIN_SCORE y notify=true
+```
+
+Con tu intención operativa actual:
+
+```text
+EVIDENCE_MIN_SCORE=80
+OPPORTUNITY_MIN_SCORE=90
+TELEGRAM_NOTIFICATION_MIN_SCORE=90
+```
+
+Un setup con score `85` se guarda en `market_signal_engine.evidence_signals` con
+`is_operational_opportunity=false`. Un setup con score `95` se guarda con
+`is_operational_opportunity=true` y sigue el flujo operativo normal.
+
+### Tablas Evidence
+
+- `evidence_signals`: snapshot inmutable del análisis observado: score, sub-scores, reasons, entry,
+  stop técnico, stop financiero, TP1/TP2, metadata (`asset_type`, `sector`, `industry`, `market`) y
+  `strategy_version`.
+- `evidence_signal_evaluations`: outcome TP1/TP2, estado, MFE, MAE, candles hasta cada target y
+  `evaluated_until`.
+- `evidence_target_evaluations`: target ladder experimental normalizado por porcentaje.
+
+La deduplicación de Evidence usa la misma ventana conceptual de oportunidades:
+`ticker + timeframe + strategy_version` dentro de `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`. Eso evita
+guardar el mismo setup cada vez que corre el Timer, pero permite guardar una observación nueva del mismo
+símbolo/timeframe fuera de esa ventana.
+
+### Target Ladder experimental
+
+El ladder no cambia el Trade Plan ni los TP/SL operativos. Solo mide, con el `financial_stop_price`
+actual, hasta dónde suelen avanzar las señales antes de tocar stop.
+
+Niveles iniciales:
+
+```text
++0.50%, +0.75%, +1.00%, +1.25%, +1.50%, +2.00%, +3.00%, +5.00%
+```
+
+Cada nivel se guarda en `evidence_target_evaluations` con outcome `WIN`, `LOSS`, `EXPIRED` o
+`AMBIGUOUS`.
+
+### Endpoint de performance
+
+```bash
+curl "http://localhost:7071/api/forward-performance?timeframe=15m&minimumScore=90&strategyVersion=v1"
+```
+
+Filtros soportados:
+
+- `ticker`
+- `timeframe`
+- `minimumScore`
+- `maximumScore`
+- `scoreBucket`: `80-84`, `85-89`, `90-94`, `95-100`
+- `assetType`
+- `sector`
+- `industry`
+- `strategyVersion`
+- `from`
+- `to`
+
+El response incluye `sampleSize`, `smallSample`, TP1/TP2 win rate, buckets de score, agregaciones por
+dimensión, MFE/MAE promedio y mediano, expired/ambiguous rate y ladder experimental.
+
+Expectancy experimental:
+
+```text
+historicalForwardExpectancyPercent = (Pwin × targetPercent) - (Ploss × stopLossPercent)
+```
+
+`EXPIRED` y `AMBIGUOUS` se excluyen del cálculo principal. No es promesa de rendimiento futuro; solo
+resume la muestra forward observada por el engine.
+
+Profit Factor se calcula únicamente cuando hay pérdidas resueltas suficientes para evitar una métrica
+falsa. Si no puede calcularse de forma rigurosa, se devuelve `null`.
+
+SQL útil para Evidence:
+
+```sql
+SELECT ticker, timeframe, score, is_operational_opportunity, strategy_version, detected_at
+FROM market_signal_engine.evidence_signals
+ORDER BY detected_at DESC
+LIMIT 20;
+```
+
+Buckets de score:
+
+```sql
+SELECT
+  CASE
+    WHEN score BETWEEN 80 AND 84 THEN '80-84'
+    WHEN score BETWEEN 85 AND 89 THEN '85-89'
+    WHEN score BETWEEN 90 AND 94 THEN '90-94'
+    WHEN score BETWEEN 95 AND 100 THEN '95-100'
+  END AS score_bucket,
+  count(*) AS sample_size
+FROM market_signal_engine.evidence_signals
+GROUP BY score_bucket
+ORDER BY score_bucket;
+```
+
+Comparar timeframes:
+
+```sql
+SELECT timeframe, count(*) AS sample_size
+FROM market_signal_engine.evidence_signals
+GROUP BY timeframe
+ORDER BY sample_size DESC;
+```
+
+Comparar sectores:
+
+```sql
+SELECT sector, count(*) AS sample_size
+FROM market_signal_engine.evidence_signals
+GROUP BY sector
+ORDER BY sample_size DESC;
+```
 
 
 ## Market scan multi-timeframe
@@ -1297,6 +1447,7 @@ MARKET_DATA_REQUEST_DELAY_MS=13000 # deprecated
 MARKET_DATA_SEQUENTIAL=true # deprecated
 OPPORTUNITY_MIN_SCORE=50
 TELEGRAM_NOTIFICATION_MIN_SCORE=80
+EVIDENCE_MIN_SCORE=80
 TRADE_STOP_LOSS_PERCENT=1
 TRADE_TARGET_MIN_PERCENT=2
 TRADE_TARGET_MAX_PERCENT=3
@@ -1336,6 +1487,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `ENGINE_STRATEGY_VERSION`               | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
 | `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                             |
 | `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.     |
+| `EVIDENCE_MIN_SCORE`                   | Score mínimo para capturar Evidence de investigación sin cambiar thresholds operativos.          |
 | `TRADE_STOP_LOSS_PERCENT`             | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.             |
 | `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                          |
 | `TRADE_TARGET_MAX_PERCENT`             | Segundo escenario de take profit; debe ser mayor que `TRADE_TARGET_MIN_PERCENT`.                 |

@@ -14,6 +14,16 @@ export interface TradeOutcomeEvaluationRequest {
   candles: Candle[];
 }
 
+export interface SingleTargetOutcomeEvaluationRequest {
+  direction?: TradeDirection;
+  entry: number;
+  stopLoss: number;
+  takeProfit: number;
+  signalAt: Date;
+  expiresAt: Date;
+  candles: Candle[];
+}
+
 export interface TargetOutcomeEvaluation {
   outcome: BacktestOutcome;
   exitAt?: Date;
@@ -31,6 +41,12 @@ export interface TradeOutcomeEvaluation {
 }
 
 export class TradeOutcomeEvaluator {
+  public evaluateTarget(request: SingleTargetOutcomeEvaluationRequest): TargetOutcomeEvaluation {
+    this.validateSingleTargetRequest(request);
+    const futureCandles = this.getFutureCandles(request);
+    return this.evaluateLongTarget(futureCandles, request.stopLoss, request.takeProfit);
+  }
+
   public evaluate(request: TradeOutcomeEvaluationRequest): TradeOutcomeEvaluation {
     this.validateRequest(request);
 
@@ -56,7 +72,7 @@ export class TradeOutcomeEvaluator {
     };
   }
 
-  private getFutureCandles(request: TradeOutcomeEvaluationRequest): Candle[] {
+  private getFutureCandles(request: TradeOutcomeEvaluationRequest | SingleTargetOutcomeEvaluationRequest): Candle[] {
     const signalTimestamp = request.signalAt.getTime();
     const expirationTimestamp = request.expiresAt.getTime();
 
@@ -111,6 +127,31 @@ export class TradeOutcomeEvaluator {
       candlesUntil: candles.length,
       exitIndex: candles.length > 0 ? candles.length - 1 : -1,
     };
+  }
+
+
+  private validateSingleTargetRequest(request: SingleTargetOutcomeEvaluationRequest): void {
+    const direction = request.direction ?? 'LONG';
+
+    if (direction !== 'LONG') {
+      throw new Error(`Unsupported trade direction: ${direction}`);
+    }
+
+    if (!Number.isFinite(request.entry) || request.entry <= 0) {
+      throw new Error('Trade outcome entry must be greater than 0');
+    }
+
+    if (!Number.isFinite(request.stopLoss) || request.stopLoss >= request.entry) {
+      throw new Error('Trade outcome stopLoss must be below entry for LONG trades');
+    }
+
+    if (!Number.isFinite(request.takeProfit) || request.takeProfit <= request.entry) {
+      throw new Error('Trade outcome takeProfit must be above entry for LONG trades');
+    }
+
+    if (request.expiresAt.getTime() <= request.signalAt.getTime()) {
+      throw new Error('Trade outcome expiresAt must be after signalAt');
+    }
   }
 
   private validateRequest(request: TradeOutcomeEvaluationRequest): void {

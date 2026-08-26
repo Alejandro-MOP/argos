@@ -666,7 +666,7 @@ describe('MarketScanExecutor', () => {
     );
 
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false strategyVersion=v1 marketDataMaxConcurrency=5 marketDataBatchDelayMs=0 opportunityMinScore=50 telegramMinScore=80',
+      '[debug] Debug de escaneo habilitado. temporalidades=15m limiteVelas=80 notificar=false strategyVersion=v1 marketDataMaxConcurrency=5 marketDataBatchDelayMs=0 opportunityMinScore=50 telegramMinScore=80 evidenceMinScore=80',
     );
   });
 
@@ -1087,4 +1087,170 @@ describe('MarketScanExecutor', () => {
 
     jest.useRealTimers();
   });
+
+
+  it('does not capture Evidence, Opportunity, or Telegram below EVIDENCE_MIN_SCORE', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 79);
+    const evidenceSignalRepository = {
+      saveIfNotDuplicate: jest.fn(),
+      findPending: jest.fn(),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      opportunityFilter: {
+        shouldNotify: jest.fn(),
+        evaluate: jest.fn().mockResolvedValue({ shouldNotify: false, reason: 'below-threshold' }),
+        getMinimumScore: jest.fn().mockReturnValue(90),
+      },
+      evidenceSignalRepository,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(evidenceSignalRepository.saveIfNotDuplicate).not.toHaveBeenCalled();
+    expect(result.opportunities).toEqual([]);
+    expect(result.notifiedSignals).toEqual([]);
+  });
+
+  it('captures score 85 as Evidence-only with metadata and strategy_version', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('NVDA', 85);
+    const evidenceSignalRepository = {
+      saveIfNotDuplicate: jest.fn().mockResolvedValue(true),
+      findPending: jest.fn(),
+    };
+    const executor = buildExecutor({
+      strategyVersion: 'v1',
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [] }),
+        buildScanCandidates: jest.fn().mockReturnValue([
+          {
+            symbol: 'NVDA',
+            providerSymbol: 'NVDA',
+            timeframe: '15m',
+            source: 'postgres',
+            metadata: {
+              symbol: 'NVDA',
+              providerSymbol: 'NVDA',
+              assetType: 'STOCK',
+              sector: 'Technology',
+              industry: 'Semiconductors',
+              market: 'US',
+              timezone: 'America/New_York',
+              sessionType: 'US_REGULAR',
+              supportsIntraday: true,
+              isActive: true,
+              timeframes: ['15m'],
+            },
+          },
+        ]),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      opportunityFilter: {
+        shouldNotify: jest.fn(),
+        evaluate: jest.fn().mockResolvedValue({ shouldNotify: false, reason: 'below-threshold' }),
+        getMinimumScore: jest.fn().mockReturnValue(90),
+      },
+      riskService: {
+        calculateRisk: jest.fn((candidate) => ({
+          ticker: candidate.ticker,
+          timeframe: candidate.timeframe,
+          entry: 100,
+          stop: 95,
+          target: 110,
+          score: candidate.score,
+          signalType: 'LONG',
+          createdAt: new Date(),
+        })),
+      },
+      evidenceSignalRepository,
+      notificationService: {
+        sendSignal: jest.fn(),
+        shouldNotifyOpportunity: jest.fn().mockReturnValue(false),
+        getMinimumScore: jest.fn().mockReturnValue(90),
+      },
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['NVDA'], timeframe: '15m', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(evidenceSignalRepository.saveIfNotDuplicate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticker: 'NVDA',
+        providerSymbol: 'NVDA',
+        score: 85,
+        strategyVersion: 'v1',
+        assetType: 'STOCK',
+        sector: 'Technology',
+        industry: 'Semiconductors',
+        isOperationalOpportunity: false,
+      }),
+      60,
+    );
+    expect(result.opportunities).toEqual([]);
+    expect(result.notifiedSignals).toEqual([]);
+  });
+
+  it('captures score 90 as Evidence and keeps the operational Opportunity/Telegram flow', async () => {
+    const logger = buildLogger();
+    const opportunity = buildOpportunity('SPY', 90);
+    const evidenceSignalRepository = {
+      saveIfNotDuplicate: jest.fn().mockResolvedValue(true),
+      findPending: jest.fn(),
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(90),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      opportunityFilter: {
+        shouldNotify: jest.fn(),
+        evaluate: jest.fn().mockResolvedValue({ shouldNotify: true }),
+        getMinimumScore: jest.fn().mockReturnValue(90),
+      },
+      evidenceSignalRepository,
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '15m', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(evidenceSignalRepository.saveIfNotDuplicate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticker: 'SPY',
+        score: 90,
+        isOperationalOpportunity: true,
+      }),
+      60,
+    );
+    expect(result.opportunities).toEqual([opportunity]);
+    expect(result.notifiedSignals).toHaveLength(1);
+    expect(notificationService.sendSignal).toHaveBeenCalled();
+  });
+
 });

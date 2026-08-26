@@ -10,9 +10,11 @@ import {
   BacktestHistoricalPerformanceProvider,
   EmptyForwardPerformanceProvider,
 } from '../performance/PerformanceProviders';
+import { PostgresForwardPerformanceProvider } from '../performance/PostgresForwardPerformanceProvider';
 import { createRepositories } from './repositories';
 import { buildEnvRuntimeConfig, env } from './env';
 import { EngineConfigService } from '../services/EngineConfigService';
+import { EvidenceSignalEvaluator } from '../services/EvidenceSignalEvaluator';
 import { ForwardSignalEvaluator } from '../services/ForwardSignalEvaluator';
 import { MarketDataService } from '../services/MarketDataService';
 import { MarketScanExecutor } from '../services/MarketScanExecutor';
@@ -40,6 +42,9 @@ const {
   signalEvaluationRepository,
   engineConfigRepository,
   marketSymbolRepository,
+  evidenceSignalRepository,
+  evidenceSignalEvaluationRepository,
+  database,
 } = createRepositories(env.databaseUrl);
 
 const watchlistService = new WatchlistService(env.marketScanWatchlist, env.marketScanTickers);
@@ -47,6 +52,9 @@ const fallbackRuntimeConfig = buildEnvRuntimeConfig();
 const engineConfigService = new EngineConfigService(engineConfigRepository, fallbackRuntimeConfig);
 const marketUniverseService = new MarketUniverseService(marketSymbolRepository, watchlistService);
 const marketSessionService = new MarketSessionService();
+const forwardPerformanceReportProvider = database
+  ? new PostgresForwardPerformanceProvider(database, fallbackRuntimeConfig.signalIntelligence.performanceMinSampleSize)
+  : undefined;
 
 const createOpportunityService = (config: EngineRuntimeConfig): OpportunityService =>
   new OpportunityService({
@@ -118,6 +126,12 @@ export const forwardSignalEvaluator = new ForwardSignalEvaluator({
   marketDataService,
 });
 
+export const evidenceSignalEvaluator = new EvidenceSignalEvaluator({
+  evidenceSignalRepository,
+  evidenceSignalEvaluationRepository,
+  marketDataService,
+});
+
 export const marketScanExecutor = new MarketScanExecutor({
   marketDataService,
   watchlistService,
@@ -128,6 +142,7 @@ export const marketScanExecutor = new MarketScanExecutor({
   opportunityRepository,
   signalRepository,
   forwardSignalRepository,
+  evidenceSignalRepository,
   notificationService,
   signalContextService: createSignalContextService(fallbackRuntimeConfig),
   engineConfigService,
@@ -148,3 +163,5 @@ export const marketScanExecutor = new MarketScanExecutor({
   strategyVersion: fallbackRuntimeConfig.strategyVersion,
   defaultTimeframes: env.marketScanTimeframes,
 });
+
+export { forwardPerformanceReportProvider };
