@@ -312,6 +312,7 @@ Asset Type
           ├── 1d
           └── 1w
 ```
+
 Cada combinación podría eventualmente tener parámetros calibrados a partir de Evidence.
 
 Por ejemplo:
@@ -361,3 +362,233 @@ Notas metodológicas:
 - MAE conserva signo negativo en promedios y percentiles.
 
 Esta entrada no reemplaza ni recalcula cortes históricos previos de Evidence.
+
+---
+
+## Segundo corte experimental — 27 Ago 2026
+
+### Contexto
+
+Segundo corte formal de Evidence bajo `strategy_version = v1`.
+
+El objetivo de este corte no es seleccionar todavía una estrategia,
+TP o SL definitivo, sino observar cómo evoluciona la evidencia acumulada
+y comenzar a caracterizar el comportamiento por:
+
+- asset type;
+- timeframe;
+- score bucket;
+- target experimental;
+- MFE;
+- MAE.
+
+Durante este corte ya se encuentra implementada la capa
+`Strategy Profile Research`.
+
+---
+
+### 1. Estado general de Evidence
+
+| Métrica                   | Total |
+| ------------------------- | ----: |
+| Evidence                  |   167 |
+| Score 80-84               |    46 |
+| Score 85-89               |    46 |
+| Score 90-94               |    53 |
+| Score 95-100              |    22 |
+| Operational opportunities |    74 |
+
+Distribución actual de evaluaciones:
+
+| Estado             | Total |
+| ------------------ | ----: |
+| CLOSED             |   106 |
+| OPEN               |    39 |
+| PARTIALLY_RESOLVED |     8 |
+| EXPIRED            |    10 |
+| AMBIGUOUS          |     2 |
+
+Las evaluaciones listadas suman 165 frente a 167 Evidence.
+No se asume que esto represente un error: pueden existir Evidence todavía
+sin registro de evaluación. Se conserva como observación para seguimiento.
+
+---
+
+### 2. Target Ladder global
+
+| Target | Wins | Losses | Expired | Ambiguous | Unresolved | Resolved N | Win Rate |
+| ------ | ---: | -----: | ------: | --------: | ---------: | ---------: | -------: |
+| +0.50% |   67 |     59 |       1 |        14 |         24 |        141 |   53.17% |
+| +0.75% |   59 |     66 |       2 |        10 |         28 |        137 |   47.20% |
+| +1.00% |   50 |     72 |       4 |         8 |         31 |        134 |   40.98% |
+| +1.25% |   39 |     78 |       5 |         6 |         37 |        128 |   33.33% |
+| +1.50% |   37 |     79 |       6 |         6 |         37 |        128 |   31.90% |
+| +2.00% |   29 |     86 |       9 |         2 |         39 |        126 |   25.22% |
+| +3.00% |   20 |     87 |      10 |         1 |         47 |        118 |   18.69% |
+| +5.00% |    9 |     89 |      10 |         0 |         57 |        108 |    9.18% |
+
+### Lectura preliminar
+
+El ladder continúa mostrando una reducción progresiva del `winRate`
+conforme aumenta el target.
+
+La muestra resuelta también disminuye conforme aumenta el target,
+por lo que no deben compararse porcentajes sin considerar su `Resolved N`.
+
+En particular:
+
+- +0.50% dispone de N=141 outcomes resueltos.
+- +1.00% dispone de N=134.
+- +2.00% dispone de N=126.
+- +5.00% dispone de N=108.
+
+Esto refuerza la necesidad de conservar métricas de madurez independientes
+por target.
+
+---
+
+### 3. Strategy Profile Research
+
+Todos los perfiles continúan con muestras pequeñas y deben considerarse
+exploratorios.
+
+No se utilizarán todavía para modificar scoring ni para seleccionar TP/SL.
+
+#### CRYPTO
+
+| Timeframe | Score  |   N | Median MFE | Median MAE |
+| --------- | ------ | --: | ---------: | ---------: |
+| 15m       | 80-84  |   6 |     +0.55% |     -1.48% |
+| 15m       | 85-89  |   4 |     +0.54% |     -2.97% |
+| 15m       | 90-94  |   8 |     +1.24% |     -1.08% |
+| 1m        | 80-84  | 5\* |     +1.05% |     -0.97% |
+| 1m        | 85-89  |   5 |     +0.21% |     -1.04% |
+| 1m        | 90-94  |   5 |     +1.39% |     -1.07% |
+| 1m        | 95-100 |   2 |     +1.60% |     -1.06% |
+| 5m        | 80-84  |   9 |     +0.53% |     -1.21% |
+| 5m        | 90-94  |  10 |     +1.30% |     -1.35% |
+| 5m        | 95-100 |   4 |     +1.12% |     -2.76% |
+
+\* El perfil posee 6 Evidence en el conteo general, pero 5 observaciones
+con MFE/MAE disponibles para esta consulta.
+
+#### STOCK
+
+| Timeframe | Score  |   N | Median MFE | Median MAE |
+| --------- | ------ | --: | ---------: | ---------: |
+| 15m       | 80-84  |   4 |     +1.89% |     -1.07% |
+| 15m       | 85-89  |   1 |      0.00% |     -1.33% |
+| 15m       | 90-94  |   4 |     +1.06% |     -1.25% |
+| 1d        | 80-84  |   1 |     +1.07% |     -0.41% |
+| 1d        | 85-89  |   1 |     +0.84% |     -1.08% |
+| 1d        | 90-94  | 2\* |     +0.48% |     -2.26% |
+| 1m        | 80-84  |  11 |     +0.44% |     -0.59% |
+| 1m        | 85-89  |  18 |     +0.67% |     -0.83% |
+| 1m        | 90-94  |  19 |     +0.32% |     -0.76% |
+| 1m        | 95-100 |  10 |     +0.21% |     -0.72% |
+| 5m        | 80-84  |   7 |     +0.78% |     -0.54% |
+| 5m        | 85-89  |  17 |     +0.20% |     -1.12% |
+| 5m        | 90-94  |   4 |     +1.13% |     -1.10% |
+| 5m        | 95-100 |   6 |     +0.09% |     -1.14% |
+
+\* Existen 3 Evidence en el perfil STOCK/1d/90-94, pero sólo 2 registros
+con MFE/MAE disponibles en esta consulta.
+
+---
+
+### 4. Hipótesis emergentes
+
+Las siguientes observaciones son hipótesis de investigación y NO
+conclusiones de estrategia.
+
+#### H1 — Score alto no implica todavía mejor resultado observado
+
+No existe por ahora una relación monotónica evidente entre score y MFE.
+
+Ejemplo STOCK / 1m:
+
+| Score  |   N | Median MFE |
+| ------ | --: | ---------: |
+| 80-84  |  11 |     +0.44% |
+| 85-89  |  18 |     +0.67% |
+| 90-94  |  19 |     +0.32% |
+| 95-100 |  10 |     +0.21% |
+
+Esto debe seguirse conforme crezca N.
+
+No implica todavía que el scoring sea incorrecto.
+
+#### H2 — STOCK 5m / 95-100 requiere seguimiento
+
+Actualmente:
+
+N = 6
+Median MFE = +0.09%
+Median MAE = -1.14%
+
+Es una relación preliminar desfavorable y contradictoria con la intuición
+de que un score alto debería representar una oportunidad de mayor calidad.
+
+La muestra es demasiado pequeña para modificar el algoritmo.
+
+#### H3 — CRYPTO presenta mayor amplitud
+
+Los perfiles CRYPTO muestran en varios casos MFE medianos mayores que
+los perfiles STOCK intradía.
+
+Ejemplos:
+
+CRYPTO 5m / 90-94:
+Median MFE = +1.30%
+Median MAE = -1.35%
+
+CRYPTO 15m / 90-94:
+Median MFE = +1.24%
+Median MAE = -1.08%
+
+Esto apoya mantener separados asset type y timeframe.
+
+#### H4 — Mayor MFE no significa automáticamente mejor trade
+
+Algunos perfiles con MFE atractivo presentan también MAE considerable.
+
+Por tanto, la investigación futura deberá estudiar no solamente:
+
+"¿hasta dónde llegó?"
+
+sino también:
+
+"¿qué excursión adversa ocurrió durante el camino?"
+
+---
+
+### 5. Estado de las conclusiones
+
+No existe todavía evidencia suficiente para:
+
+- modificar el scoring;
+- seleccionar un TP definitivo;
+- seleccionar un SL definitivo;
+- considerar un perfil rentable;
+- operar capital real basándose únicamente en estos resultados.
+
+Los perfiles continúan siendo experimentales.
+
+El objetivo inmediato continúa siendo aumentar N y observar si los
+patrones actuales persisten o desaparecen conforme aumenta la muestra.
+
+---
+
+### 6. Próximos pasos
+
+1. Continuar Evidence Collection bajo `strategy_version = v1`.
+2. No modificar scoring durante esta fase.
+3. Continuar Forward/Evidence Evaluation.
+4. Mantener Strategy Profile Research como capa descriptiva read-only.
+5. Implementar Broker / Transaction Cost Model como capa independiente.
+6. Posteriormente estudiar Trade Plan Research usando:
+   - Strategy Profiles;
+   - MFE/MAE;
+   - target reachability;
+   - transaction costs;
+   - risk/reward.
