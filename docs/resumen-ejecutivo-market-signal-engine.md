@@ -1,10 +1,10 @@
-# Resumen ejecutivo — market-signal-engine
+# Resumen ejecutivo — ARGOS
 
 ## Qué es
 
-`market-signal-engine` es un motor de análisis de mercado que revisa activos financieros, detecta
+ARGOS es un sistema experimental de soporte a decisiones de mercado que revisa activos financieros, detecta
 posibles oportunidades de trading y genera un plan básico de entrada, stop y objetivos. No compra,
-no vende y no se conecta a brokers; funciona como una capa de análisis y alerta.
+no vende y no se conecta a brokers; funciona como una capa de análisis, evidencia y alerta.
 
 La propuesta central es simple: convertir muchas velas de mercado en una respuesta clara:
 
@@ -16,7 +16,7 @@ Si la hay, ¿dónde sería razonable entrar, cuánto se arriesga y qué objetivo
 ## Qué problema resuelve
 
 Cuando se revisan muchos tickers manualmente, es fácil perder oportunidades o perseguir movimientos
-sin estructura. El motor ayuda a filtrar ruido usando reglas consistentes:
+sin estructura. ARGOS Engine ayuda a filtrar ruido usando reglas consistentes:
 
 - Revisa una lista de activos.
 - Evalúa tendencia, volumen, momentum y estructura.
@@ -25,7 +25,7 @@ sin estructura. El motor ayuda a filtrar ruido usando reglas consistentes:
 - Calcula un plan de operación con capital, pérdida estimada y ganancia estimada.
 - Permite probar históricamente si esas reglas habrían funcionado.
 
-## Cómo funciona el motor
+## Cómo funciona ARGOS Engine
 
 El flujo operativo es:
 
@@ -39,7 +39,7 @@ Tickers
   -> Respuesta HTTP y/o Telegram
 ```
 
-El motor analiza velas normalizadas con precio de apertura, máximo, mínimo, cierre y volumen. Con esas
+ARGOS Engine analiza velas normalizadas con precio de apertura, máximo, mínimo, cierre y volumen. Con esas
 velas calcula cuatro bloques, cada uno con máximo 25 puntos.
 
 ## Cómo calcula una oportunidad
@@ -64,7 +64,7 @@ flojas.
 
 ### 3. Momentum — fuerza del movimiento
 
-Usa RSI14 para detectar si el activo está en una zona constructiva. El motor favorece momentum positivo,
+Usa RSI14 para detectar si el activo está en una zona constructiva. ARGOS Engine favorece momentum positivo,
 pero intenta no premiar movimientos demasiado extendidos.
 
 ### 4. Structure — comportamiento del precio
@@ -87,7 +87,7 @@ intermedias sin llenar Telegram de alertas.
 
 ## Cómo interpreta entry, stop y target
 
-Cuando una oportunidad es válida, el motor crea un plan:
+Cuando una oportunidad es válida, ARGOS Engine crea un plan:
 
 - `entry`: precio de referencia para entrar, basado en el cierre de la vela señal.
 - `financialStop`: precio donde se asume una pérdida porcentual controlada, por ejemplo -1%.
@@ -95,7 +95,7 @@ Cuando una oportunidad es válida, el motor crea un plan:
 - `takeProfit1`: primer objetivo, por ejemplo +2%.
 - `takeProfit2`: segundo objetivo, por ejemplo +3%.
 
-Si se manda `capital`, el motor estima pérdida y ganancia usando ese capital completo para cada
+Si se manda `capital`, ARGOS estima pérdida y ganancia usando ese capital completo para cada
 oportunidad individual. No reparte automáticamente el capital entre todas las oportunidades.
 
 ## Temporalidad y tipo de oportunidad
@@ -166,7 +166,7 @@ recientes.
 
 ## Configuración dinámica y universo de mercado
 
-El motor ya cuenta con una capa de configuración dinámica en PostgreSQL. Esto reduce la dependencia de
+ARGOS ya cuenta con una capa de configuración dinámica en PostgreSQL. Esto reduce la dependencia de
 variables de entorno para la operación diaria y permite ajustar parámetros sin redeploy cuando la base de
 datos está disponible.
 
@@ -175,16 +175,16 @@ La separación es intencional:
 | Componente | Vive en | Motivo |
 | --- | --- | --- |
 | Secretos y bootstrap | Variables de entorno | No deben guardarse tokens ni credenciales en base de datos. |
-| Configuración funcional | PostgreSQL | Permite ajustar scoring, riesgo, retries y parámetros del motor con trazabilidad. |
+| Configuración funcional | PostgreSQL | Permite ajustar scoring, riesgo, retries y parámetros de ARGOS Engine con trazabilidad. |
 | Universo de mercado | PostgreSQL | Permite activar/desactivar símbolos y timeframes por símbolo sin tocar código. |
 
 El universo ahora incluye símbolos, tipo de activo, sector, industria, mercado, exchange, timezone,
-sesión de mercado y `provider_symbol`. Esto último desacopla el ticker lógico del engine del ticker que
+sesión de mercado y `provider_symbol`. Esto último desacopla el ticker lógico de ARGOS Engine del ticker que
 se manda al proveedor de datos.
 
 ## Conciencia de horario de mercado
 
-Antes, un ticker intradía fuera de sesión podía aparecer como `stale-market-data`. Ahora el motor separa
+Antes, un ticker intradía fuera de sesión podía aparecer como `stale-market-data`. Ahora ARGOS Engine separa
 los casos:
 
 - `market-closed`: el mercado regular está cerrado y no conviene llamar a Yahoo.
@@ -218,7 +218,7 @@ El proyecto todavía tiene límites importantes:
 ## Riesgos principales
 
 - Un buen backtest no garantiza resultados futuros.
-- El motor puede sobreajustarse si se cambian reglas solo para mejorar resultados históricos.
+- ARGOS Engine puede sobreajustarse si se cambian reglas solo para mejorar resultados históricos.
 - Las señales de temporalidades pequeñas pueden ser más sensibles a ruido, latencia y spread.
 - El cálculo de capital asume una operación individual; si se operan varias a la vez, el riesgo real
   acumulado puede ser mayor.
@@ -235,7 +235,7 @@ El proyecto todavía tiene límites importantes:
 
 ## Mensaje para presentación
 
-El motor no pretende adivinar el mercado. Su valor está en estandarizar el análisis, reducir ruido,
+ARGOS no pretende adivinar el mercado. Su valor está en estandarizar el análisis, reducir ruido,
 medir resultados históricos y crear disciplina antes de tomar una decisión. Es una herramienta de
 soporte: detecta setups con reglas claras, muestra el riesgo de forma explícita y permite validar si
 la lógica tiene sentido antes de escalarla.
@@ -248,12 +248,12 @@ conceptos:
 
 ### 1. Setup actual
 
-Muestra lo que el motor ve hoy: ticker, temporalidad, score, tendencia, volumen, momentum, estructura,
-razones técnicas y plan de operación. Esta capa responde si el setup actual cumple las reglas del motor.
+Muestra lo que ARGOS Engine ve hoy: ticker, temporalidad, score, tendencia, volumen, momentum, estructura,
+razones técnicas y plan de operación. Esta capa responde si el setup actual cumple las reglas de ARGOS Engine.
 
 ### 2. Evidencia histórica — Backtest
 
-Muestra qué ocurrió en el pasado con setups comparables usando el mismo motor. Incluye cuántos casos
+Muestra qué ocurrió en el pasado con setups comparables usando ARGOS Engine. Incluye cuántos casos
 históricos existen, resultados para TP +2% y TP +3%, MFE promedio y MAE promedio. Esta información sirve
 como evidencia, no como promesa. Un 71% histórico no significa “71% de probabilidad de ganar”.
 

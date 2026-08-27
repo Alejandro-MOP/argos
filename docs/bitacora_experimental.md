@@ -1,6 +1,6 @@
-# EXPERIMENT_LOG.md — Bitácora experimental de Market Signal Engine / ARGOS
+# Bitácora experimental de ARGOS
 
-Esta bitácora documenta la evolución empírica del motor con datos observados en ejecución real.
+Esta bitácora documenta la evolución empírica de ARGOS y ARGOS Engine con datos observados en ejecución real.
 No reemplaza a `ROADMAP.md`: el roadmap describe qué se construyó, versiones, hitos y backlog técnico;
 esta bitácora registra qué estamos observando, qué hipótesis aparecen y qué decisiones todavía no deben tomarse.
 
@@ -23,7 +23,7 @@ Reglas importantes:
 
 ## Principio anti data leakage
 
-Las Evidence Signals son snapshots inmutables de lo que el engine sabía en T0.
+Las Evidence Signals son snapshots inmutables de lo que ARGOS Engine sabía en T0.
 Los resultados futuros solo pueden utilizarse para evaluar la señal, no para reescribirla.
 
 Nunca modificar retrospectivamente estos campos con base en lo que ocurrió después:

@@ -1,8 +1,8 @@
 # Backtesting V1
 
-`BacktestEngine` ejecuta simulaciones históricas usando la misma lógica de producción del motor.
+`BacktestEngine` ejecuta simulaciones históricas usando la misma lógica de producción de ARGOS Engine.
 La intención no es crear una estrategia distinta para investigación, sino contestar una pregunta
-concreta: si el motor hubiera estado corriendo en una fecha pasada, qué señales habría generado y
+concreta: si ARGOS Engine hubiera estado corriendo en una fecha pasada, qué señales habría generado y
 qué habría pasado después.
 
 ## Flujo técnico
@@ -30,7 +30,7 @@ reutiliza piezas del flujo vivo para que el score histórico sea comparable con 
 
 ## No look-ahead bias
 
-Para cada vela histórica `i`, el engine construye una ventana cerrada:
+Para cada vela histórica `i`, ARGOS Engine construye una ventana cerrada:
 
 ```ts
 const historicalWindow = candles.slice(0, i + 1);
@@ -71,7 +71,7 @@ La candle exactamente igual a `signalAt` no se usa como candle futura. Las candl
 
 ## Evaluación de targets
 
-El engine evalúa dos targets independientes:
+ARGOS Engine evalúa dos targets independientes:
 
 ```text
 TP1 = takeProfitMinPercent
@@ -87,7 +87,7 @@ low <= stopLoss
 high >= target
 ```
 
-Con datos OHLC no sabemos si primero tocó el stop o el target dentro de esa vela, así que el motor
+Con datos OHLC no sabemos si primero tocó el stop o el target dentro de esa vela, así que ARGOS Engine
 no lo cuenta automáticamente como acierto ni como fallo. Para `AMBIGUOUS`, `exitAt` apunta al timestamp
 de la candle ambigua. Para `EXPIRED`, `exitAt` queda vacío.
 
@@ -117,12 +117,12 @@ expiran, se usan todas las candles futuras hasta `expiresAt`.
 
 ## No overlapping trades
 
-Para el mismo `ticker + timeframe`, el engine no abre una nueva operación mientras la anterior siga
+Para el mismo `ticker + timeframe`, ARGOS Engine no abre una nueva operación mientras la anterior siga
 activa. Esto evita inflar resultados contando varias señales dentro del mismo movimiento.
 
 ## Ventanas recientes
 
-Además del periodo completo, el engine calcula:
+Además del periodo completo, ARGOS Engine calcula:
 
 - `last12Months`
 - `last6Months`

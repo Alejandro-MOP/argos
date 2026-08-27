@@ -1,4 +1,4 @@
-# Market Signal Engine — Roadmap, Hitos y Versionamiento
+# ARGOS — Roadmap, Hitos y Versionamiento
 
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
@@ -9,9 +9,15 @@
 
 ---
 
+## Nota de identidad documental
+
+ARGOS fue adoptado como identidad oficial documental del sistema. ARGOS describe la plataforma completa; ARGOS Engine identifica específicamente el núcleo analítico encargado de evaluar mercado, calcular scoring y detectar setups. Este cambio es nominal/documental y no modifica `strategy_version`, endpoints, schemas, tablas ni comportamiento funcional.
+
+---
+
 ## 1. Objetivo
 
-Market Signal Engine es un radar cuantitativo de mercado que analiza
+ARGOS es un Experimental Market Decision Support System: un sistema experimental de soporte a decisiones de mercado que analiza
 automáticamente múltiples símbolos y temporalidades, filtra ruido,
 detecta oportunidades y posteriormente mide qué ocurrió con cada señal.
 
@@ -66,7 +72,7 @@ El score representa:
 | Versión                         | Objetivo                                            | Estado                                   |
 | ------------------------------- | --------------------------------------------------- | ---------------------------------------- |
 | V0 — Core                       | Núcleo cuantitativo desacoplado                     | ✅ Completado                            |
-| V1 — Signal Engine              | Detectar, persistir, notificar y evaluar señales    | ✅ Funcional                             |
+| V1 — ARGOS Engine Signals       | Detectar, persistir, notificar y evaluar señales    | ✅ Funcional                             |
 | V1.1 — Dynamic Configuration    | Configuración, universo y sesiones desde PostgreSQL | ✅ Completado                            |
 | V1.1.1 — Market Data Throughput | Concurrencia controlada y retries seguros           | ✅ Completado                            |
 | V1.2 — Evidence                 | Medir estadísticamente la calidad de los setups     | 🧪 Implementado / recolectando evidencia |
@@ -114,7 +120,7 @@ Yahoo / PostgreSQL / Telegram
 
 ---
 
-# 4. V1 — Signal Engine
+# 4. V1 — ARGOS Engine Signals
 
 ## Implementado
 
@@ -173,7 +179,7 @@ Outcome + MFE / MAE
 
 ---
 
-# 5. V1.1 — Dynamic Engine Configuration & Market Universe
+# 5. V1.1 — Dynamic ARGOS Engine Configuration & Market Universe
 
 ## Implementado
 
@@ -293,7 +299,7 @@ compatibilidad de fallback.
 
 # 6. Estado actual — v0.9 Pre-V1 / Evidence Validation
 
-El motor ya puede:
+ARGOS Engine ya puede:
 
 ```text
 Analizar
@@ -348,7 +354,7 @@ hipótesis
 hallazgos
 ```
 
-Podemos continuar desarrollando capacidades alrededor del motor siempre que
+Podemos continuar desarrollando capacidades alrededor de ARGOS Engine siempre que
 no modifiquemos silenciosamente las reglas de:
 
 ```text
@@ -363,7 +369,7 @@ strategy_version = v1
 
 Responder con datos:
 
-> ¿Las alertas y setups detectados por el motor realmente identifican oportunidades útiles?
+> ¿Las alertas y setups detectados por ARGOS Engine realmente identifican oportunidades útiles?
 
 ## Implementado
 
@@ -1426,7 +1432,7 @@ No en garantizar el resultado de una operación.
    Conservar las reglas de una `strategy_version` mientras se mide.
 
 3. **Separar detección de ejecución.**
-   El engine detecta; el humano decide.
+   ARGOS Engine detecta; el humano decide.
 
 4. **Separar calidad técnica de riesgo de portafolio.**
 
@@ -1446,7 +1452,7 @@ No en garantizar el resultado de una operación.
 
 12. **La estrategia debe validarse out-of-sample antes de aumentar confianza operativa.**
 
-13. **El motor es un asistente cuantitativo, no una garantía de rentabilidad.**
+13. **ARGOS es un asistente cuantitativo experimental, no una garantía de rentabilidad.**
 
 ---
 
@@ -1464,7 +1470,7 @@ Conceptualmente:
 hasta 305 análisis potenciales
     ↓
 ARGOS
-Market Signal Engine
+ARGOS
     ↓
 pocas oportunidades relevantes
     ↓

@@ -1,8 +1,42 @@
-# market-signal-engine
+# ARGOS
 
-Motor de análisis cuantitativo para detectar oportunidades de trading en ETFs y acciones estadounidenses.
+Experimental Market Decision Support System
 
-El sistema no ejecuta órdenes, no se conecta a brokers y no toma decisiones operativas. Analiza datos de mercado, genera `Opportunity`, convierte las mejores en `Signal` mediante gestión de riesgo y notifica.
+ARGOS es un sistema experimental de soporte a decisiones de mercado. Observa múltiples instrumentos y temporalidades, evalúa condiciones técnicas, calcula scoring, recolecta Evidence, evalúa resultados forward y puede generar notificaciones operativas para revisión humana.
+
+ARGOS no garantiza ganancias, no es asesor financiero, no ejecuta órdenes, no se conecta a brokers y no toma decisiones autónomas de trading. Su propósito es reducir ruido, estandarizar el análisis técnico y construir evidencia cuantitativa sobre setups observados.
+
+## ARGOS Engine
+
+ARGOS Engine es el núcleo analítico de ARGOS: el componente encargado de normalizar datos de mercado, ejecutar analyzers técnicos, calcular el score y decidir si un setup se conserva como Evidence, Opportunity o Signal.
+
+```text
+Market Data
+  ↓
+ARGOS Engine
+  ↓
+Trend / Volume / Momentum / Structure
+  ↓
+Technical Score
+  ↓
+Evidence / Opportunity
+  ↓
+Forward Evaluation
+  ↓
+Performance Research
+```
+
+```mermaid
+flowchart TD
+  A[ARGOS] --> B[ARGOS Engine<br/>Implemented]
+  A --> C[Evidence<br/>Implemented]
+  A --> D[Forward Evaluation<br/>Implemented]
+  A --> E[Performance Research<br/>Implemented]
+  A --> F[Notifications<br/>Implemented]
+  A --> G[Data Protection<br/>Implemented]
+  A --> H[Portfolio Risk<br/>Next]
+  A --> I[Product Platform<br/>Future]
+```
 
 ## Stack
 
@@ -83,7 +117,7 @@ Azure Timer
   -> External Adapters
 ```
 
-Los detalles externos, como Yahoo Finance, Telegram o PostgreSQL, viven detrás de interfaces. El motor analiza `Candle[]` normalizadas y no depende del formato crudo del proveedor.
+Los detalles externos, como Yahoo Finance, Telegram o PostgreSQL, viven detrás de interfaces. ARGOS Engine analiza `Candle[]` normalizadas y no depende del formato crudo del proveedor.
 
 ## Flujo Principal
 
@@ -275,7 +309,7 @@ analiza SPY,QQQ
 
 Si el mensaje no trae tickers, se ejecuta con la watchlist configurada.
 
-## Opportunity Engine
+## ARGOS Engine — Opportunity Detection
 
 `Opportunity` representa una oportunidad de mercado, no una orden:
 
@@ -300,7 +334,7 @@ score = trendScore + volumeScore + momentumScore + structureScore
 max score = 100
 ```
 
-Cada analyzer devuelve de `0` a `25`. En lenguaje más natural, el motor busca cuatro pistas
+Cada analyzer devuelve de `0` a `25`. En lenguaje más natural, ARGOS Engine busca cuatro pistas
 independientes antes de llamar algo oportunidad:
 
 1. `Trend`: que la tendencia esté alineada, principalmente EMA20 sobre EMA50 y medias ascendentes.
@@ -356,7 +390,7 @@ Detecta higher highs, higher lows y breakout de máximo de 20 velas.
 - `5`: consolidación.
 - `0`: estructura bajista o insuficiente.
 
-## Ranking Engine
+## ARGOS Engine — Ranking
 
 `RankingService` ordena oportunidades de mayor a menor score:
 
@@ -364,7 +398,7 @@ Detecta higher highs, higher lows y breakout de máximo de 20 velas.
 const ranked = rankingService.rank(opportunities);
 ```
 
-El objetivo es que el motor notifique primero lo mejor, no todo lo que apenas cumple una regla.
+El objetivo es que ARGOS notifique primero lo mejor, no todo lo que apenas cumple una regla.
 
 ## Filtro
 
@@ -408,8 +442,8 @@ score `85` aparece en ambos y, si `notify=true`, se envía por Telegram.
 
 ## Evidence / Forward Performance V1.2
 
-Evidence es el dataset de investigación del motor. A diferencia de `opportunities` y `signals`, no
-representa necesariamente algo que quieras operar; representa algo que el engine observó antes de
+Evidence es el dataset de investigación de ARGOS. A diferencia de `opportunities` y `signals`, no
+representa necesariamente algo que quieras operar; representa algo que ARGOS Engine observó antes de
 conocer el futuro y que vale la pena medir.
 
 La interpretación histórica de estos cortes vive en [`EXPERIMENT_LOG.md`](./EXPERIMENT_LOG.md). Cuando una tarea futura produzca nueva evidencia experimental, cambie métricas relevantes o genere un nuevo corte de Forward Performance, revisar si corresponde agregar una nueva entrada fechada a esa bitácora. No modificar entradas históricas para hacerlas coincidir con resultados nuevos.
@@ -503,7 +537,7 @@ historicalForwardExpectancyPercent = (Pwin × targetPercent) - (Ploss × stopLos
 ```
 
 `EXPIRED` y `AMBIGUOUS` se excluyen del cálculo principal. No es promesa de rendimiento futuro; solo
-resume la muestra forward observada por el engine.
+resume la muestra forward observada por ARGOS Engine.
 
 Profit Factor se calcula únicamente cuando hay pérdidas resueltas suficientes para evitar una métrica
 falsa. Si no puede calcularse de forma rigurosa, se devuelve `null`.
@@ -602,7 +636,7 @@ MARKET_DATA_MAX_RETRIES=3
 MARKET_DATA_RETRY_BASE_DELAY_MS=1000
 ```
 
-Con ese modo, el motor no dispara toda la matriz `ticker × timeframe` al mismo tiempo. Procesa hasta
+Con ese modo, ARGOS Engine no dispara toda la matriz `ticker × timeframe` al mismo tiempo. Procesa hasta
 `MARKET_DATA_MAX_CONCURRENCY` requests de datos de mercado en paralelo, aplica una pausa opcional entre
 jobs del pool con `MARKET_DATA_BATCH_DELAY_MS`, y reintenta solo errores recuperables con exponential
 backoff. Las combinaciones fuera de sesión se marcan como `market-closed` antes de llamar Yahoo, así que
@@ -637,11 +671,11 @@ porcentajes”.
 
 ## Configuración dinámica y universo de mercado
 
-El motor ya no depende únicamente de variables de entorno para decidir qué analizar ni con qué
+ARGOS ya no depende únicamente de variables de entorno para decidir qué analizar ni con qué
 parámetros funcionales operar. Cuando `DATABASE_URL` está configurado y las migraciones fueron
 ejecutadas, PostgreSQL se vuelve la fuente primaria para:
 
-- configuración funcional del engine en `market_signal_engine.engine_config`;
+- configuración funcional de ARGOS Engine en `market_signal_engine.engine_config`;
 - catálogo de símbolos en `market_signal_engine.market_symbols`;
 - timeframes activos por símbolo en `market_signal_engine.symbol_timeframes`;
 - versión funcional de estrategia mediante `ENGINE_STRATEGY_VERSION` / `engine_config`.
@@ -660,7 +694,7 @@ Al inicio de cada scan el flujo conceptual es:
 
 ```text
 scan starts
-  -> load engine config snapshot
+  -> load ARGOS Engine config snapshot
   -> load market universe snapshot
   -> build symbol/timeframe matrix
   -> skip market-closed combinations
@@ -668,7 +702,7 @@ scan starts
   -> analyze opportunities
 ```
 
-El snapshot de configuración se carga una sola vez por ejecución; no se consulta `engine_config` por
+El snapshot de configuración de ARGOS Engine se carga una sola vez por ejecución; no se consulta `engine_config` por
 ticker. Lo mismo aplica al universo de mercado.
 
 ### `engine_config`
@@ -692,7 +726,7 @@ WHERE key = 'OPPORTUNITY_MIN_SCORE';
 
 ### Universo de mercado
 
-`market_symbols` guarda el ticker lógico del engine y `provider_symbol` guarda el símbolo que se manda
+`market_symbols` guarda el ticker lógico de ARGOS Engine y `provider_symbol` guarda el símbolo que se manda
 al proveedor de datos. Por ahora Yahoo es el proveedor principal y normalmente ambos valores son iguales,
 pero el diseño ya permite desacoplarlos.
 
@@ -726,7 +760,7 @@ WHERE timeframe.symbol_id = symbol.id
 
 ### Market hours awareness
 
-El motor separa `market-closed` de `stale-market-data`:
+ARGOS Engine separa `market-closed` de `stale-market-data`:
 
 - `STOCK`/`ETF` con `session_type=US_REGULAR` en `1m`, `5m`, `15m`, `30m` o `1h` solo consultan Yahoo
   durante sesión regular de Estados Unidos: lunes a viernes, 09:30-16:00, `America/New_York`.
@@ -775,10 +809,10 @@ MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
 ## Market Data
 
 El proyecto usa Yahoo Finance como única fuente de datos de mercado mediante `yahoo-finance2`.
-No requiere API key y el resto del motor no conoce detalles de Yahoo: solo recibe velas normalizadas
+No requiere API key y el resto de ARGOS Engine no conoce detalles de Yahoo: solo recibe velas normalizadas
 con el modelo interno `Candle`.
 
-El puerto se mantiene simple para que el motor siga desacoplado:
+El puerto se mantiene simple para que ARGOS Engine siga desacoplado:
 
 ```ts
 interface MarketDataProvider {
@@ -798,7 +832,7 @@ MarketScanExecutor
 `YahooFinanceClient` se instancia directamente en `container.ts`. La intención es mantener una sola
 fuente útil y evitar código muerto o configuraciones que confundan.
 
-Timeframes soportados por Yahoo Finance en este motor:
+Timeframes soportados por Yahoo Finance en ARGOS Engine:
 
 - Minutos: `1m`, `5m`, `15m`, `30m`
 - Hora: `1h`
@@ -815,7 +849,7 @@ Para timeframes intradía, `MarketScanExecutor` valida frescura de datos con
 ## Rate limits y datos de mercado
 
 Aunque Yahoo no requiere API key, puede limitar o rechazar tráfico si se hacen demasiadas llamadas.
-Desde V1.1.1 el motor usa concurrencia controlada: avanza más rápido que un scan 100% secuencial, pero
+Desde V1.1.1 ARGOS Engine usa concurrencia controlada: avanza más rápido que un scan 100% secuencial, pero
 con un límite explícito para no golpear al proveedor con todos los símbolos a la vez.
 
 Configuración recomendada:
@@ -832,7 +866,7 @@ fallos temporales de red. Por ejemplo, con base `1000ms`, los intentos esperan a
 `2s` y `4s`. Errores no recuperables como símbolo inválido, delisted, not found o no data no se
 reintentan.
 
-Antes de pedir datos, el motor revisa sesión de mercado. Una acción/ETF intradía fuera de horario se
+Antes de pedir datos, ARGOS Engine revisa sesión de mercado. Una acción/ETF intradía fuera de horario se
 omite con `market-closed` y Yahoo no recibe request. Crypto sigue operando 24/7, y temporalidades `1d` /
 `1w` de acciones/ETF se permiten fuera de sesión.
 
@@ -1118,7 +1152,7 @@ Score actual ≠ win rate histórico ≠ forward-test win rate
 
 ### 1. Current Setup
 
-Es el setup técnico actual. Resume ticker, timeframe, score total y los cuatro componentes del motor:
+Es el setup técnico actual. Resume ticker, timeframe, score total y los cuatro componentes de ARGOS Engine:
 `Trend`, `Volume`, `Momentum` y `Structure`. Este score responde:
 
 ```text
@@ -1129,7 +1163,7 @@ No es una probabilidad de ganar.
 
 ### 2. Historical Backtest
 
-Cuando `BACKTEST_CONTEXT_ENABLED=true`, el motor intenta adjuntar un resumen histórico comparable a la
+Cuando `BACKTEST_CONTEXT_ENABLED=true`, ARGOS intenta adjuntar un resumen histórico comparable a la
 señal actual usando el mismo ticker, timeframe, threshold comparable y ventana configurada por
 `BACKTEST_CONTEXT_MONTHS`.
 
@@ -1291,7 +1325,7 @@ curl -X POST "http://localhost:7071/api/telegram-test"
 Debe enviar:
 
 ```text
-✅ market-signal-engine conectado a Telegram
+✅ ARGOS conectado a Telegram
 ```
 
 ### Notificar Señales
@@ -1304,7 +1338,7 @@ curl "http://localhost:7071/api/market-scan?tickers=NVDA,MSFT&timeframe=15m&limi
 
 ## Backtesting V1
 
-El proyecto incluye un endpoint independiente para simular cómo se habría comportado el motor en
+El proyecto incluye un endpoint independiente para simular cómo se habría comportado ARGOS Engine en
 un periodo histórico sin modificar el flujo de producción:
 
 ```text
@@ -1336,11 +1370,11 @@ El backtest responde dos preguntas distintas:
 
 El backtest reutiliza exactamente la misma lógica de producción para calcular `Trend`, `Volume`,
 `Momentum`, `Structure`, `Score`, `Opportunity` y el `entry` vía `RiskService`. No existen analyzers
-especiales para backtesting y no se modifica el scoring del motor vivo.
+especiales para backtesting y no se modifica el scoring de ARGOS Engine vivo.
 
 ### Regla anti look-ahead bias
 
-Para cada vela histórica `i`, el motor solo analiza:
+Para cada vela histórica `i`, ARGOS Engine solo analiza:
 
 ```text
 candles[0..i]
@@ -1358,7 +1392,7 @@ Una operación simulada nace cuando:
 score >= minimumScore
 ```
 
-Para no contar varias veces el mismo movimiento, el engine no abre una nueva operación para el mismo
+Para no contar varias veces el mismo movimiento, ARGOS Engine no abre una nueva operación para el mismo
 `ticker + timeframe` mientras exista una operación activa. La siguiente señal puede abrirse cuando
 la anterior termina como `WIN`, `LOSS`, `EXPIRED` o `AMBIGUOUS`.
 
@@ -1464,12 +1498,12 @@ Si `includeTrades=true`, el response incluye operaciones simuladas individuales 
 MFE y MAE. Esto permite revisar literalmente algo como:
 
 ```text
-El motor habría alertado NVDA el 24-Jul; TP1 se alcanzó dos velas después.
+ARGOS habría alertado NVDA el 24-Jul; TP1 se alcanzó dos velas después.
 ```
 
 ### Backtesting vs Forward Testing
 
-`Backtesting` simula qué habría ocurrido si el motor hubiera existido históricamente.
+`Backtesting` simula qué habría ocurrido si ARGOS Engine hubiera existido históricamente.
 
 `Forward Testing` guardará señales realmente generadas en vivo y evaluará después qué pasó. Esa fase
 no está implementada todavía; los modelos actuales ya separan `signalAt`, `ticker`, `timeframe`,
@@ -1562,7 +1596,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.             |
 | `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                            |
 | `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                    |
-| `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que el motor espera analizar por ticker.                                  |
+| `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que ARGOS Engine espera analizar por ticker.                                  |
 | `MARKET_SCAN_WATCHLIST`                | Watchlist a usar: `custom`, `etfs`, `growth` o `dividends`.                                      |
 | `MARKET_SCAN_DEBUG`                    | Habilita logs debug seguros de escaneo y datos de mercado.                                       |
 | `MARKET_DATA_MAX_AGE_MINUTES`          | Edad máxima permitida para la última vela en timeframes intradía.                                |
