@@ -542,6 +542,73 @@ resume la muestra forward observada por ARGOS Engine.
 Profit Factor se calcula únicamente cuando hay pérdidas resueltas suficientes para evitar una métrica
 falsa. Si no puede calcularse de forma rigurosa, se devuelve `null`.
 
+### Strategy Profile Research V1.3
+
+`GET /api/strategy-profiles` construye perfiles estadísticos descriptivos desde Evidence. Es una
+capa read-only: no modifica `evidence_signals`, no reevalúa señales y no cambia MarketScan, Telegram,
+scoring ni los evaluadores forward.
+
+Agrupa la muestra por:
+
+```text
+asset_type + timeframe + score_bucket + strategy_version
+```
+
+Esto evita mezclar crypto con acciones, temporalidades rápidas con swings, o señales generadas por
+versiones distintas del motor.
+
+Ejemplo:
+
+```bash
+curl "http://localhost:7071/api/strategy-profiles?assetType=CRYPTO&timeframe=1m&scoreBucket=90-94&strategyVersion=v1"
+```
+
+Filtros soportados:
+
+- `assetType`
+- `timeframe`
+- `scoreBucket`: `80-84`, `85-89`, `90-94`, `95-100`
+- `strategyVersion`
+- `minimumSampleSize`
+
+Semántica importante:
+
+- `Trade Outcome` mide resolución operativa del target.
+- `Market Reachability` mide si el mercado tocó el target, aunque el trade sea ambiguo.
+- Para cada target experimental:
+  - `WIN` cuenta como target alcanzado.
+  - `LOSS` no cuenta como target alcanzado.
+  - `EXPIRED` no cuenta como target alcanzado.
+  - `AMBIGUOUS` sí cuenta como target alcanzado porque la vela tocó target y stop.
+  - `NULL` significa unresolved y queda fuera del denominador.
+
+Fórmulas:
+
+```text
+winRate = wins / (wins + losses)
+reachRate = (wins + ambiguous) / (wins + losses + expired + ambiguous)
+```
+
+V1.3 separa:
+
+- `resolvedSignalSampleSize`: señales con estado terminal a nivel perfil.
+- `resolvedTargetSampleSize`: outcomes resueltos por cada target experimental.
+
+`dataMaturity` usa:
+
+```text
+INSUFFICIENT: sampleSize < 30 OR resolvedSignalSampleSize < 10
+EARLY:        sampleSize >= 30 AND resolvedSignalSampleSize >= 10
+DEVELOPING:  sampleSize >= 75 AND resolvedSignalSampleSize >= 30
+MATURE:      sampleSize >= 150 AND resolvedSignalSampleSize >= 60
+```
+
+`MATURE` no significa validación estadística, rentabilidad ni autorización para operar capital real.
+Solo significa que hay suficiente data para hacer análisis más serio.
+
+MFE/MAE incluyen `average`, `median`, `p25`, `p75` y `p90`. MAE conserva su signo negativo real; por
+eso sus percentiles pueden sentirse visualmente invertidos frente a MFE.
+
 SQL útil para Evidence:
 
 ```sql

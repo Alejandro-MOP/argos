@@ -12,6 +12,7 @@ import {
   EmptyForwardPerformanceProvider,
 } from '../performance/PerformanceProviders';
 import { PostgresForwardPerformanceProvider } from '../performance/PostgresForwardPerformanceProvider';
+import { PostgresStrategyProfileProvider } from '../research/PostgresStrategyProfileProvider';
 import { createRepositories } from './repositories';
 import { buildEnvRuntimeConfig, env } from './env';
 import { EngineConfigService } from '../services/EngineConfigService';
@@ -56,6 +57,9 @@ const marketUniverseService = new MarketUniverseService(marketSymbolRepository, 
 const marketSessionService = new MarketSessionService();
 const forwardPerformanceReportProvider = database
   ? new PostgresForwardPerformanceProvider(database, fallbackRuntimeConfig.signalIntelligence.performanceMinSampleSize)
+  : undefined;
+const strategyProfileProvider = database
+  ? new PostgresStrategyProfileProvider(database)
   : undefined;
 
 export const postgresBackupService = database
@@ -177,4 +181,4 @@ export const marketScanExecutor = new MarketScanExecutor({
   defaultTimeframes: env.marketScanTimeframes,
 });
 
-export { forwardPerformanceReportProvider };
+export { forwardPerformanceReportProvider, strategyProfileProvider };

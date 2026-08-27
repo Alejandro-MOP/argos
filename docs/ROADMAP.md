@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.3 — Portfolio Risk & Exposure Manager`
+**Desarrollo siguiente:** `V1.4 — Portfolio Risk & Exposure Manager`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -76,7 +76,8 @@ El score representa:
 | V1.1 — Dynamic Configuration    | Configuración, universo y sesiones desde PostgreSQL | ✅ Completado                            |
 | V1.1.1 — Market Data Throughput | Concurrencia controlada y retries seguros           | ✅ Completado                            |
 | V1.2 — Evidence                 | Medir estadísticamente la calidad de los setups     | 🧪 Implementado / recolectando evidencia |
-| **V1.3 — Portfolio Risk**       | Riesgo agregado, concentración y exposición         | 🔥 Siguiente desarrollo                  |
+| V1.3 — Strategy Profile Research | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                     |
+| **V1.4 — Portfolio Risk**       | Riesgo agregado, concentración y exposición         | 🔥 Siguiente desarrollo                  |
 | V2 — Strategy Calibration       | Mejorar estrategia utilizando Evidence              | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion            | Seguimiento de trades realmente tomados             | 📋 Backlog                               |
 | V3.1 — Trading Journal          | Medir decisiones y resultados reales                | 📋 Backlog                               |
@@ -714,7 +715,96 @@ Se verificó que:
 
 ---
 
-# 8. V1.3 — Portfolio Risk & Exposure Manager 🔥
+# 8. V1.3 — Strategy Profile Research ✅
+
+## Objetivo
+
+Construir perfiles estadísticos descriptivos sobre Evidence sin modificar el motor operativo.
+
+V1.3 responde preguntas como:
+
+> ¿Cómo se comportan las señales históricas cuando se separan por asset type, timeframe, score bucket y strategy version?
+
+No recomienda operar, no optimiza TP/SL y no declara rentabilidad. Solo resume lo observado en Evidence para alimentar decisiones humanas y futuras hipótesis.
+
+## Agrupación
+
+Los perfiles se agrupan por:
+
+```text
+asset_type + timeframe + score_bucket + strategy_version
+```
+
+Score buckets iniciales:
+
+- `80-84`
+- `85-89`
+- `90-94`
+- `95-100`
+
+## Métricas
+
+Cada profile incluye:
+
+- `sampleSize`
+- `resolvedSignalSampleSize`
+- distribución de estados `OPEN`, `PARTIALLY_RESOLVED`, `CLOSED`, `EXPIRED`, `AMBIGUOUS`
+- MFE promedio, mediana, p25, p75 y p90
+- MAE promedio, mediana, p25, p75 y p90 conservando signo negativo
+- target ladder experimental con `resolvedTargetSampleSize`, `winRate` y `reachRate`
+
+## Trade Outcome vs Market Reachability
+
+Para target experimental:
+
+```text
+winRate = wins / (wins + losses)
+reachRate = (wins + ambiguous) / (wins + losses + expired + ambiguous)
+```
+
+`AMBIGUOUS` cuenta como target alcanzado para reachability porque el evaluador actual marca ese estado cuando la misma vela toca target y stop.
+
+`NULL` significa unresolved y queda fuera del denominador. Esto evita penalizar señales recientes.
+
+## Data maturity
+
+`dataMaturity` usa:
+
+```text
+INSUFFICIENT: sampleSize < 30 OR resolvedSignalSampleSize < 10
+EARLY:        sampleSize >= 30 AND resolvedSignalSampleSize >= 10
+DEVELOPING:  sampleSize >= 75 AND resolvedSignalSampleSize >= 30
+MATURE:      sampleSize >= 150 AND resolvedSignalSampleSize >= 60
+```
+
+`MATURE` no significa estadísticamente validado, rentable ni listo para operar capital real. Solo indica que existe una cantidad de data más seria para análisis.
+
+## Endpoint
+
+```text
+GET /api/strategy-profiles
+```
+
+Filtros:
+
+- `assetType`
+- `timeframe`
+- `scoreBucket`
+- `strategyVersion`
+- `minimumSampleSize`
+
+## Protección de Evidence
+
+V1.3 es read-only sobre Evidence:
+
+- no crea migrations;
+- no escribe ni reevalúa señales;
+- no modifica MarketScan, scoring, Telegram ni Forward/Evidence evaluators;
+- no altera métricas históricas de la bitácora.
+
+---
+
+# 9. V1.4 — Portfolio Risk & Exposure Manager 🔥
 
 ## Objetivo
 
@@ -1761,8 +1851,8 @@ el objeto que estamos intentando medir.
 
 ---
 
-**Última actualización conceptual:** 2026-08-26
+**Última actualización conceptual:** 2026-08-27
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.3 — Portfolio Risk & Exposure Manager`
+**Desarrollo siguiente:** `V1.4 — Portfolio Risk & Exposure Manager`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

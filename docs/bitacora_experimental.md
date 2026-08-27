@@ -339,3 +339,25 @@ Esto es solamente una dirección experimental y NO una decisión
 de arquitectura ni de estrategia.
 
 La decisión actual es seguir observando.
+
+---
+
+# 2026-08-27 — V1.3 Strategy Profile Research
+
+Se agrega una capa de investigación descriptiva sobre Evidence para agrupar señales por:
+
+```text
+asset_type + timeframe + score_bucket + strategy_version
+```
+
+La intención es observar comportamiento histórico sin cambiar el motor que genera las señales.
+
+Notas metodológicas:
+
+- `Trade Outcome` y `Market Reachability` se reportan por separado.
+- `AMBIGUOUS` cuenta como target alcanzado para reachability porque la vela tocó target y stop.
+- Outcomes `NULL` permanecen como unresolved y no penalizan señales recientes.
+- `dataMaturity=MATURE` no significa validación estadística, rentabilidad ni autorización para operar capital real.
+- MAE conserva signo negativo en promedios y percentiles.
+
+Esta entrada no reemplaza ni recalcula cortes históricos previos de Evidence.
