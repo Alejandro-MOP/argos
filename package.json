@@ -11,7 +11,9 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,json,md}\"",
-    "db:migrate": "npm run build && node dist/src/db/migrate.js"
+    "db:migrate": "npm run build && node dist/src/db/migrate.js",
+    "db:backup": "npm run build && node dist/src/db/backupCli.js",
+    "db:backup:verify": "npm run build && node dist/src/db/verifyBackupCli.js"
   },
   "engines": {
     "node": ">=22.0.0"

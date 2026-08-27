@@ -908,6 +908,74 @@ veces actualiza la misma fila en lugar de duplicarla.
 El flujo de Telegram es resiliente: si PostgreSQL falla, se registra un error seguro y la alerta se
 sigue enviando.
 
+
+## PostgreSQL Backups y Disaster Recovery
+
+La protección de datos de ARGOS es intencionalmente conservadora: el backup solo lee PostgreSQL y nunca ejecuta restores automáticos. El objetivo es tener snapshots recuperables del dataset de señales/evidence sin convertir el proceso de backup en un riesgo operativo.
+
+Se generan snapshots diarios en formato custom de PostgreSQL (`pg_dump -Fc`) dentro de:
+
+```text
+backups/YYYY/MM/DD/
+  argos.dump
+  manifest.json
+  RESTORE.md
+```
+
+Cada snapshot incluye:
+
+- `argos.dump`: dump custom de PostgreSQL.
+- `manifest.json`: metadata auditable con versión real del servidor, versiones reales de `pg_dump`, `pg_restore` y `psql`, tamaño del archivo, SHA-256 y schema respaldado.
+- `RESTORE.md`: guía de recuperación para validar checksum, inspeccionar el dump y restaurarlo primero en una base nueva de prueba.
+
+El backup se escribe de forma atómica: primero crea `argos.dump.tmp`, valida que exista y tenga contenido, ejecuta `pg_restore --list`, calcula SHA-256 y solo entonces lo renombra a `argos.dump`. Si algo falla, no reemplaza un dump previo válido ni escribe un `manifest.json` completado.
+
+Variables principales:
+
+```text
+DATABASE_BACKUP_ENABLED=false
+DATABASE_BACKUP_SCHEDULE=0 50 5 * * *
+DATABASE_BACKUP_BASE_PATH=./backups
+DATABASE_BACKUP_TIMEZONE=America/Mexico_City
+```
+
+Notas:
+
+- `DATABASE_BACKUP_ENABLED=false` por default evita crear dumps diarios accidentalmente en local.
+- `DATABASE_BACKUP_SCHEDULE` usa NCRONTAB de Azure Functions.
+- `DATABASE_BACKUP_TIMEZONE` define el folder calendario `YYYY/MM/DD`; las versiones del servidor y herramientas se detectan en runtime, no están hardcodeadas.
+- `backups/` está en `.gitignore`; los dumps no deben subirse a Git.
+- En local se validó una combinación común donde PostgreSQL Server era `16.15` y las herramientas cliente `pg_dump`/`pg_restore`/`psql` eran `17.6`. Eso se documenta como referencia operativa, pero cada backup registra sus versiones reales en `manifest.json`.
+
+Backup manual:
+
+```bash
+npm run db:backup
+```
+
+Endpoint manual:
+
+```bash
+curl -X POST http://localhost:7071/api/database-backup
+```
+
+Verificación manual sin restaurar:
+
+```bash
+npm run db:backup:verify -- backups/YYYY/MM/DD/argos.dump
+```
+
+Verificación opcional restaurando a una base explícita de prueba:
+
+```bash
+createdb argos_restore_test
+npm run db:backup:verify -- backups/YYYY/MM/DD/argos.dump --restore-to argos_restore_test
+```
+
+No existe endpoint de restore. Los restores deben ser una acción humana, deliberada y primero contra una base disposable.
+
+Cuando ARGOS viva en infraestructura cloud, el almacenamiento de dumps debe moverse fuera del filesystem de la aplicación hacia object storage / bucket / remote durable storage. Todavía no se elige proveedor cloud específico. En una etapa posterior conviene agregar política de retención, cifrado at-rest, lifecycle policy y simulacros periódicos de restore.
+
 ## Forward Signal Evaluation
 
 Una vez que una alerta real se guarda en `market_signal_engine.signals`, el sistema la evalúa de
@@ -1468,6 +1536,10 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
 | `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
 | `DATABASE_URL`                         | URL de PostgreSQL para persistir señales reales y evaluaciones forward.                          |
+| `DATABASE_BACKUP_ENABLED`              | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                          |
+| `DATABASE_BACKUP_SCHEDULE`             | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                           |
+| `DATABASE_BACKUP_BASE_PATH`            | Directorio base donde se escriben snapshots locales; default `./backups`.                        |
+| `DATABASE_BACKUP_TIMEZONE`             | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                        |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |
 | `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                        |

@@ -180,6 +180,10 @@ export const env = {
   marketScanSchedule: process.env.MARKET_SCAN_SCHEDULE ?? '0 */15 14-21 * * 1-5',
   forwardSignalEvaluationSchedule:
     process.env.FORWARD_SIGNAL_EVALUATION_SCHEDULE ?? '0 0 * * * *',
+  databaseBackupEnabled: parseBoolean(process.env.DATABASE_BACKUP_ENABLED, false),
+  databaseBackupSchedule: process.env.DATABASE_BACKUP_SCHEDULE ?? '0 50 5 * * *',
+  databaseBackupBasePath: process.env.DATABASE_BACKUP_BASE_PATH ?? './backups',
+  databaseBackupTimezone: process.env.DATABASE_BACKUP_TIMEZONE ?? 'America/Mexico_City',
   marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
   marketScanTimeframes: parseMarketScanTimeframes(),

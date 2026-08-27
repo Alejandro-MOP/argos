@@ -105,3 +105,42 @@ describe('signal intelligence env defaults', () => {
     });
   });
 });
+
+
+describe('database backup env defaults', () => {
+  const originalEnv = process.env;
+
+  afterEach(() => {
+    jest.resetModules();
+    process.env = originalEnv;
+  });
+
+  it('uses safe database backup defaults', async () => {
+    jest.resetModules();
+    process.env = {};
+
+    const { env } = await import('../src/config/env');
+
+    expect(env.databaseBackupEnabled).toBe(false);
+    expect(env.databaseBackupSchedule).toBe('0 50 5 * * *');
+    expect(env.databaseBackupBasePath).toBe('./backups');
+    expect(env.databaseBackupTimezone).toBe('America/Mexico_City');
+  });
+
+  it('parses database backup overrides', async () => {
+    jest.resetModules();
+    process.env = {
+      DATABASE_BACKUP_ENABLED: 'true',
+      DATABASE_BACKUP_SCHEDULE: '0 0 6 * * *',
+      DATABASE_BACKUP_BASE_PATH: '/tmp/argos-backups',
+      DATABASE_BACKUP_TIMEZONE: 'UTC',
+    } as NodeJS.ProcessEnv;
+
+    const { env } = await import('../src/config/env');
+
+    expect(env.databaseBackupEnabled).toBe(true);
+    expect(env.databaseBackupSchedule).toBe('0 0 6 * * *');
+    expect(env.databaseBackupBasePath).toBe('/tmp/argos-backups');
+    expect(env.databaseBackupTimezone).toBe('UTC');
+  });
+});

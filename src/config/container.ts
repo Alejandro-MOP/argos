@@ -3,6 +3,7 @@ import { StructureAnalyzer } from '../analyzers/StructureAnalyzer';
 import { TrendAnalyzer } from '../analyzers/TrendAnalyzer';
 import { VolumeAnalyzer } from '../analyzers/VolumeAnalyzer';
 import { BacktestEngine } from '../backtesting/BacktestEngine';
+import { ProcessCommandRunner } from '../adapters/CommandRunner';
 import { TelegramClient } from '../clients/TelegramClient';
 import { YahooFinanceClient } from '../clients/YahooFinanceClient';
 import type { EngineRuntimeConfig } from '../models/EngineConfig';
@@ -25,6 +26,7 @@ import { OpportunityFilter } from '../services/OpportunityFilter';
 import { OpportunityService } from '../services/OpportunityService';
 import { RankingService } from '../services/RankingService';
 import { RiskService } from '../services/RiskService';
+import { PostgresBackupService } from '../services/PostgresBackupService';
 import { SignalContextService } from '../services/SignalContextService';
 import { WatchlistService } from '../services/WatchlistService';
 
@@ -54,6 +56,14 @@ const marketUniverseService = new MarketUniverseService(marketSymbolRepository, 
 const marketSessionService = new MarketSessionService();
 const forwardPerformanceReportProvider = database
   ? new PostgresForwardPerformanceProvider(database, fallbackRuntimeConfig.signalIntelligence.performanceMinSampleSize)
+  : undefined;
+
+export const postgresBackupService = database
+  ? new PostgresBackupService(database, new ProcessCommandRunner(), {
+      databaseUrl: env.databaseUrl,
+      basePath: env.databaseBackupBasePath,
+      timezone: env.databaseBackupTimezone,
+    })
   : undefined;
 
 const createOpportunityService = (config: EngineRuntimeConfig): OpportunityService =>

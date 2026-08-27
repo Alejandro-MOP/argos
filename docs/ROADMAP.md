@@ -1386,6 +1386,19 @@ No en garantizar el resultado de una operación.
 
 ---
 
+
+## Data Protection & Disaster Recovery
+
+- Daily PostgreSQL Custom Dump usando `pg_dump -Fc` como snapshot recuperable del dataset operativo.
+- SHA-256 verification por snapshot mediante `manifest.json` y script manual de verificación.
+- Restore verification mediante `pg_restore --list` y, cuando se decida manualmente, restore hacia una base disposable.
+- Disaster recovery documentation generada junto a cada snapshot en `RESTORE.md`.
+- Restore drills periódicos para comprobar que los dumps realmente sirven antes de necesitarlos.
+- Offsite/remote backup como evolución necesaria antes de operar en serio fuera de entorno local.
+- Cuando ARGOS viva en cloud, migrar almacenamiento de dumps fuera del filesystem de la aplicación hacia object storage / bucket / remote durable storage.
+- Considerar posteriormente retention policy, encryption at rest y lifecycle policy.
+- No elegir todavía proveedor cloud específico; mantenerlo conceptual hasta decidir infraestructura.
+
 ## PostgreSQL
 
 - Mantener repositorios y SQL explícitos mientras sean mantenibles.
