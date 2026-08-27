@@ -6,6 +6,20 @@ ARGOS es un sistema experimental de soporte a decisiones de mercado. Observa mú
 
 ARGOS no garantiza ganancias, no es asesor financiero, no ejecuta órdenes, no se conecta a brokers y no toma decisiones autónomas de trading. Su propósito es reducir ruido, estandarizar el análisis técnico y construir evidencia cuantitativa sobre setups observados.
 
+## Estado actual — Research / Evidence Build
+
+El proyecto se encuentra actualmente en etapa de **Research / Evidence Build**. La PoC técnica está prácticamente validada: el pipeline funciona de punta a punta desde datos de mercado hasta Evidence, forward evaluation, MFE/MAE, target ladder experimental, Strategy Profiles y bitácora experimental.
+
+Esto significa que el software funciona técnicamente, pero **no** significa que la estrategia esté validada, que exista evidencia suficiente de rentabilidad ni que deba operarse capital real con base en los resultados actuales. La filosofía vigente es:
+
+```text
+Evidence first.
+Human decision.
+No automatic broker execution.
+```
+
+ARGOS es hoy un motor cuantitativo experimental que observa el mercado, detecta configuraciones técnicas, registra lo que observó, mide posteriormente qué ocurrió y construye evidencia para investigación. Sólo después de suficiente validación podrían diseñarse estrategias candidatas, incorporar costos reales y pasar a paper trading.
+
 ## ARGOS Engine
 
 ARGOS Engine es el núcleo analítico de ARGOS: el componente encargado de normalizar datos de mercado, ejecutar analyzers técnicos, calcular el score y decidir si un setup se conserva como Evidence, Opportunity o Signal.
@@ -34,7 +48,7 @@ flowchart TD
   A --> E[Performance Research<br/>Implemented]
   A --> F[Notifications<br/>Implemented]
   A --> G[Data Protection<br/>Implemented]
-  A --> H[Portfolio Risk<br/>Next]
+  A --> H[Broker / Cost Model<br/>Next]
   A --> I[Product Platform<br/>Future]
 ```
 
@@ -231,13 +245,13 @@ curl -X POST "http://localhost:7071/api/market-scan" \
 
 Interpretación del tipo por temporalidad:
 
-| Timeframe | `opportunityType` | Lectura práctica |
-| --- | --- | --- |
-| `1m`, `5m` | `scalping` | Entrada rápida de minutos. |
-| `15m`, `30m` | `intradia` | Operación dentro del día. |
-| `1h` | `swing-corto` | Movimiento de horas a pocos días. |
-| `1d` | `swing` | Movimiento de días a semanas. |
-| `1w` | `posicion` | Contexto amplio de semanas o meses. |
+| Timeframe    | `opportunityType` | Lectura práctica                    |
+| ------------ | ----------------- | ----------------------------------- |
+| `1m`, `5m`   | `scalping`        | Entrada rápida de minutos.          |
+| `15m`, `30m` | `intradia`        | Operación dentro del día.           |
+| `1h`         | `swing-corto`     | Movimiento de horas a pocos días.   |
+| `1d`         | `swing`           | Movimiento de días a semanas.       |
+| `1w`         | `posicion`        | Contexto amplio de semanas o meses. |
 
 El trade plan ya no usa el target técnico `entry + risk * 2` como objetivo principal. Ahora muestra
 escenarios simples sobre el capital completo:
@@ -446,7 +460,7 @@ Evidence es el dataset de investigación de ARGOS. A diferencia de `opportunitie
 representa necesariamente algo que quieras operar; representa algo que ARGOS Engine observó antes de
 conocer el futuro y que vale la pena medir.
 
-La interpretación histórica de estos cortes vive en [`EXPERIMENT_LOG.md`](./EXPERIMENT_LOG.md). Cuando una tarea futura produzca nueva evidencia experimental, cambie métricas relevantes o genere un nuevo corte de Forward Performance, revisar si corresponde agregar una nueva entrada fechada a esa bitácora. No modificar entradas históricas para hacerlas coincidir con resultados nuevos.
+La interpretación histórica de estos cortes vive en [`docs/bitacora_experimental.md`](./docs/bitacora_experimental.md). Cuando una tarea futura produzca nueva evidencia experimental, cambie métricas relevantes o genere un nuevo corte de Forward Performance, revisar si corresponde agregar una nueva entrada fechada a esa bitácora. No modificar entradas históricas para hacerlas coincidir con resultados nuevos.
 
 Flujo conceptual:
 
@@ -652,7 +666,6 @@ GROUP BY sector
 ORDER BY sample_size DESC;
 ```
 
-
 ## Market scan multi-timeframe
 
 El scan vivo puede recopilar evidencia real de varias temporalidades en paralelo lógico sin mezclar
@@ -735,7 +748,6 @@ Las estrategias y analyzers no crean `Signal` directamente. El score responde �
 el setup técnico”; el `tradePlan` responde “qué pasa con mi capital si el precio cae/sube ciertos
 porcentajes”.
 
-
 ## Configuración dinámica y universo de mercado
 
 ARGOS ya no depende únicamente de variables de entorno para decidir qué analizar ni con qué
@@ -749,9 +761,9 @@ ejecutadas, PostgreSQL se vuelve la fuente primaria para:
 
 Las variables de entorno siguen existiendo como fallback y bootstrap. La separación queda así:
 
-| Fuente | Responsabilidad |
-| --- | --- |
-| ENV | Secretos, infraestructura, schedules y fallback local. |
+| Fuente     | Responsabilidad                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| ENV        | Secretos, infraestructura, schedules y fallback local.                                   |
 | PostgreSQL | Configuración funcional, universo de mercado, símbolos activos y timeframes por símbolo. |
 
 No se guardan secretos en PostgreSQL. `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `DATABASE_URL`,
@@ -967,7 +979,6 @@ Los errores del proveedor se sanitizan antes de llegar a logs. No se imprime inf
 ni detalles ruidosos de request; solo status, statusText, provider, endpoint, ticker, requestId si
 existe, intento y mensaje resumido.
 
-
 ## PostgreSQL local y migraciones
 
 Fase 2 agrega persistencia opcional para construir el dataset de Forward Testing real. El proyecto
@@ -1008,7 +1019,6 @@ veces actualiza la misma fila en lugar de duplicarla.
 
 El flujo de Telegram es resiliente: si PostgreSQL falla, se registra un error seguro y la alerta se
 sigue enviando.
-
 
 ## PostgreSQL Backups y Disaster Recovery
 
@@ -1123,15 +1133,15 @@ ni targets. Para V1 evalúa contra `financial_stop_price`, no contra `technical_
 
 Timeframe de seguimiento preferido:
 
-| Timeframe de señal | Seguimiento preferido | Fallbacks |
-| --- | --- | --- |
-| `1m` | `1m` | `5m`, `15m`, `1d` |
-| `5m` | `5m` | `15m`, `1d` |
-| `15m` | `15m` | `30m`, `1h`, `1d` |
-| `30m` | `15m` | `30m`, `1h`, `1d` |
-| `1h` | `15m` | `30m`, `1h`, `1d` |
-| `1d` | `15m` | `30m`, `1h`, `1d` |
-| `1w` | `1d` | `1w` |
+| Timeframe de señal | Seguimiento preferido | Fallbacks         |
+| ------------------ | --------------------- | ----------------- |
+| `1m`               | `1m`                  | `5m`, `15m`, `1d` |
+| `5m`               | `5m`                  | `15m`, `1d`       |
+| `15m`              | `15m`                 | `30m`, `1h`, `1d` |
+| `30m`              | `15m`                 | `30m`, `1h`, `1d` |
+| `1h`               | `15m`                 | `30m`, `1h`, `1d` |
+| `1d`               | `15m`                 | `30m`, `1h`, `1d` |
+| `1w`               | `1d`                  | `1w`              |
 
 La intención es mejorar la precisión para saber qué ocurrió primero entre stop, TP1 y TP2. Si Yahoo
 no entrega datos suficientes en el timeframe preferido, se intenta el siguiente fallback. Si no hay
@@ -1489,11 +1499,11 @@ y TP2 sea `LOSS` si el precio toca +2% primero y después cae al stop antes de l
 
 Cada target puede terminar como:
 
-| Outcome | Significado |
-| --- | --- |
-| `WIN` | El target se alcanzó antes que el stop. |
-| `LOSS` | El stop se alcanzó antes que el target. |
-| `EXPIRED` | No tocó ni stop ni target dentro de la ventana máxima. |
+| Outcome     | Significado                                                                |
+| ----------- | -------------------------------------------------------------------------- |
+| `WIN`       | El target se alcanzó antes que el stop.                                    |
+| `LOSS`      | El stop se alcanzó antes que el target.                                    |
+| `EXPIRED`   | No tocó ni stop ni target dentro de la ventana máxima.                     |
 | `AMBIGUOUS` | La misma vela tocó stop y target; con OHLC no sabemos qué ocurrió primero. |
 
 `AMBIGUOUS` no cuenta automáticamente como win ni como loss. El `winRate` principal usa:
@@ -1509,14 +1519,14 @@ wins / (wins + losses) * 100
 Defaults iniciales:
 
 | Timeframe | Ventana máxima del trade |
-| --- | --- |
-| `1m` | 1 día |
-| `5m` | 2 días |
-| `15m` | 3 días |
-| `30m` | 5 días |
-| `1h` | 10 días |
-| `1d` | 45 días |
-| `1w` | 180 días |
+| --------- | ------------------------ |
+| `1m`      | 1 día                    |
+| `5m`      | 2 días                   |
+| `15m`     | 3 días                   |
+| `30m`     | 5 días                   |
+| `1h`      | 10 días                  |
+| `1d`      | 45 días                  |
+| `1w`      | 180 días                 |
 
 Estas ventanas viven desacopladas en `BacktestEngine`, para poder ajustarlas después sin reescribir
 la lógica de evaluación.
@@ -1643,62 +1653,62 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 
 ### Variables De Entorno
 
-| Variable                               | Descripción corta                                                                                |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
-| `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                     |
-| `DATABASE_URL`                         | URL de PostgreSQL para persistir señales reales y evaluaciones forward.                          |
-| `DATABASE_BACKUP_ENABLED`              | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                          |
-| `DATABASE_BACKUP_SCHEDULE`             | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                           |
-| `DATABASE_BACKUP_BASE_PATH`            | Directorio base donde se escriben snapshots locales; default `./backups`.                        |
-| `DATABASE_BACKUP_TIMEZONE`             | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                        |
-| `DATABASE_PG_DUMP_BIN`                 | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.                   |
-| `DATABASE_PG_RESTORE_BIN`              | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.          |
-| `DATABASE_PSQL_BIN`                    | Binario de `psql` usado para registrar versión de tooling en el manifest.                        |
-| `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
-| `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |
-| `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                        |
-| `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                             |
-| `MARKET_SCAN_TIMEFRAMES`               | Lista CSV de temporalidades para el scan vivo; si no existe, se usa `MARKET_SCAN_TIMEFRAME`.     |
-| `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.             |
-| `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                            |
-| `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                    |
-| `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que ARGOS Engine espera analizar por ticker.                                  |
-| `MARKET_SCAN_WATCHLIST`                | Watchlist a usar: `custom`, `etfs`, `growth` o `dividends`.                                      |
-| `MARKET_SCAN_DEBUG`                    | Habilita logs debug seguros de escaneo y datos de mercado.                                       |
-| `MARKET_DATA_MAX_AGE_MINUTES`          | Edad máxima permitida para la última vela en timeframes intradía.                                |
-| `MARKET_DATA_MAX_CONCURRENCY`          | Máximo de requests simultáneos al proveedor de datos durante el market scan.                     |
-| `MARKET_DATA_BATCH_DELAY_MS`           | Pausa opcional entre jobs del pool; `0` la desactiva.                                            |
-| `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos para errores recuperables del proveedor.                             |
-| `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para exponential backoff de rate limit, 5xx y timeouts.                               |
-| `MARKET_DATA_REQUEST_DELAY_MS`         | Deprecated: delay secuencial antiguo, conservado solo por compatibilidad.                        |
-| `MARKET_DATA_SEQUENTIAL`               | Deprecated: modo secuencial antiguo, conservado solo por compatibilidad.                         |
-| `ENGINE_STRATEGY_VERSION`               | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
-| `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                             |
-| `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.     |
-| `EVIDENCE_MIN_SCORE`                   | Score mínimo para capturar Evidence de investigación sin cambiar thresholds operativos.          |
-| `TRADE_STOP_LOSS_PERCENT`             | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.             |
-| `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                          |
-| `TRADE_TARGET_MAX_PERCENT`             | Segundo escenario de take profit; debe ser mayor que `TRADE_TARGET_MIN_PERCENT`.                 |
-| `BACKTEST_CONTEXT_ENABLED`             | Activa/desactiva la sección `📊 BACKTEST` en alertas Telegram.                                   |
-| `BACKTEST_CONTEXT_MONTHS`              | Meses de historia usados para buscar setups comparables en el contexto histórico.                 |
-| `PERFORMANCE_MIN_SAMPLE_SIZE`          | Muestra mínima esperada antes de advertir `⚠️ Muestra pequeña`.                                  |
-| `FORWARD_TEST_CONTEXT_ENABLED`         | Activa/desactiva la sección `🧪 FORWARD TEST` en el mensaje enriquecido.                         |
-| `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                             |
-| `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                              |
-| `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                      |
-| `TREND_EMA_SLOW_PERIOD`                | Periodo de EMA lenta para `TrendAnalyzer`.                                                       |
-| `VOLUME_LOOKBACK_PERIOD`               | Velas usadas para calcular volumen promedio.                                                     |
-| `VOLUME_STRONG_RATIO`                  | Ratio de volumen para score fuerte.                                                              |
-| `VOLUME_MODERATE_RATIO`                | Ratio de volumen para score moderado.                                                            |
-| `VOLUME_WEAK_RATIO`                    | Ratio de volumen para score débil.                                                               |
-| `MOMENTUM_RSI_PERIOD`                  | Periodo RSI usado por `MomentumAnalyzer`.                                                        |
-| `MOMENTUM_RSI_IDEAL_MIN`               | Límite inferior del rango RSI ideal.                                                             |
-| `MOMENTUM_RSI_IDEAL_MAX`               | Límite superior del rango RSI ideal.                                                             |
-| `MOMENTUM_RSI_NEUTRAL_MIN`             | Límite inferior del rango RSI neutral.                                                           |
-| `MOMENTUM_RSI_NEUTRAL_MAX`             | Límite superior del rango RSI neutral.                                                           |
-| `MOMENTUM_RSI_EXTENDED_MAX`            | Máximo RSI considerado extendido pero todavía puntuable.                                         |
-| `STRUCTURE_LOOKBACK_PERIOD`            | Velas usadas para evaluar estructura/breakout.                                                   |
+| Variable                               | Descripción corta                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`.          |
+| `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                              |
+| `DATABASE_URL`                         | URL de PostgreSQL para persistir señales reales y evaluaciones forward.                                   |
+| `DATABASE_BACKUP_ENABLED`              | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                                   |
+| `DATABASE_BACKUP_SCHEDULE`             | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                                    |
+| `DATABASE_BACKUP_BASE_PATH`            | Directorio base donde se escriben snapshots locales; default `./backups`.                                 |
+| `DATABASE_BACKUP_TIMEZONE`             | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                                 |
+| `DATABASE_PG_DUMP_BIN`                 | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.                           |
+| `DATABASE_PG_RESTORE_BIN`              | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.                  |
+| `DATABASE_PSQL_BIN`                    | Binario de `psql` usado para registrar versión de tooling en el manifest.                                 |
+| `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                                    |
+| `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                           |
+| `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                                 |
+| `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                                      |
+| `MARKET_SCAN_TIMEFRAMES`               | Lista CSV de temporalidades para el scan vivo; si no existe, se usa `MARKET_SCAN_TIMEFRAME`.              |
+| `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.                      |
+| `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                                     |
+| `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                             |
+| `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que ARGOS Engine espera analizar por ticker.                                       |
+| `MARKET_SCAN_WATCHLIST`                | Watchlist a usar: `custom`, `etfs`, `growth` o `dividends`.                                               |
+| `MARKET_SCAN_DEBUG`                    | Habilita logs debug seguros de escaneo y datos de mercado.                                                |
+| `MARKET_DATA_MAX_AGE_MINUTES`          | Edad máxima permitida para la última vela en timeframes intradía.                                         |
+| `MARKET_DATA_MAX_CONCURRENCY`          | Máximo de requests simultáneos al proveedor de datos durante el market scan.                              |
+| `MARKET_DATA_BATCH_DELAY_MS`           | Pausa opcional entre jobs del pool; `0` la desactiva.                                                     |
+| `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos para errores recuperables del proveedor.                                      |
+| `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para exponential backoff de rate limit, 5xx y timeouts.                                        |
+| `MARKET_DATA_REQUEST_DELAY_MS`         | Deprecated: delay secuencial antiguo, conservado solo por compatibilidad.                                 |
+| `MARKET_DATA_SEQUENTIAL`               | Deprecated: modo secuencial antiguo, conservado solo por compatibilidad.                                  |
+| `ENGINE_STRATEGY_VERSION`              | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
+| `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                                      |
+| `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.              |
+| `EVIDENCE_MIN_SCORE`                   | Score mínimo para capturar Evidence de investigación sin cambiar thresholds operativos.                   |
+| `TRADE_STOP_LOSS_PERCENT`              | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.                      |
+| `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                                   |
+| `TRADE_TARGET_MAX_PERCENT`             | Segundo escenario de take profit; debe ser mayor que `TRADE_TARGET_MIN_PERCENT`.                          |
+| `BACKTEST_CONTEXT_ENABLED`             | Activa/desactiva la sección `📊 BACKTEST` en alertas Telegram.                                            |
+| `BACKTEST_CONTEXT_MONTHS`              | Meses de historia usados para buscar setups comparables en el contexto histórico.                         |
+| `PERFORMANCE_MIN_SAMPLE_SIZE`          | Muestra mínima esperada antes de advertir `⚠️ Muestra pequeña`.                                           |
+| `FORWARD_TEST_CONTEXT_ENABLED`         | Activa/desactiva la sección `🧪 FORWARD TEST` en el mensaje enriquecido.                                  |
+| `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                                      |
+| `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                                       |
+| `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                               |
+| `TREND_EMA_SLOW_PERIOD`                | Periodo de EMA lenta para `TrendAnalyzer`.                                                                |
+| `VOLUME_LOOKBACK_PERIOD`               | Velas usadas para calcular volumen promedio.                                                              |
+| `VOLUME_STRONG_RATIO`                  | Ratio de volumen para score fuerte.                                                                       |
+| `VOLUME_MODERATE_RATIO`                | Ratio de volumen para score moderado.                                                                     |
+| `VOLUME_WEAK_RATIO`                    | Ratio de volumen para score débil.                                                                        |
+| `MOMENTUM_RSI_PERIOD`                  | Periodo RSI usado por `MomentumAnalyzer`.                                                                 |
+| `MOMENTUM_RSI_IDEAL_MIN`               | Límite inferior del rango RSI ideal.                                                                      |
+| `MOMENTUM_RSI_IDEAL_MAX`               | Límite superior del rango RSI ideal.                                                                      |
+| `MOMENTUM_RSI_NEUTRAL_MIN`             | Límite inferior del rango RSI neutral.                                                                    |
+| `MOMENTUM_RSI_NEUTRAL_MAX`             | Límite superior del rango RSI neutral.                                                                    |
+| `MOMENTUM_RSI_EXTENDED_MAX`            | Máximo RSI considerado extendido pero todavía puntuable.                                                  |
+| `STRUCTURE_LOOKBACK_PERIOD`            | Velas usadas para evaluar estructura/breakout.                                                            |
 
 ## Scripts
 

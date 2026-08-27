@@ -2,8 +2,8 @@
 
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
-**Estado actual:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.4 — Portfolio Risk & Exposure Manager`
+**Estado actual:** `Research / Evidence Build`
+**Desarrollo siguiente:** `V1.4 — Broker / Transaction Cost Model`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -32,7 +32,7 @@ Señales relevantes
    ↓
 Evidence
    ↓
-Portfolio Risk
+Costos reales / ejecución neta
    ↓
 Decisión humana
 ```
@@ -69,20 +69,21 @@ El score representa:
 
 # 2. Estado general
 
-| Versión                         | Objetivo                                            | Estado                                   |
-| ------------------------------- | --------------------------------------------------- | ---------------------------------------- |
-| V0 — Core                       | Núcleo cuantitativo desacoplado                     | ✅ Completado                            |
-| V1 — ARGOS Engine Signals       | Detectar, persistir, notificar y evaluar señales    | ✅ Funcional                             |
-| V1.1 — Dynamic Configuration    | Configuración, universo y sesiones desde PostgreSQL | ✅ Completado                            |
-| V1.1.1 — Market Data Throughput | Concurrencia controlada y retries seguros           | ✅ Completado                            |
-| V1.2 — Evidence                 | Medir estadísticamente la calidad de los setups     | 🧪 Implementado / recolectando evidencia |
-| V1.3 — Strategy Profile Research | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                     |
-| **V1.4 — Portfolio Risk**       | Riesgo agregado, concentración y exposición         | 🔥 Siguiente desarrollo                  |
-| V2 — Strategy Calibration       | Mejorar estrategia utilizando Evidence              | 📊 Requiere muestra suficiente           |
-| V3 — Trade Companion            | Seguimiento de trades realmente tomados             | 📋 Backlog                               |
-| V3.1 — Trading Journal          | Medir decisiones y resultados reales                | 📋 Backlog                               |
-| V4 — Product                    | Dashboard y administración visual                   | 🌱 Futuro                                |
-| V5 — Platform                   | Usuarios, preferencias y posible comercialización   | 💭 Futuro                                |
+| Versión                                    | Objetivo                                                | Estado                                   |
+| ------------------------------------------ | ------------------------------------------------------- | ---------------------------------------- |
+| V0 — Core                                  | Núcleo cuantitativo desacoplado                         | ✅ Completado                            |
+| V1 — ARGOS Engine Signals                  | Detectar, persistir, notificar y evaluar señales        | ✅ Funcional                             |
+| V1.1 — Dynamic Configuration               | Configuración, universo y sesiones desde PostgreSQL     | ✅ Completado                            |
+| V1.1.1 — Market Data Throughput            | Concurrencia controlada y retries seguros               | ✅ Completado                            |
+| V1.2 — Evidence                            | Medir estadísticamente la calidad de los setups         | 🧪 Implementado / recolectando evidencia |
+| V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
+| **V1.4 — Broker / Transaction Cost Model** | Gross vs net executable return, costos y break-even     | 🔥 Siguiente desarrollo                  |
+| Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
+| V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
+| V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
+| V3.1 — Trading Journal                     | Medir decisiones y resultados reales                    | 📋 Backlog                               |
+| V4 — Product                               | Dashboard y administración visual                       | 🌱 Futuro                                |
+| V5 — Platform                              | Usuarios, preferencias y posible comercialización       | 💭 Futuro                                |
 
 ---
 
@@ -298,7 +299,7 @@ compatibilidad de fallback.
 
 ---
 
-# 6. Estado actual — v0.9 Pre-V1 / Evidence Validation
+# 6. Estado actual — Research / Evidence Build
 
 ARGOS Engine ya puede:
 
@@ -333,7 +334,7 @@ strategy_version = v1
 La validación empírica se documenta incrementalmente en:
 
 ```text
-EXPERIMENT_LOG.md
+docs/bitacora_experimental.md
 ```
 
 El roadmap y la bitácora experimental tienen responsabilidades diferentes:
@@ -347,7 +348,7 @@ versiones
 backlog
 
 
-EXPERIMENT_LOG.md
+docs/bitacora_experimental.md
     ↓
 cortes experimentales
 métricas observadas
@@ -804,7 +805,52 @@ V1.3 es read-only sobre Evidence:
 
 ---
 
-# 9. V1.4 — Portfolio Risk & Exposure Manager 🔥
+# 9. V1.4 — Broker / Transaction Cost Model 🔥
+
+## Objetivo
+
+Evaluar la diferencia entre:
+
+```text
+gross market return
+vs
+net executable return
+```
+
+sin modificar Strategy Profiles, Evidence, scoring ni evaluadores.
+
+V1.4 debe diseñarse como una capa independiente para estimar costos de ejecución antes de convertir observaciones de mercado en hipótesis operables.
+
+## Primeros product profiles previstos
+
+1. `BITSO_CRYPTO_MXN`
+2. `BITSO_CRYPTO_USDC`
+3. `GBM_TRADING_USA`
+4. `IBKR_US_STOCKS`
+
+## Conceptos previstos
+
+- capital;
+- broker;
+- product profile;
+- maker/taker;
+- buy fee;
+- sell fee;
+- fixed minimum commission;
+- FX costs cuando aplique;
+- estimated spread/slippage en una etapa posterior;
+- gross target return;
+- round-trip cost;
+- break-even target;
+- net return.
+
+## Alcance
+
+V1.4 no debe declarar rentabilidad ni cambiar reglas de estrategia. Su función será agregar realismo económico a los resultados de investigación.
+
+---
+
+# 10. Backlog futuro — Portfolio Risk & Exposure Manager
 
 ## Objetivo
 
@@ -872,7 +918,7 @@ Pero desde riesgo pueden compartir una misma fuente de exposición.
 
 ---
 
-# 8.1. V1.3.1 — Exposure Manager
+# 10.1. Exposure Manager
 
 ## Backlog
 
@@ -980,7 +1026,7 @@ Total:
 
 ---
 
-# 8.2. V1.3.2 — Correlation Risk
+# 10.2. Correlation Risk
 
 Sector e industria son aproximaciones útiles, pero no capturan toda la
 dependencia entre instrumentos.
@@ -1081,7 +1127,7 @@ Mientras la ejecución siga siendo discrecional:
 
 ---
 
-# 9. Hito v1.0.0 — Detection & Evidence
+# 11. Hito v1.0.0 — Detection & Evidence
 
 Crear el primer release/tag formal cuando Detection & Evidence haya sido
 validado suficientemente con datos reales.
@@ -1106,7 +1152,7 @@ La implementación técnica de Evidence por sí sola no obliga a crear el tag.
 
 ---
 
-# 10. V2 — Strategy Calibration
+# 12. V2 — Strategy Calibration
 
 ## Condición de entrada
 
@@ -1482,7 +1528,6 @@ No en garantizar el resultado de una operación.
 
 ---
 
-
 ## Data Protection & Disaster Recovery
 
 - Daily PostgreSQL Custom Dump usando `pg_dump -Fc` como snapshot recuperable del dataset operativo.
@@ -1631,7 +1676,7 @@ Antes de finalizar el commit:
 10. En el resumen final indica explícitamente qué se modificó en ROADMAP.md.
 
 11. No mezcles resultados experimentales puntuales dentro del roadmap.
-    Los cortes, métricas e hipótesis observadas pertenecen a EXPERIMENT_LOG.md.
+    Los cortes, métricas e hipótesis observadas pertenecen a docs/bitacora_experimental.md.
 
 12. No cambies strategy_version=v1 durante Evidence Collection salvo que
     exista una decisión explícita y documentada de crear una nueva estrategia.
@@ -1645,135 +1690,93 @@ Antes de finalizar el commit:
 ROADMAP.md es la fuente de verdad del estado, hitos, versiones y backlog
 del proyecto.
 
-EXPERIMENT_LOG.md es la fuente de verdad de los cortes experimentales,
+docs/bitacora_experimental.md es la fuente de verdad de los cortes experimentales,
 observaciones e hipótesis.
 ```
 
 ---
 
-# 19. Próximos pasos
+# 19. Fases actuales de investigación
 
-## Desarrollo
+## 1. Technical PoC
 
-### 🔥 V1.3 — Portfolio Risk & Exposure Manager
+**Estado:** prácticamente validada.
 
-Construir una capa independiente del scoring que permita medir concentración
-y exposición agregada antes de que ARGOS evolucione hacia seguimiento de
-trades reales.
-
-Primera evolución:
+El pipeline técnico funciona de punta a punta:
 
 ```text
-Opportunity
+Market Data
     ↓
-Score
+Market Scan
     ↓
-Sector / Industry / Asset Type
+Technical Analysis / Scoring
     ↓
-Exposure Manager
+Signal / Evidence Capture
     ↓
-Risk Recommendation
+Forward Evaluation
+    ↓
+MFE / MAE
+    ↓
+Experimental Target Ladder
+    ↓
+Strategy Profiles
+    ↓
+Experimental Research Log
 ```
 
-No modificar:
+Esto valida la mecánica del software, no la rentabilidad de la estrategia.
+
+## 2. Evidence / Research
+
+**Estado:** fase actual.
+
+Periodo orientativo: agosto-octubre 2026. Las fechas no son compromisos; dependen de data maturity, cantidad de outcomes resueltos y diversidad de mercado.
+
+Durante Evidence Build v1 se mantiene congelado:
 
 ```text
 strategy_version = v1
 ```
 
-como consecuencia de esta etapa.
+## 3. V1.4 Broker / Transaction Cost Model
 
----
+**Estado:** siguiente desarrollo.
 
-## Experimento en paralelo
+Puede construirse en paralelo a Evidence Collection porque no modifica Strategy Profiles ni Evidence.
 
-Mantener congelada:
+## 4. Trade Plan Research
 
-```text
-strategy_version = v1
-```
+**Estado:** futuro.
 
-y continuar recolectando Evidence real.
+Combinará:
 
-Cortes orientativos:
+- Strategy Profiles;
+- MFE/MAE;
+- Target Reachability;
+- Transaction Costs;
+- Risk/Reward.
 
-```text
-~100 Evidence
-      ↓
-Smoke test estadístico
+## 5. Out-of-Sample / Forward Validation
 
+**Estado:** futuro.
 
-~250 Evidence
-      ↓
-Primer análisis segmentado
+Congelar reglas candidatas y probarlas con datos nuevos no utilizados para formularlas.
 
+## 6. Paper Trading
 
-~500 Evidence
-      ↓
-Comparaciones más útiles por:
-score
-timeframe
-asset type
+**Estado:** futuro.
 
+Sólo después de contar con reglas candidatas, costos considerados y validación forward/out-of-sample.
 
-~1000+ Evidence
-      ↓
-Evaluar hipótesis candidatas para V2
-```
+## 7. Small Capital Live Pilot
 
-Estos tamaños son referencias operativas.
+**Estado:** futuro y condicionado.
 
-No son criterios estadísticos suficientes por sí solos.
+No está desbloqueado por la implementación técnica actual ni por un único corte experimental.
 
-También deben considerarse:
+## 8. Validated Operational System
 
-- cantidad de outcomes resueltos;
-- diversidad de sesiones/días;
-- distintos regímenes de mercado;
-- distribución por timeframe;
-- distribución por asset type;
-- correlación entre observaciones;
-- concentración sectorial;
-- estabilidad out-of-sample.
-
----
-
-## Secuencia conceptual actual
-
-```text
-V1.2 Evidence
-     │
-     ├──────────────→ Recolección continua de Evidence V1
-     │
-     ↓
-V1.3 Portfolio Risk
-     ↓
-Muestra suficiente
-     ↓
-V2 Strategy Calibration
-     ↓
-Out-of-sample Validation
-     ↓
-Micro-capital experimental
-     ↓
-V3 Trade Companion
-     ↓
-V3.1 Trading Journal
-```
-
----
-
-## Hardening posterior
-
-- Calendario bursátil completo.
-- Holidays.
-- Early closes.
-- Sesiones especiales.
-- Cache compartido Forward/Evidence.
-- Request deduplication.
-- Candle resampling.
-- Mejor coordinación de jobs si las métricas muestran colisiones.
-- Evaluar Knex únicamente si la complejidad de PostgreSQL lo justifica.
+**Estado:** objetivo eventual, no garantizado.
 
 ---
 
@@ -1833,7 +1836,7 @@ ARGOS evoluciona hacia dos líneas paralelas:
      ENGINEERING               RESEARCH
           │                       │
           ↓                       ↓
-   Portfolio Risk             Evidence V1
+   Cost Model                 Evidence V1
    Trade Companion            Forward Performance
    Hardening                  Hipótesis
           │                       │
@@ -1853,6 +1856,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-27
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.4 — Portfolio Risk & Exposure Manager`
+**Desarrollo siguiente:** `V1.4 — Broker / Transaction Cost Model`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

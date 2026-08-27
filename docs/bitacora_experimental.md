@@ -387,6 +387,63 @@ Durante este corte ya se encuentra implementada la capa
 
 ---
 
+### Validación real Forward/Evidence Evaluator
+
+Última validación real registrada:
+
+#### Forward
+
+| Métrica                | Total |
+| ---------------------- | ----: |
+| pendingSignals         |    22 |
+| evaluated              |    22 |
+| closed                 |     0 |
+| partial                |     3 |
+| open                   |    19 |
+| expired                |     0 |
+| ambiguous              |     0 |
+| pendingNoFutureCandles |     0 |
+| providerErrors         |     0 |
+| errors                 |     0 |
+
+#### Evidence
+
+| Métrica                | Total |
+| ---------------------- | ----: |
+| pendingSignals         |    47 |
+| evaluated              |    47 |
+| closed                 |     0 |
+| partial                |     8 |
+| open                   |    39 |
+| expired                |     0 |
+| ambiguous              |     0 |
+| pendingNoFutureCandles |     0 |
+| providerErrors         |     0 |
+| errors                 |     0 |
+
+Conclusión técnica:
+
+- El evaluador procesó correctamente todas las señales pendientes.
+- No hubo errores de provider.
+- No hubo errores de evaluación.
+- No hubo señales pendientes por ausencia de future candles.
+- Una señal no debe convertirse en `CLOSED` simplemente porque termine la sesión bursátil.
+- `OPEN` y `PARTIALLY_RESOLVED` son estados válidos mientras el horizonte de evaluación siga vigente.
+- Se validó en condiciones reales el arreglo relacionado con historical-data / future-candle evaluation.
+
+Detalle técnico observado:
+
+```text
+original timeframe: 1d
+evaluation timeframe: 15m
+```
+
+Ejemplo: NVDA.
+
+Esto no se considera actualmente un bug. `signal timeframe` describe la temporalidad con la que nació la señal; `evaluation timeframe` o `evaluation granularity` describe la granularidad usada para observar qué ocurrió después.
+
+---
+
 ### 1. Estado general de Evidence
 
 | Métrica                   | Total |
@@ -560,6 +617,35 @@ sino también:
 
 "¿qué excursión adversa ocurrió durante el camino?"
 
+#### H5 — Targets grandes requieren más evidencia
+
+Los targets grandes (+2%, +3%, +5%) parecen alcanzarse con menor frecuencia, pero todavía no existe evidencia suficiente para convertir esto en reglas de estrategia o elegir un Take Profit definitivo.
+
+#### H6 — No modificar V1 con perfiles inmaduros
+
+Mientras los perfiles relevantes sigan siendo inmaduros, no se debe modificar `strategy_version=v1` ni optimizar parámetros contra la muestra actual.
+
+### Tamaño de muestra y lectura de N
+
+`N` significa sample size / tamaño de muestra. Como guía interna de investigación, no como regla estadística universal:
+
+|     N | Lectura interna            |
+| ----: | -------------------------- |
+|  < 20 | Exploratorio               |
+| 20-49 | Patrón preliminar          |
+| 50-99 | Patrón interesante         |
+|  100+ | Permite análisis más serio |
+
+`N=100` no demuestra rentabilidad ni significancia estadística. Además, el N depende de la pregunta.
+
+Ejemplos de este corte:
+
+- Evidence global = 167.
+- STOCK / 1m / 90-94 = 19.
+- CRYPTO / 5m / 90-94 = 10.
+- Target +0.50 resolved N = 141.
+- Target +5.00 resolved N = 108.
+
 ---
 
 ### 5. Estado de las conclusiones
@@ -576,6 +662,20 @@ Los perfiles continúan siendo experimentales.
 
 El objetivo inmediato continúa siendo aumentar N y observar si los
 patrones actuales persisten o desaparecen conforme aumenta la muestra.
+
+### Decisión explícita durante Evidence Build v1
+
+Durante Evidence Build v1 no se debe:
+
+- modificar scoring basándose en estos primeros resultados;
+- eliminar score buckets;
+- elegir todavía un TP definitivo;
+- elegir todavía un SL definitivo;
+- optimizar parámetros contra la muestra actual;
+- declarar perfiles rentables;
+- utilizar resultados actuales como justificación suficiente para operar dinero real.
+
+La razón es evitar premature optimization y overfitting. La decisión actual es continuar acumulando Evidence con `strategyVersion=v1`.
 
 ---
 
