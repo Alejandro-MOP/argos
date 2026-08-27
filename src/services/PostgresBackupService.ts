@@ -11,6 +11,9 @@ export interface PostgresBackupConfig {
   schema?: string;
   application?: string;
   now?: () => Date;
+  pgDumpCommand?: string;
+  pgRestoreCommand?: string;
+  psqlCommand?: string;
 }
 
 export interface PostgresBackupManifest {
@@ -105,9 +108,9 @@ export class PostgresBackupService {
 
     const [databaseVersion, pgDumpVersion, pgRestoreVersion, psqlVersion] = await Promise.all([
       this.getDatabaseVersionInfo(),
-      this.getToolVersion('pg_dump'),
-      this.getToolVersion('pg_restore'),
-      this.getToolVersion('psql'),
+      this.getToolVersion('pg_dump', this.config.pgDumpCommand),
+      this.getToolVersion('pg_restore', this.config.pgRestoreCommand),
+      this.getToolVersion('psql', this.config.psqlCommand),
     ]);
 
     try {
@@ -192,8 +195,8 @@ export class PostgresBackupService {
     };
   }
 
-  private async getToolVersion(command: 'pg_dump' | 'pg_restore' | 'psql'): Promise<string> {
-    const result = await this.commandRunner.run(command, ['--version']);
+  private async getToolVersion(command: 'pg_dump' | 'pg_restore' | 'psql', commandPath: string = command): Promise<string> {
+    const result = await this.commandRunner.run(commandPath, ['--version']);
     if (result.exitCode !== 0) {
       throw new Error(`${command}-version-failed: ${sanitizeForLogs(result.stderr || result.stdout)}`);
     }
@@ -202,7 +205,7 @@ export class PostgresBackupService {
   }
 
   private async runPgDump(connection: ParsedDatabaseUrl, outputPath: string): Promise<void> {
-    const result = await this.commandRunner.run('pg_dump', [
+    const result = await this.commandRunner.run(this.config.pgDumpCommand ?? 'pg_dump', [
       '--format=custom',
       '--file',
       outputPath,
@@ -231,7 +234,7 @@ export class PostgresBackupService {
   }
 
   private async validatePgRestoreList(filePath: string, password?: string): Promise<void> {
-    const result = await this.commandRunner.run('pg_restore', ['--list', filePath], {
+    const result = await this.commandRunner.run(this.config.pgRestoreCommand ?? 'pg_restore', ['--list', filePath], {
       env: buildPostgresToolEnv(password),
     });
 
@@ -315,10 +318,10 @@ const buildCompatibilityNotes = (
   pgRestoreVersion: string,
 ): string =>
   [
-    `This snapshot was created from PostgreSQL server ${serverVersion}.`,
-    'Use PostgreSQL client tools compatible with the recorded server/dump version.',
-    `Recorded tools: ${pgDumpVersion}; ${pgRestoreVersion}.`,
-    'If pg_dump is older than the server, PostgreSQL can refuse the dump; do not ignore that failure.',
+    `Este snapshot fue creado desde PostgreSQL Server ${serverVersion}.`,
+    'Usa herramientas cliente de PostgreSQL compatibles con la versión registrada del servidor y del dump.',
+    `Herramientas registradas: ${pgDumpVersion}; ${pgRestoreVersion}.`,
+    'Si pg_dump es más viejo que el servidor, PostgreSQL puede rechazar el dump; no ignores ese fallo.',
   ].join(' ');
 
 export const buildRestoreInstructions = (manifest: PostgresBackupManifest): string => {
@@ -329,40 +332,40 @@ export const buildRestoreInstructions = (manifest: PostgresBackupManifest): stri
   const port = manifest.database.port ?? 5432;
   const username = manifest.database.username ?? '<ROLE_NAME>';
 
-  return `# ARGOS PostgreSQL Recovery
+  return `# Recuperación PostgreSQL de ARGOS
 
 ## Snapshot
 
-- Backup date: ${manifest.backupDate}
-- Generated at: ${manifest.generatedAt}
-- PostgreSQL server version: ${manifest.database.postgresServerVersion}
-- PostgreSQL server version number: ${manifest.database.postgresServerVersionNumber}
-- pg_dump version: ${manifest.tools.pgDumpVersion}
-- pg_restore version: ${manifest.tools.pgRestoreVersion}
-- psql version: ${manifest.tools.psqlVersion}
-- Dump format: ${manifest.backup.format}
+- Fecha del backup: ${manifest.backupDate}
+- Generado en: ${manifest.generatedAt}
+- Versión del servidor PostgreSQL: ${manifest.database.postgresServerVersion}
+- Número de versión del servidor PostgreSQL: ${manifest.database.postgresServerVersionNumber}
+- Versión de pg_dump: ${manifest.tools.pgDumpVersion}
+- Versión de pg_restore: ${manifest.tools.pgRestoreVersion}
+- Versión de psql: ${manifest.tools.psqlVersion}
+- Formato del dump: ${manifest.backup.format}
 - SHA-256: ${manifest.backup.sha256}
 
-## Requirements
+## Requisitos
 
-You need PostgreSQL client tooling compatible with this snapshot:
+Necesitas herramientas cliente de PostgreSQL compatibles con este snapshot:
 
 - PostgreSQL server / client tools
 - pg_restore
 - psql
 - createdb
 
-Recommended starting point based on this snapshot:
+Punto de partida recomendado según este snapshot:
 
 \`\`\`bash
 brew install ${postgresqlPackage}
 \`\`\`
 
-If Homebrew reports that the package is already installed, ensure its \`bin\` directory is on your \`PATH\` before restoring.
+Si Homebrew indica que el paquete ya está instalado, asegúrate de que su directorio \`bin\` esté en tu \`PATH\` antes de restaurar.
 
-## Verify checksum first
+## Verificar checksum primero
 
-Do not restore if the checksum does not match.
+No restaures si el checksum no coincide.
 
 macOS:
 
@@ -370,11 +373,11 @@ macOS:
 shasum -a 256 argos.dump
 \`\`\`
 
-Compare the output with the SHA-256 recorded above and in \`manifest.json\`.
+Compara el resultado contra el SHA-256 registrado arriba y en \`manifest.json\`.
 
-## Rebuild PostgreSQL locally if needed
+## Reconstruir PostgreSQL localmente si hace falta
 
-Start PostgreSQL using your preferred local setup. With Homebrew this is commonly:
+Arranca PostgreSQL con tu setup local preferido. Con Homebrew normalmente sería:
 
 \`\`\`bash
 brew services start ${postgresqlPackage}
@@ -382,16 +385,16 @@ psql --version
 pg_restore --version
 \`\`\`
 
-Create the role manually if it does not exist. Never paste real passwords into Git-tracked files:
+Crea el rol manualmente si no existe. Nunca pegues passwords reales en archivos versionados por Git:
 
 \`\`\`sql
 CREATE ROLE ${username}
 WITH LOGIN PASSWORD '<SET_PASSWORD_MANUALLY>';
 \`\`\`
 
-## Restore safely into a new database first
+## Restaurar de forma segura primero en una base nueva
 
-Prefer restoring into a new validation database before touching any active ARGOS database.
+Prefiere restaurar en una base nueva de validación antes de tocar cualquier base activa de ARGOS.
 
 \`\`\`bash
 createdb \\
@@ -408,15 +411,25 @@ pg_restore \\
   argos.dump
 \`\`\`
 
-This guide intentionally does not recommend restoring over the active database as the first step.
+Esta guía intencionalmente no recomienda restaurar sobre la base activa como primer paso.
 
-## Inspect dump contents without restoring
+## Inspeccionar el dump sin restaurar
 
 \`\`\`bash
 pg_restore --list argos.dump
 \`\`\`
 
-## Post-restore verification queries
+## Prueba controlada de Disaster Recovery
+
+El proyecto incluye una herramienta manual que restaura en una base temporal, compara estructura/conteos contra la base original y elimina la base temporal solo si todas las validaciones pasan:
+
+\`\`\`bash
+npm run db:backup:restore-test -- backups/YYYY/MM/DD/argos.dump
+\`\`\`
+
+No existe endpoint de restore ni restore automático.
+
+## Queries de verificación post-restore
 
 \`\`\`sql
 SELECT schema_name
@@ -437,11 +450,11 @@ SELECT count(*) FROM ${manifest.database.schema}.engine_config;
 SELECT count(*) FROM ${manifest.database.schema}.market_symbols;
 \`\`\`
 
-## Safety notes
+## Notas de seguridad
 
-- This snapshot is a PostgreSQL custom dump created with \`pg_dump -Fc\`.
-- No passwords are stored in this file or in \`manifest.json\`.
-- Restore drills should be done against disposable databases first.
-- Do not run destructive commands such as \`DROP DATABASE\`, \`DROP SCHEMA\`, \`TRUNCATE\` or \`DELETE\` as part of routine backup verification.
+- Este snapshot es un dump custom de PostgreSQL creado con \`pg_dump -Fc\`.
+- No se guardan passwords en este archivo ni en \`manifest.json\`.
+- Los simulacros de restore deben hacerse primero contra bases desechables.
+- No ejecutes comandos destructivos como \`DROP DATABASE\`, \`DROP SCHEMA\`, \`TRUNCATE\` o \`DELETE\` como parte de la verificación rutinaria de backups.
 `;
 };

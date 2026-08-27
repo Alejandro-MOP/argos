@@ -20,7 +20,10 @@ export interface RestoreVerificationResult {
 }
 
 export class PostgresRestoreVerificationService {
-  public constructor(private readonly commandRunner: CommandRunner) {}
+  public constructor(
+    private readonly commandRunner: CommandRunner,
+    private readonly pgRestoreCommand = 'pg_restore',
+  ) {}
 
   public async verify(request: RestoreVerificationRequest): Promise<RestoreVerificationResult> {
     const backupPath = path.resolve(request.backupPath);
@@ -32,13 +35,13 @@ export class PostgresRestoreVerificationService {
       throw new Error('backup-checksum-mismatch');
     }
 
-    const listResult = await this.commandRunner.run('pg_restore', ['--list', backupPath]);
+    const listResult = await this.commandRunner.run(this.pgRestoreCommand, ['--list', backupPath]);
     if (listResult.exitCode !== 0) {
       throw new Error(`pg-restore-list-failed: ${listResult.stderr || listResult.stdout}`);
     }
 
     if (request.restoreDatabase?.trim()) {
-      const restoreResult = await this.commandRunner.run('pg_restore', [
+      const restoreResult = await this.commandRunner.run(this.pgRestoreCommand, [
         '--dbname',
         request.restoreDatabase.trim(),
         backupPath,

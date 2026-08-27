@@ -63,6 +63,9 @@ export const postgresBackupService = database
       databaseUrl: env.databaseUrl,
       basePath: env.databaseBackupBasePath,
       timezone: env.databaseBackupTimezone,
+      pgDumpCommand: env.databasePgDumpBin,
+      pgRestoreCommand: env.databasePgRestoreBin,
+      psqlCommand: env.databasePsqlBin,
     })
   : undefined;
 

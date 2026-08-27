@@ -1,4 +1,5 @@
 import { ProcessCommandRunner } from '../adapters/CommandRunner';
+import { env } from '../config/env';
 import { PostgresRestoreVerificationService } from '../services/PostgresRestoreVerificationService';
 
 const main = async (): Promise<void> => {
@@ -9,7 +10,7 @@ const main = async (): Promise<void> => {
     throw new Error('Usage: npm run db:backup:verify -- <path-to-argos.dump> [--restore-to <database>]');
   }
 
-  const service = new PostgresRestoreVerificationService(new ProcessCommandRunner());
+  const service = new PostgresRestoreVerificationService(new ProcessCommandRunner(), env.databasePgRestoreBin);
   const result = await service.verify({ backupPath, restoreDatabase });
   console.log(JSON.stringify(result, null, 2));
 };

@@ -937,6 +937,9 @@ DATABASE_BACKUP_ENABLED=false
 DATABASE_BACKUP_SCHEDULE=0 50 5 * * *
 DATABASE_BACKUP_BASE_PATH=./backups
 DATABASE_BACKUP_TIMEZONE=America/Mexico_City
+DATABASE_PG_DUMP_BIN=pg_dump
+DATABASE_PG_RESTORE_BIN=pg_restore
+DATABASE_PSQL_BIN=psql
 ```
 
 Notas:
@@ -965,6 +968,12 @@ Verificación manual sin restaurar:
 npm run db:backup:verify -- backups/YYYY/MM/DD/argos.dump
 ```
 
+Prueba controlada de Disaster Recovery restaurando en una base temporal y borrándola solo si todo pasa:
+
+```bash
+npm run db:backup:restore-test -- backups/YYYY/MM/DD/argos.dump
+```
+
 Verificación opcional restaurando a una base explícita de prueba:
 
 ```bash
@@ -973,6 +982,8 @@ npm run db:backup:verify -- backups/YYYY/MM/DD/argos.dump --restore-to argos_res
 ```
 
 No existe endpoint de restore. Los restores deben ser una acción humana, deliberada y primero contra una base disposable.
+
+Si ves un error similar a `unrecognized configuration parameter "transaction_timeout"`, normalmente significa que estás usando herramientas PostgreSQL 17 contra un servidor PostgreSQL 16. En local apunta `DATABASE_PG_RESTORE_BIN` —y de preferencia también `DATABASE_PG_DUMP_BIN`/`DATABASE_PSQL_BIN`— a los binarios de la misma versión mayor del servidor.
 
 Cuando ARGOS viva en infraestructura cloud, el almacenamiento de dumps debe moverse fuera del filesystem de la aplicación hacia object storage / bucket / remote durable storage. Todavía no se elige proveedor cloud específico. En una etapa posterior conviene agregar política de retención, cifrado at-rest, lifecycle policy y simulacros periódicos de restore.
 
@@ -1540,6 +1551,9 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `DATABASE_BACKUP_SCHEDULE`             | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                           |
 | `DATABASE_BACKUP_BASE_PATH`            | Directorio base donde se escriben snapshots locales; default `./backups`.                        |
 | `DATABASE_BACKUP_TIMEZONE`             | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                        |
+| `DATABASE_PG_DUMP_BIN`                 | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.                   |
+| `DATABASE_PG_RESTORE_BIN`              | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.          |
+| `DATABASE_PSQL_BIN`                    | Binario de `psql` usado para registrar versión de tooling en el manifest.                        |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                           |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                  |
 | `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                        |

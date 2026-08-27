@@ -237,8 +237,10 @@ describe('PostgresBackupService', () => {
       recovery: { instructionsFile: 'RESTORE.md' },
     });
 
-    expect(instructions).toContain('ARGOS PostgreSQL Recovery');
+    expect(instructions).toContain('Recuperación PostgreSQL de ARGOS');
     expect(instructions).toContain('createdb');
+    expect(instructions).toContain('Verificar checksum primero');
+    expect(instructions).toContain('Restaurar de forma segura primero en una base nueva');
     expect(instructions).toContain('pg_restore');
     expect(instructions).toContain('DROP DATABASE');
   });
