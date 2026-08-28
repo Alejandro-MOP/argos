@@ -692,3 +692,664 @@ La razón es evitar premature optimization y overfitting. La decisión actual es
    - target reachability;
    - transaction costs;
    - risk/reward.
+
+## Tercer Corte Experimental — 2026-08-28
+
+### Objetivo del corte
+
+Realizar el tercer cierre diario de la fase **Research / Evidence Build**, manteniendo sin cambios:
+
+- `strategyVersion = v1`
+- scoring actual;
+- reglas de generación de señales;
+- reglas de Forward Evaluation;
+- horizontes de evaluación;
+- Target Ladder experimental;
+- semántica de `WIN`, `LOSS`, `EXPIRED` y `AMBIGUOUS`.
+
+El objetivo continúa siendo observar el comportamiento de las señales y acumular evidencia antes de modificar la estrategia.
+
+---
+
+### 1. Estado del Forward Evaluator
+
+El cierre diario fue ejecutado correctamente.
+
+Para Evidence:
+
+- pendingSignals: 23
+- evaluated: 20
+- PARTIALLY_RESOLVED: 5
+- OPEN: 15
+- pendingNoFutureCandles: 3
+- providerErrors: 0
+- errors: 0
+
+Las 3 señales sin futuras velas corresponden a señales `NVDA / 1d`.
+
+Esto no se considera por sí mismo un error del evaluator. Una señal puede permanecer pendiente cuando todavía no existen suficientes velas posteriores para continuar su evaluación.
+
+La ausencia de `providerErrors` y `errors` continúa respaldando el correcto funcionamiento operativo del pipeline de Forward Evaluation.
+
+---
+
+### 2. Crecimiento de la muestra
+
+El conjunto analizado por Forward Performance alcanzó:
+
+- N global evaluable: 198
+
+Distribución por score:
+
+| Score Bucket |   N |
+| ------------ | --: |
+| 80-84        |  57 |
+| 85-89        |  52 |
+| 90-94        |  64 |
+| 95-100       |  25 |
+
+Por primera vez varios buckets globales superan N=50.
+
+Esto permite comenzar a observar patrones preliminares con mayor interés, aunque continúa siendo insuficiente para declarar una estrategia estadísticamente validada o rentable.
+
+---
+
+### 3. Score vs comportamiento futuro
+
+Resultados globales:
+
+| Score Bucket |   N | Median MFE | Median MAE | TP1 Win Rate |
+| ------------ | --: | ---------: | ---------: | -----------: |
+| 80-84        |  57 |     +0.88% |     -1.03% |       31.82% |
+| 85-89        |  52 |     +0.52% |     -1.09% |       25.53% |
+| 90-94        |  64 |     +0.73% |     -1.15% |       20.37% |
+| 95-100       |  25 |     +0.31% |     -1.03% |       15.79% |
+
+No aparece por ahora una relación monotónica positiva entre score y comportamiento favorable posterior.
+
+En particular, el bucket `95-100` presenta actualmente:
+
+- menor median MFE global;
+- menor TP1 Win Rate global;
+
+que los buckets inferiores.
+
+Esto NO demuestra que el scoring sea incorrecto.
+
+El score actual puede estar representando principalmente **confluencia técnica en el instante de la señal**, lo cual no necesariamente equivale a mayor magnitud de movimiento favorable futuro.
+
+No se realizará ningún ajuste al scoring durante Evidence Build v1 basándose en estos resultados.
+
+---
+
+### 4. Perfil centinela — STOCK / 1m / 90-94
+
+Estado actual:
+
+- sampleSize: 20
+- resolvedSignalSampleSize: 19
+- dataMaturity: `INSUFFICIENT`
+- median MFE: +0.46%
+- median MAE: -1.02%
+
+Target Ladder:
+
+| Target | Win Rate | Reach Rate |
+| ------ | -------: | ---------: |
+| +0.50% |   52.94% |     45.00% |
+| +0.75% |   47.06% |     40.00% |
+| +1.00% |   33.33% |     26.32% |
+| +1.25% |   28.57% |     21.05% |
+| +1.50% |   28.57% |     21.05% |
+| +2.00% |    7.69% |      5.26% |
+| +3.00% |    0.00% |      0.00% |
+| +5.00% |    0.00% |      0.00% |
+
+Este perfil alcanzó N=20 y entra en una zona donde los patrones pueden comenzar a considerarse preliminares.
+
+Por ahora, los movimientos de +2% o superiores presentan baja frecuencia dentro del horizonte evaluado.
+
+Esto NO implica seleccionar +0.50% como Take Profit.
+
+La viabilidad económica de targets pequeños deberá evaluarse posteriormente incorporando costos de transacción y un Trade Plan definido.
+
+---
+
+### 5. Perfil centinela — STOCK / 5m / 95-100
+
+Estado actual:
+
+- sampleSize: 6
+- resolvedSignalSampleSize: 6
+- CLOSED: 6
+- median MFE: +0.20%
+- median MAE: -1.13%
+- p90 MFE: +0.35%
+
+Resultados:
+
+- +0.50%: 0 WIN / 6 LOSS
+- +0.75%: 0 WIN / 6 LOSS
+- +1.00%: 0 WIN / 6 LOSS
+- +1.25%: 0 WIN / 6 LOSS
+- +1.50%: 0 WIN / 6 LOSS
+- +2.00%: 0 WIN / 6 LOSS
+- +3.00%: 0 WIN / 6 LOSS
+- +5.00%: 0 WIN / 6 LOSS
+
+El comportamiento continúa siendo desfavorable.
+
+Sin embargo:
+
+> N=6 continúa siendo demasiado pequeño para justificar cualquier modificación del motor.
+
+El perfil permanece marcado únicamente como **perfil de observación experimental**.
+
+---
+
+### 6. Perfiles centinela CRYPTO
+
+#### CRYPTO / 5m / 90-94
+
+- N: 11
+- median MFE: +1.09%
+- median MAE: -1.32%
+
+| Target | Reach Rate |
+| ------ | ---------: |
+| +0.50% |     63.64% |
+| +0.75% |     54.55% |
+| +1.00% |     54.55% |
+| +1.25% |     45.45% |
+| +1.50% |     45.45% |
+| +2.00% |     27.27% |
+| +3.00% |     18.18% |
+| +5.00% |     10.00% |
+
+#### CRYPTO / 15m / 90-94
+
+- N: 8
+- median MFE: +1.24%
+- median MAE: -1.18%
+
+| Target | Reach Rate |
+| ------ | ---------: |
+| +0.50% |     62.50% |
+| +0.75% |     62.50% |
+| +1.00% |     50.00% |
+| +1.25% |     50.00% |
+| +1.50% |     50.00% |
+| +2.00% |     37.50% |
+| +3.00% |     25.00% |
+| +5.00% |      0.00% |
+
+Los perfiles CRYPTO continúan mostrando una excursión favorable mayor que varios perfiles STOCK intradía.
+
+Las muestras siguen siendo pequeñas, por lo que esto permanece como hipótesis experimental y no como conclusión.
+
+---
+
+### 7. Global Target Ladder
+
+Forward Performance muestra:
+
+| Target | Wins | Losses | Win Rate |
+| ------ | ---: | -----: | -------: |
+| +0.50% |   97 |     75 |   56.40% |
+| +0.75% |   82 |     91 |   47.40% |
+| +1.00% |   66 |    103 |   39.05% |
+| +1.25% |   54 |    113 |   32.34% |
+| +1.50% |   50 |    114 |   30.49% |
+| +2.00% |   40 |    124 |   24.39% |
+| +3.00% |   30 |    127 |   19.11% |
+| +5.00% |    9 |    129 |    6.52% |
+
+Se mantiene una caída progresiva en la frecuencia de resolución favorable conforme aumenta el target.
+
+Este resultado es descriptivo del universo completo y NO debe utilizarse para seleccionar un Take Profit universal.
+
+El agregado mezcla:
+
+- distintos asset types;
+- distintos timeframes;
+- distintos score buckets;
+- comportamientos de mercado diferentes.
+
+La selección futura de targets debe continuar realizándose a nivel de profile.
+
+---
+
+### 8. Expectancy histórica observada
+
+Forward Performance reporta actualmente:
+
+| Target | Historical Forward Expectancy |
+| ------ | ----------------------------: |
+| +0.50% |                        -0.15% |
+| +0.75% |                        -0.17% |
+| +1.00% |                        -0.22% |
+| +1.25% |                        -0.27% |
+| +1.50% |                        -0.24% |
+| +2.00% |                        -0.27% |
+| +3.00% |                        -0.24% |
+| +5.00% |                        -0.61% |
+
+Todos los targets presentan actualmente expectancy histórica global negativa.
+
+Esto refuerza una distinción fundamental del proyecto:
+
+> ARGOS todavía no representa una estrategia de trading validada.
+
+Actualmente es un sistema de detección de condiciones técnicas y una plataforma de investigación que permite estudiar qué sucede después de una señal.
+
+No se utilizará la expectancy global para optimizar la estrategia durante Evidence Build v1.
+
+---
+
+### 9. Observación sobre STOCK / 1d
+
+El profile:
+
+`STOCK / 1d / 90-94`
+
+presenta:
+
+- N: 9
+- median MFE: +0.56%
+- +0.50%: 7 WIN
+- +0.75%: 0 WIN
+- +1.00% o superior: 0 WIN
+
+Adicionalmente, durante el cierre existían señales `NVDA / 1d` pendientes por ausencia de futuras velas.
+
+No existe evidencia suficiente para clasificar esto como bug.
+
+Sin embargo, antes de utilizar los perfiles `1d` para conclusiones de estrategia deberá revisarse el comportamiento de generación y evaluación de estas señales para confirmar que el horizonte y `evaluationTimeframe` representan correctamente la intención experimental.
+
+---
+
+## Evolución de hipótesis
+
+### H1 — Score vs magnitud favorable
+
+**Estado: se fortalece como hipótesis.**
+
+Mayor score todavía no presenta una relación monotónica positiva con MFE, reach rate o TP1 Win Rate.
+
+No implica todavía que el scoring sea incorrecto.
+
+---
+
+### H2 — STOCK / 5m / 95-100
+
+**Estado: se mantiene.**
+
+Continúa mostrando comportamiento desfavorable:
+
+- N=6
+- median MFE +0.20%
+- median MAE -1.13%
+- ningún target desde +0.50% alcanzó WIN.
+
+La muestra continúa siendo insuficiente.
+
+---
+
+### H3 — Mayor amplitud en CRYPTO
+
+**Estado: se mantiene.**
+
+Los perfiles CRYPTO observados continúan mostrando mayor excursión favorable que varios perfiles STOCK intradía, aunque también pueden presentar mayor MAE.
+
+---
+
+### H4 — MFE no equivale a rentabilidad
+
+**Estado: se mantiene y gana relevancia.**
+
+Una señal puede presentar excursión favorable significativa y aun así no constituir un trade rentable.
+
+Será necesario incorporar posteriormente:
+
+- MAE;
+- stop survival;
+- secuencia temporal;
+- target;
+- costos de transacción;
+- reglas de ejecución.
+
+---
+
+### H5 — Segmentación por profile
+
+**Estado: reforzada.**
+
+Los resultados continúan justificando analizar independientemente:
+
+`assetType + timeframe + scoreBucket + strategyVersion`
+
+No utilizar resultados globales como sustituto del análisis por profile.
+
+---
+
+### H6 — No modificar estrategia durante Evidence Build v1
+
+**Estado: vigente.**
+
+No modificar:
+
+- scoring;
+- thresholds;
+- targets;
+- reglas de señal;
+- horizontes;
+
+basándose en muestras todavía inmaduras.
+
+Los resultados actuales deben generar hipótesis, no optimizaciones.
+
+---
+
+### H7 — Nueva hipótesis: significado predictivo del score
+
+El score podría estar funcionando mejor como una medida de:
+
+> intensidad/confluencia del estado técnico presente
+
+que como una escala ordinal de:
+
+> magnitud o calidad futura esperada del movimiento.
+
+Por lo tanto:
+
+`score 98`
+
+no necesariamente significa:
+
+`mejor expectativa futura que score 82`.
+
+Esta hipótesis deberá evaluarse cuando exista mayor N por bucket y profile.
+
+No modificar el significado ni cálculo del score durante Evidence Build v1.
+
+---
+
+## Conclusión del tercer corte
+
+El tercer corte no justifica cambios en la estrategia.
+
+Sí aporta señales preliminares cada vez más interesantes:
+
+1. el crecimiento de N empieza a hacer visibles patrones por score;
+2. mayor score no está produciendo por ahora mayor excursión favorable;
+3. `STOCK / 5m / 95-100` continúa siendo un profile de vigilancia;
+4. CRYPTO mantiene un comportamiento diferente a STOCK intradía;
+5. targets grandes pierden rápidamente frecuencia de alcance;
+6. la expectancy histórica global continúa negativa;
+7. sigue siendo necesario separar comportamiento de mercado de rentabilidad económica.
+
+La prioridad continúa siendo:
+
+> **acumular evidencia sin modificar Strategy v1.**
+
+Los siguientes cortes deberán evaluar principalmente la persistencia o desaparición de estos patrones conforme aumente N.
+
+## Contexto de Mercado — 2026-08-28
+
+> Esta sección incorpora información externa al dataset de ARGOS con el
+> objetivo de contextualizar el régimen de mercado durante el corte.
+>
+> Las coincidencias entre noticias, eventos macroeconómicos y comportamiento
+> de las señales NO implican causalidad.
+
+### 1. Régimen general del mercado
+
+El mercado estadounidense cerró la semana bajo una combinación de fuerzas
+contrapuestas:
+
+- preocupación por inflación persistente;
+- aumento de rendimientos de Treasury;
+- comentarios restrictivos de la Reserva Federal;
+- elevada volatilidad en semiconductores;
+- digestión de resultados de NVIDIA;
+- debilidad posterior en parte del sector tecnológico;
+- volatilidad significativa en Bitcoin y otros criptoactivos.
+
+El mercado venía además de una sesión del jueves fuertemente impulsada por
+Technology.
+
+El 27-Aug:
+
+- Nasdaq: +1.6%
+- S&P 500: +0.7%
+- XLK / Technology: +3.2%
+- NVIDIA: +8.7%
+
+Technology fue el único sector positivo del S&P 500 durante esa sesión.
+
+Esto representa un contexto importante para las señales generadas/evaluadas
+durante el periodo, ya que parte de la evidencia puede estar capturando la
+continuación o reversión posterior de un movimiento sectorial excepcional.
+
+---
+
+### 2. Technology / Semiconductors
+
+El principal catalizador tecnológico del periodo fueron los resultados y
+guidance de NVIDIA.
+
+NVIDIA reportó resultados superiores a expectativas y presentó una fuerte
+perspectiva de crecimiento, provocando inicialmente una expansión importante
+del sector semiconductor.
+
+Durante la sesión siguiente, 28-Aug, ocurrió una reversión parcial.
+
+El Philadelphia Semiconductor Index llegó a caer más de 3%.
+
+Entre los movimientos reportados:
+
+- NVIDIA: aproximadamente -4%
+- Marvell: aproximadamente -10% después de resultados
+
+Esto produjo un escenario particular:
+
+    fuerte impulso tecnológico
+            ↓
+    expansión de señales / momentum
+            ↓
+    cambio de sentimiento
+            ↓
+    reversión parcial en semiconductores
+
+Este régimen podría ser relevante al interpretar por qué una condición de
+alta confluencia técnica no necesariamente produjo posteriormente una mayor
+MFE.
+
+No se establece causalidad.
+
+---
+
+### 3. Contexto para H1 — Score vs movimiento futuro
+
+ARGOS está observando actualmente que los score buckets superiores no
+presentan una mejora monotónica en MFE:
+
+| Score  | Median MFE |
+| ------ | ---------: |
+| 80-84  |     +0.88% |
+| 85-89  |     +0.52% |
+| 90-94  |     +0.73% |
+| 95-100 |     +0.31% |
+
+El contexto de mercado del periodo introduce una posible explicación que
+deberá investigarse en muestras futuras:
+
+> un score elevado puede detectar una condición técnica muy fuerte después
+> de que una parte importante del movimiento ya ocurrió.
+
+Un evento como el rally tecnológico posterior a earnings de NVIDIA seguido
+por una reversión parcial constituye un ejemplo del tipo de régimen donde
+esta hipótesis podría ser relevante.
+
+Esto NO demuestra que sea la explicación del comportamiento observado.
+
+Se registra únicamente como hipótesis contextual para investigación futura.
+
+---
+
+### 4. Inflación, Treasury y Reserva Federal
+
+El contexto macroeconómico también fue relevante.
+
+La inflación PCE de julio continuó elevada:
+
+- headline PCE: aproximadamente 3.7% YoY
+- core PCE: aproximadamente 3.3% YoY
+
+Al mismo tiempo, el Treasury a 10 años se encontraba aproximadamente alrededor
+de 4.67%-4.69%.
+
+El mercado permaneció especialmente atento al discurso del presidente de la
+Reserva Federal, Kevin Warsh, en Jackson Hole.
+
+Sus comentarios fueron interpretados como restrictivos respecto a inflación y
+política monetaria, aumentando la sensibilidad del mercado a tasas de interés.
+
+Este contexto puede afectar particularmente:
+
+- Technology / Growth;
+- Financial Services;
+- Crypto;
+- activos de mayor duración.
+
+Por lo tanto, el corte debe considerarse realizado dentro de un régimen con
+riesgo macroeconómico elevado y no como una sesión completamente neutral.
+
+---
+
+### 5. Financial Services
+
+Forward Performance muestra actualmente:
+
+- sector: Financial Services
+- N: 24
+- TP1 Win Rate: 7.14%
+
+El sector financiero presentó uno de los resultados más débiles dentro de la
+muestra actual de ARGOS.
+
+Durante el mismo periodo existió elevada sensibilidad alrededor de:
+
+- expectativas de tasas;
+- rendimientos de Treasury;
+- política futura de la Reserva Federal.
+
+Sin embargo, no existe evidencia suficiente para atribuir el bajo rendimiento
+de las señales Financial Services directamente a estos eventos.
+
+Se registra como contexto para comparación con futuros cortes.
+
+Pregunta experimental futura:
+
+> ¿El comportamiento de las señales Financial Services cambia
+> significativamente entre regímenes de tasas crecientes, decrecientes y
+> estables?
+
+---
+
+### 6. Crypto
+
+Crypto también operó bajo elevada volatilidad macroeconómica.
+
+Bitcoin abrió el 28-Aug aproximadamente en:
+
+    $80,262
+
+llegó a superar aproximadamente:
+
+    $81,000
+
+y posteriormente retrocedió.
+
+Después de los comentarios de la Reserva Federal se reportaron precios de
+Bitcoin alrededor de:
+
+    $78,000-$79,000
+
+Ethereum se encontraba aproximadamente alrededor de $2,500.
+
+El periodo coincidió además con varios catalizadores:
+
+- discurso de la Fed;
+- datos económicos;
+- vencimiento importante de opciones de Bitcoin;
+- resultados de NVIDIA;
+- expectativas sobre futuras decisiones de tasas.
+
+Por lo tanto, la mayor amplitud observada por ARGOS en CRYPTO puede estar
+ocurriendo dentro de un régimen de volatilidad elevada.
+
+Esto resulta relevante para H3:
+
+> mayor MFE en CRYPTO puede venir acompañada de mayor MAE y no necesariamente
+> representar una mejor oportunidad ajustada por riesgo.
+
+---
+
+### 7. Nueva hipótesis contextual — H8
+
+**H8 — La efectividad del score puede depender del régimen de mercado.**
+
+El mismo nivel de score podría tener diferente significado dependiendo de si
+el mercado se encuentra en:
+
+- tendencia;
+- expansión posterior a noticias;
+- reversión;
+- alta volatilidad;
+- baja volatilidad;
+- risk-on;
+- risk-off;
+- evento macroeconómico.
+
+Por ejemplo:
+
+    score 95
+    + tendencia estable
+
+podría comportarse de forma diferente a:
+
+    score 95
+    + movimiento explosivo post-earnings
+    + reversión posterior
+
+Actualmente ARGOS no clasifica explícitamente estos regímenes dentro del
+análisis experimental.
+
+No modificar Strategy v1.
+
+Primero acumular evidencia y contexto.
+
+---
+
+### 8. Interpretación del corte dentro del contexto de mercado
+
+El Corte Experimental #3 ocurrió durante una sesión que NO debe considerarse
+un entorno de mercado neutral.
+
+Existieron simultáneamente:
+
+1. resultados corporativos de alto impacto;
+2. movimientos extraordinarios en semiconductores;
+3. preocupación por inflación;
+4. rendimientos elevados de Treasury;
+5. discurso de política monetaria;
+6. volatilidad importante en crypto.
+
+Esto incrementa el valor del corte experimental porque permite comenzar a
+observar ARGOS bajo diferentes condiciones de mercado.
+
+Sin embargo, también obliga a evitar conclusiones causales prematuras.
+
+El objetivo futuro será comparar múltiples cortes y determinar si los patrones
+observados permanecen cuando cambia el régimen de mercado.
