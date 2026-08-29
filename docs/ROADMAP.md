@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.4 — Broker / Transaction Cost Model`
+**Desarrollo siguiente:** `V1.4-B — Cost Application Layer / Research Integration`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -77,7 +77,8 @@ El score representa:
 | V1.1.1 — Market Data Throughput            | Concurrencia controlada y retries seguros               | ✅ Completado                            |
 | V1.2 — Evidence                            | Medir estadísticamente la calidad de los setups         | 🧪 Implementado / recolectando evidencia |
 | V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
-| **V1.4 — Broker / Transaction Cost Model** | Gross vs net executable return, costos y break-even     | 🔥 Siguiente desarrollo                  |
+| **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implementado como core aislado |
+| **V1.4-B — Cost Application Layer** | Integración futura con research/endpoints sin cambiar scoring | 🔥 Siguiente desarrollo |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -821,28 +822,65 @@ sin modificar Strategy Profiles, Evidence, scoring ni evaluadores.
 
 V1.4 debe diseñarse como una capa independiente para estimar costos de ejecución antes de convertir observaciones de mercado en hipótesis operables.
 
-## Primeros product profiles previstos
+## V1.4-A — Transaction Cost Core ✅
+
+Estado: implementado como núcleo puro y aislado.
+
+Lo que ya existe:
+
+- contratos de dominio para costos transaccionales;
+- `TransactionCostCalculator` basado en `decimal.js`;
+- regla `PERCENTAGE_NOTIONAL`;
+- soporte de comisión mínima y máxima opcional;
+- maker/taker independiente para compra y venta;
+- cálculo de buy cost, sell cost, round-trip cost y retorno neto;
+- cálculo de break-even directo para fees porcentuales simples;
+- cálculo de break-even por búsqueda binaria para reglas con mínimo/máximo;
+- catálogo versionado de product profiles iniciales de Bitso.
+
+Perfiles implementados:
 
 1. `BITSO_CRYPTO_MXN`
 2. `BITSO_CRYPTO_USDC`
-3. `GBM_TRADING_USA`
-4. `IBKR_US_STOCKS`
 
-## Conceptos previstos
+Semántica financiera:
 
-- capital;
-- broker;
-- product profile;
-- maker/taker;
-- buy fee;
-- sell fee;
-- fixed minimum commission;
-- FX costs cuando aplique;
-- estimated spread/slippage en una etapa posterior;
-- gross target return;
-- round-trip cost;
-- break-even target;
-- net return.
+```text
+entryNotional = capital asignado al trade antes de costos
+exitNotional = entryNotional * (1 + grossTargetPercent / 100)
+grossProfit = exitNotional - entryNotional
+roundTripCost = buyCost + sellCost
+netProfit = grossProfit - roundTripCost
+netReturnPercent = netProfit / entryNotional * 100
+```
+
+Convención pública:
+
+```text
+0.78 = 0.78%
+1 = 1%
+```
+
+`grossTargetPercent = 0` es válido. Un target menor a cero es inválido.
+
+Supuestos explícitos:
+
+- `spreadIncluded=false`
+- `slippageIncluded=false`
+- funding/deposit/withdrawal/FX costs no incluidos
+
+## V1.4-B — Integración pendiente
+
+Siguiente paso recomendado: construir una capa de aplicación que use el core de costos para enriquecer research, Strategy Profiles o endpoints, sin mezclar comisiones con scoring técnico.
+
+Todavía pendiente:
+
+- integración con Strategy Profiles;
+- endpoint o servicio de consulta;
+- persistencia opcional de escenarios;
+- perfiles GBM/IBKR;
+- spreads/slippage;
+- FX costs cuando aplique.
 
 ## Alcance
 
@@ -1854,8 +1892,8 @@ el objeto que estamos intentando medir.
 
 ---
 
-**Última actualización conceptual:** 2026-08-27
+**Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.4 — Broker / Transaction Cost Model`
+**Desarrollo siguiente:** `V1.4-B — Cost Application Layer / Research Integration`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

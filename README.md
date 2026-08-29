@@ -20,6 +20,8 @@ No automatic broker execution.
 
 ARGOS es hoy un motor cuantitativo experimental que observa el mercado, detecta configuraciones técnicas, registra lo que observó, mide posteriormente qué ocurrió y construye evidencia para investigación. Sólo después de suficiente validación podrían diseñarse estrategias candidatas, incorporar costos reales y pasar a paper trading.
 
+V1.4-A agrega el primer núcleo puro de costos transaccionales. Todavía no cambia decisiones del motor ni endpoints; sirve para responder, de forma aislada, si un target bruto tendría sentido después de comisiones maker/taker.
+
 ## ARGOS Engine
 
 ARGOS Engine es el núcleo analítico de ARGOS: el componente encargado de normalizar datos de mercado, ejecutar analyzers técnicos, calcular el score y decidir si un setup se conserva como Evidence, Opportunity o Signal.
@@ -58,6 +60,7 @@ flowchart TD
 - TypeScript
 - Azure Functions v4
 - PostgreSQL preparado por contrato
+- Decimal.js para cálculos financieros deterministas
 - Axios
 - dotenv
 - Jest
@@ -91,6 +94,7 @@ src/
     Opportunity.ts
     Signal.ts
     SignalCandidate.ts
+    TransactionCost.ts
   ports/
     Analyzer.ts
     MarketDataProvider.ts
@@ -101,6 +105,9 @@ src/
   repositories/
     OpportunityMemoryRepository.ts
     SignalRepository.ts
+  transactionCosts/
+    BrokerProductProfileCatalog.ts
+    TransactionCostCalculator.ts
   services/
     MarketDataService.ts
     NotificationService.ts
@@ -158,6 +165,67 @@ Pasos de `marketScan`:
 7. Convierte oportunidades válidas en un plan de riesgo con `RiskService`.
 8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE`, la agrega a `notifiedSignals` y puede notificar Telegram.
 9. Persiste oportunidad y señal en memoria cuando corresponde.
+
+
+## V1.4-A — Transaction Cost Core
+
+La primera pieza del modelo de costos vive desacoplada del pipeline principal. No usa PostgreSQL, no expone endpoint y no modifica Evidence, Strategy Profiles ni las reglas de scoring.
+
+Componentes:
+
+- `TransactionCostCalculator`: calculadora pura basada en `decimal.js`.
+- `BrokerProductProfileCatalog`: catálogo versionado de perfiles broker/producto.
+- `TransactionCost.ts`: contratos públicos para inputs, schedules y resultados.
+
+Convención de porcentajes:
+
+```text
+0.78 = 0.78%
+1 = 1%
+```
+
+Semántica del capital:
+
+```text
+entryNotional = capital asignado a la entrada antes de costos
+buyCost = comisión estimada de compra
+totalCashRequired = entryNotional + buyCost
+```
+
+Ejemplo conceptual:
+
+```text
+entryNotional=5000
+buyCost=39
+totalCashRequired=5039
+```
+
+El resultado diferencia:
+
+- `grossExitValue` / `exitNotional`: valor bruto de salida.
+- `grossProfit`: ganancia bruta antes de comisiones.
+- `buyCost` y `sellCost`: costos por lado de ejecución.
+- `roundTripCost`: costo total de entrada + salida.
+- `netProfit`: ganancia después de comisiones.
+- `netReturnPercent`: retorno neto sobre `entryNotional`.
+- `breakEvenGrossTargetPercent`: target bruto mínimo para cubrir comisiones.
+- `grossTargetBelowBreakEven`: indica si el target bruto no alcanza a pagar el round trip.
+
+Alcance actual:
+
+- Implementa `PERCENTAGE_NOTIONAL`.
+- Soporta maker/taker independiente para compra y venta.
+- Soporta comisión mínima y máxima opcional.
+- `grossTargetPercent = 0` es válido.
+- `grossTargetPercent < 0` es inválido.
+- No incluye spread, slippage, funding, retiros ni FX.
+
+Perfiles iniciales:
+
+- `BITSO_CRYPTO_MXN`: tier base maker `0.600%`, taker `0.780%`.
+- `BITSO_CRYPTO_USDC`: tier base maker `0.300%`, taker `0.360%`.
+
+Estos valores están encapsulados como schedules versionados y deben re-verificarse antes de usarse para decisiones reales.
 
 ## Azure Functions
 
