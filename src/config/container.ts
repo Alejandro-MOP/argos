@@ -13,6 +13,7 @@ import {
 } from '../performance/PerformanceProviders';
 import { PostgresForwardPerformanceProvider } from '../performance/PostgresForwardPerformanceProvider';
 import { PostgresStrategyProfileProvider } from '../research/PostgresStrategyProfileProvider';
+import { PostgresResearchSnapshotProvider } from '../research/PostgresResearchSnapshotProvider';
 import { createRepositories } from './repositories';
 import { buildEnvRuntimeConfig, env } from './env';
 import { EngineConfigService } from '../services/EngineConfigService';
@@ -28,6 +29,7 @@ import { OpportunityService } from '../services/OpportunityService';
 import { RankingService } from '../services/RankingService';
 import { RiskService } from '../services/RiskService';
 import { PostgresBackupService } from '../services/PostgresBackupService';
+import { ResearchSnapshotService } from '../services/ResearchSnapshotService';
 import { SignalContextService } from '../services/SignalContextService';
 import { WatchlistService } from '../services/WatchlistService';
 
@@ -61,6 +63,22 @@ const forwardPerformanceReportProvider = database
 const strategyProfileProvider = database
   ? new PostgresStrategyProfileProvider(database)
   : undefined;
+const researchSnapshotProvider = database
+  ? new PostgresResearchSnapshotProvider(database)
+  : undefined;
+const researchSnapshotService =
+  researchSnapshotProvider && strategyProfileProvider && forwardPerformanceReportProvider
+    ? new ResearchSnapshotService(
+        researchSnapshotProvider,
+        strategyProfileProvider,
+        forwardPerformanceReportProvider,
+        {
+          timeZone: env.databaseBackupTimezone,
+          strategyVersion: fallbackRuntimeConfig.strategyVersion,
+          operationalThreshold: fallbackRuntimeConfig.scoring.opportunityMinScore,
+        },
+      )
+    : undefined;
 
 export const postgresBackupService = database
   ? new PostgresBackupService(database, new ProcessCommandRunner(), {
@@ -181,4 +199,4 @@ export const marketScanExecutor = new MarketScanExecutor({
   defaultTimeframes: env.marketScanTimeframes,
 });
 
-export { forwardPerformanceReportProvider, strategyProfileProvider };
+export { forwardPerformanceReportProvider, strategyProfileProvider, researchSnapshotService };

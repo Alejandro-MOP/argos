@@ -806,6 +806,48 @@ V1.3 es read-only sobre Evidence:
 
 ---
 
+# 8.6 Research Snapshot ✅
+
+## Objetivo
+
+Reducir el corte experimental diario manual a un solo endpoint read-only:
+
+```text
+GET /api/research-snapshot
+```
+
+## Alcance implementado
+
+El snapshot consolida en un JSON autocontenido:
+
+- metadata del corte en timezone de investigación;
+- data quality de Evidence vs Evaluations;
+- Evidence summary por score bucket;
+- oportunidades operacionales usando `OPPORTUNITY_MIN_SCORE`;
+- distribución de estados de evaluación;
+- profile sample sizes;
+- Global Target Ladder;
+- MFE / MAE by profile;
+- Strategy Profiles reutilizando `PostgresStrategyProfileProvider`;
+- watch profiles derivados desde Strategy Profiles;
+- Forward Performance reutilizando `PostgresForwardPerformanceProvider`.
+
+## Principio de seguridad
+
+El endpoint no interpreta resultados y no tiene side effects:
+
+- no ejecuta Market Scan;
+- no ejecuta evaluadores;
+- no crea Evidence;
+- no modifica Strategy Profiles;
+- no escribe archivos;
+- no crea migrations;
+- no busca noticias.
+
+La interpretación experimental se mantiene fuera de ARGOS.
+
+---
+
 # 9. V1.4 — Broker / Transaction Cost Model 🔥
 
 ## Objetivo

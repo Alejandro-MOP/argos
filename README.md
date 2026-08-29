@@ -232,15 +232,64 @@ Estos valores están encapsulados como schedules versionados y deben re-verifica
 El proyecto expone entradas independientes para producción, pruebas manuales y backtesting:
 
 ```text
-marketScan      -> Timer Trigger / cron para escaneo automático
-marketScanHttp  -> HTTP Trigger manual o webhook
-backtest        -> HTTP Trigger para simulación histórica
-telegramTest    -> HTTP Trigger de prueba de Telegram
+marketScan          -> Timer Trigger / cron para escaneo automático
+marketScanHttp      -> HTTP Trigger manual o webhook
+backtest            -> HTTP Trigger para simulación histórica
+forwardPerformance -> HTTP Trigger para métricas agregadas de Evidence
+strategyProfiles   -> HTTP Trigger para Strategy Profile Research
+researchSnapshot   -> HTTP Trigger read-only para corte diario de Research
+telegramTest       -> HTTP Trigger de prueba de Telegram
 ```
 
 `marketScan` y `marketScanHttp` usan `MarketScanExecutor`, así que el pipeline cuantitativo vivo
 vive en un solo lugar. `backtest` usa `BacktestEngine`, pero reutiliza los mismos analyzers,
 `OpportunityService` y `RiskService` para evitar reglas paralelas.
+
+### Research Snapshot
+
+`GET /api/research-snapshot` entrega un único JSON autocontenido para el corte experimental diario.
+
+Este endpoint es estrictamente read-only:
+
+- no ejecuta Market Scan;
+- no ejecuta Forward/Evidence Evaluation;
+- no crea Evidence Signals;
+- no modifica Strategy Profiles;
+- no escribe archivos;
+- no crea tablas ni migrations;
+- no interpreta si una estrategia es buena o mala.
+
+El flujo recomendado es:
+
+```text
+Ejecutar evaluator existente
+  ↓
+Esperar a que termine
+  ↓
+GET /api/research-snapshot
+  ↓
+Guardar un solo JSON para análisis externo
+```
+
+Incluye:
+
+- metadata del snapshot con fecha en `America/Mexico_City`;
+- data quality (`evidenceCount`, `evaluationCount`, Evidence sin evaluación y Evidence con MFE/MAE);
+- resumen de Evidence por score bucket;
+- oportunidades operacionales usando `OPPORTUNITY_MIN_SCORE`;
+- distribución de estados de evaluación;
+- sample sizes por `assetType + timeframe + scoreBucket + strategyVersion`;
+- Target Ladder global preservando la semántica actual de win rate;
+- MFE/MAE por profile;
+- Strategy Profiles reutilizando el mismo provider de `/api/strategy-profiles`;
+- watch profiles derivados en memoria;
+- Forward Performance reutilizando el provider de `/api/forward-performance`.
+
+Ejemplo local:
+
+```bash
+curl http://localhost:7071/api/research-snapshot
+```
 
 ### Cron
 
