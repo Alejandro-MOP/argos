@@ -112,6 +112,25 @@ const parseBoolean = (value: string | undefined, fallback: boolean): boolean => 
   return value.trim().toLowerCase() === 'true';
 };
 
+const parseOptionalBoolean = (value: string | undefined): boolean | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  return value.trim().toLowerCase() === 'true';
+};
+
+export const parseTelegramAllowedUserIds = (value: string | undefined): string[] => {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(',')
+    .map((userId) => userId.trim())
+    .filter((userId) => userId.length > 0 && /^\d+$/.test(userId));
+};
+
 const parseTickers = (value: string | undefined): string[] => {
   const rawTickers = value ?? 'SPY,QQQ,AAPL,MSFT,NVDA';
 
@@ -172,11 +191,25 @@ export const buildEnvRuntimeConfig = (values: NodeJS.ProcessEnv = process.env): 
 
 const runtimeConfig = buildEnvRuntimeConfig();
 
+const telegramAlertsBotToken = process.env.TELEGRAM_ALERTS_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
+const telegramAlertsChatId = process.env.TELEGRAM_ALERTS_CHAT_ID ?? process.env.TELEGRAM_CHAT_ID ?? '';
+const telegramAlertsEnabled =
+  parseOptionalBoolean(process.env.TELEGRAM_ALERTS_ENABLED) ??
+  parseBoolean(process.env.TELEGRAM_ENABLED, true);
+
 export const env = {
   databaseUrl: process.env.DATABASE_URL ?? '',
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
-  telegramChatId: process.env.TELEGRAM_CHAT_ID ?? '',
-  telegramEnabled: parseBoolean(process.env.TELEGRAM_ENABLED, true),
+  telegramBotToken: telegramAlertsBotToken,
+  telegramChatId: telegramAlertsChatId,
+  telegramEnabled: telegramAlertsEnabled,
+  telegramAlertsBotToken,
+  telegramAlertsChatId,
+  telegramAlertsEnabled,
+  telegramControlBotToken: process.env.TELEGRAM_CONTROL_BOT_TOKEN ?? '',
+  telegramControlEnabled: parseBoolean(process.env.TELEGRAM_CONTROL_ENABLED, false),
+  telegramControlAllowedUserIds: parseTelegramAllowedUserIds(
+    process.env.TELEGRAM_CONTROL_ALLOWED_USER_IDS,
+  ),
   marketScanSchedule: process.env.MARKET_SCAN_SCHEDULE ?? '0 */15 14-21 * * 1-5',
   forwardSignalEvaluationSchedule:
     process.env.FORWARD_SIGNAL_EVALUATION_SCHEDULE ?? '0 0 * * * *',

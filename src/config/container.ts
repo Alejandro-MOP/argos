@@ -32,6 +32,10 @@ import { RiskService } from '../services/RiskService';
 import { PostgresBackupService } from '../services/PostgresBackupService';
 import { ResearchSnapshotService } from '../services/ResearchSnapshotService';
 import { TransactionCostService } from '../services/TransactionCostService';
+import { TelegramAuthorizationService } from '../services/TelegramAuthorizationService';
+import { TelegramCommandRouter } from '../services/TelegramCommandRouter';
+import { TelegramConversationStateService } from '../services/TelegramConversationStateService';
+import { TelegramControlPresenter } from '../services/TelegramControlPresenter';
 import { SignalContextService } from '../services/SignalContextService';
 import { WatchlistService } from '../services/WatchlistService';
 
@@ -41,9 +45,19 @@ const transactionCostService = new TransactionCostService(transactionCostCalcula
 const marketDataProvider = new YahooFinanceClient(undefined, env.marketScanDebug);
 const marketDataService = new MarketDataService(marketDataProvider);
 const telegramClient = new TelegramClient(
-  env.telegramBotToken,
-  env.telegramChatId,
-  env.telegramEnabled,
+  env.telegramAlertsBotToken,
+  env.telegramAlertsChatId,
+  env.telegramAlertsEnabled,
+);
+const telegramControlAuthorizationService = new TelegramAuthorizationService(
+  env.telegramControlAllowedUserIds,
+);
+const telegramConversationStateService = new TelegramConversationStateService();
+const telegramControlPresenter = new TelegramControlPresenter();
+const telegramCommandRouter = new TelegramCommandRouter(
+  telegramControlAuthorizationService,
+  telegramControlPresenter,
+  telegramConversationStateService,
 );
 const {
   opportunityRepository,
@@ -204,4 +218,13 @@ export const marketScanExecutor = new MarketScanExecutor({
   defaultTimeframes: env.marketScanTimeframes,
 });
 
-export { forwardPerformanceReportProvider, strategyProfileProvider, researchSnapshotService, transactionCostService };
+export {
+  forwardPerformanceReportProvider,
+  strategyProfileProvider,
+  researchSnapshotService,
+  transactionCostService,
+  telegramControlAuthorizationService,
+  telegramConversationStateService,
+  telegramControlPresenter,
+  telegramCommandRouter,
+};

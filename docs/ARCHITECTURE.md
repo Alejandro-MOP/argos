@@ -48,7 +48,8 @@ flowchart TD
 
   J[Supporting Services] --> K[Backtest]
   J --> L[Database Backup]
-  J --> M[Telegram]
+  J --> M[Telegram Alerts]
+  J --> N[ARGOS Control Core<br/>Implemented, transport pending]
 ```
 
 ## Data Flow actual
@@ -356,9 +357,9 @@ dailyDatabaseBackup timerTrigger
 
 Su objetivo es proteger la información de PostgreSQL, no analizar mercado.
 
-### Telegram
+### Telegram Alerts + Control Core
 
-Function:
+Function actual de alertas/prueba:
 
 ```text
 GET,POST /api/telegram-test
@@ -366,7 +367,142 @@ GET,POST /api/telegram-test
 
 `telegramTest` envía un mensaje de prueba usando `NotificationService`.
 
-Telegram en ARGOS es un canal de comunicación/notificación. No ejecuta operaciones, no compra y no vende activos.
+Telegram en ARGOS está separado conceptualmente en:
+
+- **Alerts Channel**: operativo; envía notificaciones automáticas mediante `NotificationService` y `TelegramClient`.
+- **Control Core**: implementado y validado internamente; todavía no tiene transporte Telegram real.
+
+```text
+                         ARGOS
+                           |
+              +------------+------------+
+              |                         |
+              v                         v
+        ALERTS CHANNEL             CONTROL CORE
+              |                         |
+    NotificationService        Authorization
+              |                         |
+      TelegramClient           Command Router
+              |                         |
+        Telegram API              Presenter
+                                        |
+                              Conversation State
+                                        |
+                                        X
+                              Telegram Transport
+                              NOT IMPLEMENTED YET
+```
+
+Control Core actual:
+
+```text
+TelegramControlUpdate
+        ↓
+Authorization
+        ↓
+Command Router
+        ↓
+Presenter
+        ↓
+ControlResponse
+```
+
+Este flujo puede probarse internamente mediante unit tests. Todavía no recibe Telegram Updates reales.
+
+Componentes reales de V1.5-A:
+
+- `TelegramControl` models: update interno, response e inline keyboard models.
+- `TelegramAuthorizationService`: autorización por Telegram `user_id`.
+- `TelegramCommandRouter`: enruta comandos y callbacks.
+- `TelegramControlPresenter`: construye textos, menús, errores y placeholders.
+- `TelegramConversationStateService`: estado en memoria con TTL de 15 minutos.
+
+Telegram es una interfaz, no una capa de lógica de negocio. La arquitectura objetivo es:
+
+```text
+Telegram
+   ↓
+Command Router
+   ↓
+ARGOS Application Services
+```
+
+Ejemplo futuro correcto:
+
+```text
+TelegramCommandRouter
+        ↓
+TransactionCostService
+        ↓
+TransactionCostCalculator
+```
+
+No se deben duplicar fórmulas de costos, scoring, Evidence, Forward Evaluation ni Strategy Profiles dentro de Telegram. Las integraciones reales con servicios de ARGOS siguen pendientes.
+
+#### Callback routing
+
+Convención:
+
+```text
+argos:v1:<domain>:<action>
+```
+
+Ejemplos:
+
+```text
+argos:v1:research:snapshot
+argos:v1:market:scan
+argos:v1:costs:bitso_mxn
+argos:v1:system:status
+```
+
+- **Inline Keyboard**: botones mostrados dentro de un mensaje de Telegram.
+- **callback_data**: identificador pequeño asociado al botón; no debe contener secretos, JSON grande ni estado sensible.
+- **Callback Query**: evento que Telegram produce cuando el usuario presiona un botón.
+
+En V1.5-A el routing interno existe, pero Telegram todavía no envía esos callbacks al sistema porque el transporte no está implementado.
+
+#### Authorization
+
+Control Bot authorization is based on Telegram `user_id`.
+
+- `user_id`: identifica una cuenta/usuario de Telegram.
+- `chat_id`: identifica una conversación/chat.
+
+ARGOS Control utiliza `user_id` para decidir quién puede ejecutar comandos. No se deben documentar IDs reales ni tokens.
+
+#### Conversation state
+
+El estado conversacional actual es en memoria, aislado por `user_id`, con TTL default de 15 minutos. Se usa para preparar interacciones multi-step futuras. No usa PostgreSQL y se pierde al reiniciar el proceso; esto es intencional en V1.5-A. Persistencia podría reconsiderarse para flujos futuros como Trade Companion.
+
+#### Long Polling vs Webhook
+
+Decisión arquitectónica registrada para próximas etapas:
+
+- **Local**: Long Polling Worker. ARGOS consultará periódicamente a Telegram buscando nuevos updates.
+- **Cloud futuro**: Webhook. Telegram llamará a una URL pública de ARGOS cuando exista un update.
+
+Long Polling no debe ejecutarse como loop infinito dentro de una Azure Function. La implementación real será V1.5-B.
+
+#### Future Trade Companion
+
+Futuro, no implementado en V1.5-A:
+
+```text
+signal
+  ↓
+manual user execution
+  ↓
+user confirms trade
+  ↓
+Active Trade
+  ↓
+monitoring
+  ↓
+TP / Stop Loss notifications
+```
+
+No existe schema, `ActiveTradeService` ni broker execution para esto.
 
 ## Function Map
 
@@ -444,7 +580,8 @@ Los endpoints HTTP permiten inspección, pruebas y ejecución bajo demanda cuand
 | Transaction Cost Model | Interpreta costos económicos de convertir un movimiento en operación. |
 | Backtest | Estudia comportamiento histórico. |
 | Database Backup | Protege información persistida. |
-| Telegram | Comunica alertas o mensajes de prueba. |
+| Telegram Alerts | Comunica alertas o mensajes de prueba. |
+| ARGOS Control Core | Prepara autorización, routing, presenter y estado para una futura interfaz Telegram interactiva. |
 
 ## What ARGOS Is Not
 
@@ -475,4 +612,4 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. La integración con Research Snapshot, Strategy Profiles o decisiones del motor queda fuera de este alcance.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core para una futura interfaz Telegram interactiva, pero el transporte real y las integraciones con Research Snapshot, Strategy Profiles, Transaction Costs o Market Scan todavía no están implementadas.

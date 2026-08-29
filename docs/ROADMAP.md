@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `Portfolio Risk & Exposure Manager`
+**Desarrollo siguiente:** `V1.5-B — Control Transport`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -79,6 +79,9 @@ El score representa:
 | V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
 | **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implemented & Functionally Validated |
 | **V1.4-B — Cost Application Layer** | Servicio de aplicación y endpoint HTTP read-only para evaluar costos | ✅ Implemented & Functionally Validated |
+| **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | 🚧 In Progress |
+| **V1.5-A — Control Core** | Configuración dual, autorización, router, presenter y estado en memoria | ✅ Completed & Validated |
+| **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | 🔥 Next / Not Implemented |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1047,7 +1050,83 @@ V1.4 queda marcada como **COMPLETED** para el alcance aprobado: core puro de cos
 
 ---
 
-# 10. Backlog futuro — Portfolio Risk & Exposure Manager
+# 10. V1.5 — ARGOS Control Interface 🚧
+
+V1.5 busca separar Telegram en dos responsabilidades:
+
+- **ARGOS Alerts Bot**: notificaciones automáticas generadas por ARGOS; flujo principalmente ARGOS → usuario.
+- **ARGOS Control Bot**: futura interfaz privada para consultas y acciones iniciadas por el usuario; flujo usuario ↔ ARGOS.
+
+La separación evita mezclar alertas automáticas con requests interactivos de control o análisis manual.
+
+## V1.5-A — Control Core ✅
+
+Status: **COMPLETED & VALIDATED**.
+
+Implementado:
+
+- configuración dual Alerts/Control con backward compatibility para variables legacy;
+- modelos internos `TelegramControlUpdate`, `ControlResponse` e inline keyboards;
+- `TelegramAuthorizationService` basado en Telegram `user_id`;
+- `TelegramCommandRouter` para comandos y callbacks;
+- `TelegramControlPresenter` para textos, menús y placeholders;
+- `TelegramConversationStateService` en memoria con TTL de 15 minutos;
+- tests de autorización, routing, presenter, estado y regresión del Alerts Bot.
+
+V1.5-A **no** incluye transporte real. El Control Bot todavía no recibe comandos desde Telegram.
+
+No implementado todavía:
+
+- `TelegramControlClient`;
+- Telegram Bot API para Control;
+- `getUpdates`;
+- Long Polling;
+- Telegram Control Worker;
+- Webhook;
+- mapping de raw Telegram Update a `TelegramControlUpdate`;
+- envío real de `ControlResponse` como mensaje Telegram;
+- integración real con Transaction Costs, Research Snapshot, Strategy Profiles, Forward Performance o Market Scan.
+
+## V1.5-B — Control Transport 🔥
+
+Status: **NEXT / NOT IMPLEMENTED**.
+
+Alcance conceptual:
+
+- `TelegramControlClient`;
+- Telegram Bot API;
+- `getUpdates`;
+- Long Polling local;
+- Telegram Control Worker local;
+- offset management;
+- graceful shutdown;
+- conversión raw Telegram Update → `TelegramControlUpdate`;
+- conversión `ControlResponse` → mensaje/inline keyboard real;
+- validación manual real desde Telegram.
+
+Arquitectura local planeada:
+
+```text
+Azure Functions local
++
+Telegram Control Worker local
+```
+
+Long Polling no debe ejecutarse como loop infinito dentro de una Azure Function. En cloud, la alternativa futura natural será:
+
+```text
+Telegram Webhook
+  ↓
+HTTP Function
+  ↓
+TelegramCommandRouter
+```
+
+Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B.
+
+---
+
+# 11. Backlog futuro — Portfolio Risk & Exposure Manager
 
 ## Objetivo
 
@@ -1115,7 +1194,7 @@ Pero desde riesgo pueden compartir una misma fuente de exposición.
 
 ---
 
-# 10.1. Exposure Manager
+# 11.1. Exposure Manager
 
 ## Backlog
 
@@ -2053,6 +2132,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `Portfolio Risk & Exposure Manager`
+**Desarrollo siguiente:** `V1.5-B — Control Transport`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

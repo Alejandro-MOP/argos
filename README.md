@@ -22,6 +22,8 @@ ARGOS es hoy un motor cuantitativo experimental que observa el mercado, detecta 
 
 V1.4-A agrega el primer núcleo puro de costos transaccionales. V1.4-B expone ese cálculo mediante un endpoint HTTP read-only. Ninguna de estas piezas cambia decisiones del motor, scoring, Evidence ni Telegram; sirven para responder, de forma aislada, si un target bruto tendría sentido después de comisiones maker/taker.
 
+V1.5 inicia la evolución de Telegram desde un canal únicamente de salida hacia una interfaz separada en dos responsabilidades: Alerts Bot para notificaciones automáticas y Control Bot para una futura interacción usuario ↔ ARGOS. Actualmente sólo está implementado y validado **V1.5-A — Control Core**: modelos internos, autorización, routing, presenter, inline keyboard response models y estado conversacional en memoria. El transporte real del Control Bot todavía no existe; ARGOS aún no puede recibir comandos reales desde Telegram.
+
 ## ARGOS Engine
 
 ARGOS Engine es el núcleo analítico de ARGOS: el componente encargado de normalizar datos de mercado, ejecutar analyzers técnicos, calcular el score y decidir si un setup se conserva como Evidence, Opportunity o Signal.
@@ -50,8 +52,9 @@ flowchart TD
   A --> E[Performance Research<br/>Implemented]
   A --> F[Notifications<br/>Implemented]
   A --> G[Data Protection<br/>Implemented]
-  A --> H[Broker / Cost Model<br/>Next]
-  A --> I[Product Platform<br/>Future]
+  A --> H[Broker / Cost Model<br/>Implemented]
+  A --> I[ARGOS Control Core<br/>Implemented]
+  A --> J[Product Platform<br/>Future]
 ```
 
 ## Stack
@@ -94,6 +97,7 @@ src/
     Opportunity.ts
     Signal.ts
     SignalCandidate.ts
+    TelegramControl.ts
     TransactionCost.ts
   ports/
     Analyzer.ts
@@ -111,6 +115,10 @@ src/
   services/
     MarketDataService.ts
     NotificationService.ts
+    TelegramAuthorizationService.ts
+    TelegramCommandRouter.ts
+    TelegramControlPresenter.ts
+    TelegramConversationStateService.ts
     OpportunityFilter.ts
     OpportunityService.ts
     RankingService.ts
@@ -1470,9 +1478,14 @@ Historical performance does not guarantee future results.
 
 ## Telegram
 
-`NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Si `TELEGRAM_ENABLED=true`
-y existen `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`, envía el mensaje real por Telegram.
-Si falta configuración o Telegram responde con error, el escaneo no falla y el mensaje se escribe en consola.
+Telegram está separado en dos responsabilidades conceptuales:
+
+- **ARGOS Alerts Bot**: canal operativo actual para notificaciones automáticas. Flujo principalmente ARGOS → usuario.
+- **ARGOS Control Bot**: futura interfaz interactiva privada. Flujo usuario ↔ ARGOS.
+
+El Alerts Bot sigue siendo el único bot operativo contra Telegram Bot API. `NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Si el Alerts Bot está habilitado y configurado, envía el mensaje real por Telegram. Si falta configuración o Telegram responde con error, el escaneo no falla y el mensaje se escribe en consola.
+
+V1.5-A implementa únicamente el **Control Core**: modelos internos, autorización por `user_id`, command/callback routing, presenter, inline keyboard response models y estado conversacional en memoria. Todavía no existe transporte real para Control Bot: no hay `getUpdates`, no hay Long Polling Worker, no hay Webhook y Telegram todavía no envía callbacks reales al sistema.
 
 Cuando recibe ambas entidades, envía un formato enriquecido:
 
@@ -1533,7 +1546,7 @@ Pendiente de recopilar señales reales
 1. Abre Telegram y busca `@BotFather`.
 2. Envía `/newbot`.
 3. Sigue las instrucciones y copia el token entregado.
-4. Configura el token como `TELEGRAM_BOT_TOKEN`.
+4. Configura el token como `TELEGRAM_ALERTS_BOT_TOKEN` o, por compatibilidad legacy, `TELEGRAM_BOT_TOKEN`.
 
 ### Obtener Chat ID
 
@@ -1541,10 +1554,10 @@ Pendiente de recopilar señales reales
 2. Abre en el navegador:
 
 ```text
-https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates
+https://api.telegram.org/bot<TELEGRAM_ALERTS_BOT_TOKEN>/getUpdates
 ```
 
-3. Busca `chat.id` en la respuesta y configúralo como `TELEGRAM_CHAT_ID`.
+3. Busca `chat.id` en la respuesta y configúralo como `TELEGRAM_ALERTS_CHAT_ID` o, por compatibilidad legacy, `TELEGRAM_CHAT_ID`.
 4. No compartas ni subas el token; `local.settings.json` está ignorado por git.
 
 ### Configuración Telegram
@@ -1552,12 +1565,19 @@ https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates
 ```json
 {
   "Values": {
-    "TELEGRAM_ENABLED": "true",
-    "TELEGRAM_BOT_TOKEN": "123456:token",
-    "TELEGRAM_CHAT_ID": "123456789"
+    "TELEGRAM_ALERTS_ENABLED": "true",
+    "TELEGRAM_ALERTS_BOT_TOKEN": "<alerts-bot-token>",
+    "TELEGRAM_ALERTS_CHAT_ID": "<alerts-chat-id>",
+    "TELEGRAM_CONTROL_ENABLED": "false",
+    "TELEGRAM_CONTROL_BOT_TOKEN": "",
+    "TELEGRAM_CONTROL_ALLOWED_USER_IDS": ""
   }
 }
 ```
+
+Compatibilidad: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `TELEGRAM_ENABLED` siguen funcionando como fallback del Alerts Bot. Las variables `TELEGRAM_ALERTS_*` tienen precedencia si existen. `TELEGRAM_NOTIFICATION_MIN_SCORE` conserva su comportamiento: define el score mínimo para entrar a `notifiedSignals` y enviar Telegram cuando `notify=true`.
+
+Para el futuro Control Bot, la autorización será por `user_id` de Telegram: identifica la cuenta del usuario. `chat_id` identifica una conversación/chat y se usa actualmente para enviar alertas, pero no debe ser la única base de autorización del Control Bot.
 
 ### Probar Telegram
 
@@ -1841,7 +1861,13 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `DATABASE_PSQL_BIN`                    | Binario de `psql` usado para registrar versión de tooling en el manifest.                                 |
 | `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                                    |
 | `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                           |
-| `TELEGRAM_ENABLED`                     | Activa/desactiva envío real por Telegram; si está apagado, cae a consola.                                 |
+| `TELEGRAM_ENABLED`                     | Legacy fallback para activar/desactivar Alerts Bot si `TELEGRAM_ALERTS_ENABLED` no existe.                |
+| `TELEGRAM_ALERTS_BOT_TOKEN`            | Token explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_BOT_TOKEN`.                             |
+| `TELEGRAM_ALERTS_CHAT_ID`              | Chat destino explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_CHAT_ID`.                        |
+| `TELEGRAM_ALERTS_ENABLED`              | Activa/desactiva explícitamente el Alerts Bot; tiene precedencia sobre `TELEGRAM_ENABLED`.                |
+| `TELEGRAM_CONTROL_BOT_TOKEN`           | Token reservado para el futuro Control Bot. En V1.5-A aún no se usa para llamadas reales a Telegram.      |
+| `TELEGRAM_CONTROL_ENABLED`             | Habilita/deshabilita conceptualmente Control Bot; default `false`. V1.5-A no implementa transporte real.  |
+| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`    | Lista CSV de `user_id` autorizados para el futuro Control Bot. No incluir IDs reales en documentación.    |
 | `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                                      |
 | `MARKET_SCAN_TIMEFRAMES`               | Lista CSV de temporalidades para el scan vivo; si no existe, se usa `MARKET_SCAN_TIMEFRAME`.              |
 | `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.                      |
