@@ -6,6 +6,7 @@ import { BacktestEngine } from '../backtesting/BacktestEngine';
 import { ProcessCommandRunner } from '../adapters/CommandRunner';
 import { TelegramClient } from '../clients/TelegramClient';
 import { YahooFinanceClient } from '../clients/YahooFinanceClient';
+import { TransactionCostCalculator } from '../transactionCosts/TransactionCostCalculator';
 import type { EngineRuntimeConfig } from '../models/EngineConfig';
 import {
   BacktestHistoricalPerformanceProvider,
@@ -30,8 +31,12 @@ import { RankingService } from '../services/RankingService';
 import { RiskService } from '../services/RiskService';
 import { PostgresBackupService } from '../services/PostgresBackupService';
 import { ResearchSnapshotService } from '../services/ResearchSnapshotService';
+import { TransactionCostService } from '../services/TransactionCostService';
 import { SignalContextService } from '../services/SignalContextService';
 import { WatchlistService } from '../services/WatchlistService';
+
+const transactionCostCalculator = new TransactionCostCalculator();
+const transactionCostService = new TransactionCostService(transactionCostCalculator);
 
 const marketDataProvider = new YahooFinanceClient(undefined, env.marketScanDebug);
 const marketDataService = new MarketDataService(marketDataProvider);
@@ -199,4 +204,4 @@ export const marketScanExecutor = new MarketScanExecutor({
   defaultTimeframes: env.marketScanTimeframes,
 });
 
-export { forwardPerformanceReportProvider, strategyProfileProvider, researchSnapshotService };
+export { forwardPerformanceReportProvider, strategyProfileProvider, researchSnapshotService, transactionCostService };

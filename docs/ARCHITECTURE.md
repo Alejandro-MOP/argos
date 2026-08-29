@@ -44,7 +44,7 @@ flowchart TD
 
   G[Transaction Cost Model<br/>¿Cuánto costaría operar ese movimiento?]
   G --> H[V1.4-A Transaction Cost Core<br/>Implemented & Functionally Validated]
-  G --> I[V1.4-B Application Service + HTTP Evaluation Endpoint<br/>Pending / Not Implemented Yet]
+  G --> I[V1.4-B Application Service + HTTP Evaluation Endpoint<br/>Implemented & Functionally Validated]
 
   J[Supporting Services] --> K[Backtest]
   J --> L[Database Backup]
@@ -306,16 +306,14 @@ Actualmente existe como core aislado:
 - `BrokerProductProfileCatalog`
 - perfiles `BITSO_CRYPTO_MXN` y `BITSO_CRYPTO_USDC`
 
-No tiene endpoint HTTP todavía.
-
-Futuro documentado:
+V1.4-B agrega una capa de aplicación y endpoint HTTP read-only:
 
 ```text
 POST /api/transaction-costs/evaluate
-Status: FUTURE / NOT IMPLEMENTED YET
+Status: IMPLEMENTED & FUNCTIONALLY VALIDATED
 ```
 
-Ese endpoint corresponde a V1.4-B y no existe actualmente en `src/functions`.
+El endpoint usa `TransactionCostService`, resuelve el perfil de broker/producto y delega el cálculo al core V1.4-A. No escribe en PostgreSQL, no llama Yahoo, no envía Telegram y no crea órdenes.
 
 ## Supporting Services
 
@@ -383,6 +381,7 @@ Telegram en ARGOS es un canal de comunicación/notificación. No ejecuta operaci
 | `marketScan` | Timer | — | Signal Engine | Ejecutar escaneo automático de mercado. |
 | `marketScanHttp` | HTTP | `GET,POST /api/market-scan` | Signal Engine | Ejecutar escaneo manual o bajo demanda. |
 | `researchSnapshot` | HTTP | `GET /api/research-snapshot` | Research | Consolidar el estado actual de investigación en un JSON read-only. |
+| `transactionCostsEvaluate` | HTTP | `POST /api/transaction-costs/evaluate` | Transaction Cost Model | Evaluar costos transaccionales modelados sin side effects. |
 | `strategyProfiles` | HTTP | `GET /api/strategy-profiles` | Strategy Research | Consultar perfiles descriptivos por asset/timeframe/score/version. |
 | `telegramTest` | HTTP | `GET,POST /api/telegram-test` | Supporting / Telegram | Enviar mensaje de prueba por Telegram. |
 
@@ -476,4 +475,4 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B podría agregar una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales, pero eso está pendiente y no está implementado todavía.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. La integración con Research Snapshot, Strategy Profiles o decisiones del motor queda fuera de este alcance.

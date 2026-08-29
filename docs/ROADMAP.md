@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.4-B — Cost Application Layer / Research Integration`
+**Desarrollo siguiente:** `Portfolio Risk & Exposure Manager`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -78,7 +78,7 @@ El score representa:
 | V1.2 — Evidence                            | Medir estadísticamente la calidad de los setups         | 🧪 Implementado / recolectando evidencia |
 | V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
 | **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implemented & Functionally Validated |
-| **V1.4-B — Cost Application Layer** | Integración futura con research/endpoints sin cambiar scoring | 🔥 Siguiente desarrollo |
+| **V1.4-B — Cost Application Layer** | Servicio de aplicación y endpoint HTTP read-only para evaluar costos | ✅ Implemented & Functionally Validated |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1014,17 +1014,24 @@ V1.4-A todavía no modela:
 - `withdrawal`: comisiones por retirar dinero o cripto desde el broker/exchange.
 - `FX`: costo de conversión entre monedas, por ejemplo MXN a USD o USD a MXN.
 
-## V1.4-B — Application Service + HTTP Evaluation Endpoint ⏳
+## V1.4-B — Application Service + HTTP Evaluation Endpoint ✅
 
-Status: **PENDING**.
+Status: **IMPLEMENTED & FUNCTIONALLY VALIDATED**.
 
+V1.4-B agrega una capa de aplicación read-only para consultar el core de costos desde HTTP sin mezclar comisiones con scoring técnico.
 
-Siguiente paso recomendado: construir una capa de aplicación que use el core de costos para enriquecer research, Strategy Profiles o endpoints, sin mezclar comisiones con scoring técnico.
+Implementado:
 
-Todavía pendiente:
+- `TransactionCostService` como capa de aplicación;
+- endpoint `POST /api/transaction-costs/evaluate`;
+- validación de request y errores controlados;
+- interpretación derivada del resultado del core;
+- sin escritura en PostgreSQL;
+- sin llamadas a Yahoo, Telegram, Bitso ni órdenes reales.
 
-- integración con Strategy Profiles;
-- endpoint o servicio de consulta;
+Pendiente para fases futuras:
+
+- integración con Strategy Profiles o Research Snapshot;
 - persistencia opcional de escenarios;
 - perfiles GBM/IBKR;
 - spreads/slippage;
@@ -1033,6 +1040,10 @@ Todavía pendiente:
 ## Alcance
 
 V1.4 no debe declarar rentabilidad ni cambiar reglas de estrategia. Su función será agregar realismo económico a los resultados de investigación.
+
+## Estado de cierre V1.4
+
+V1.4 queda marcada como **COMPLETED** para el alcance aprobado: core puro de costos + servicio de aplicación + endpoint HTTP read-only. No implica que ARGOS opere automáticamente ni que una estrategia sea rentable; únicamente incorpora una herramienta validada para estimar costos modelados.
 
 ---
 
@@ -2042,6 +2053,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.4-B — Cost Application Layer / Research Integration`
+**Desarrollo siguiente:** `Portfolio Risk & Exposure Manager`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

@@ -20,7 +20,7 @@ No automatic broker execution.
 
 ARGOS es hoy un motor cuantitativo experimental que observa el mercado, detecta configuraciones técnicas, registra lo que observó, mide posteriormente qué ocurrió y construye evidencia para investigación. Sólo después de suficiente validación podrían diseñarse estrategias candidatas, incorporar costos reales y pasar a paper trading.
 
-V1.4-A agrega el primer núcleo puro de costos transaccionales. Todavía no cambia decisiones del motor ni endpoints; sirve para responder, de forma aislada, si un target bruto tendría sentido después de comisiones maker/taker.
+V1.4-A agrega el primer núcleo puro de costos transaccionales. V1.4-B expone ese cálculo mediante un endpoint HTTP read-only. Ninguna de estas piezas cambia decisiones del motor, scoring, Evidence ni Telegram; sirven para responder, de forma aislada, si un target bruto tendría sentido después de comisiones maker/taker.
 
 ## ARGOS Engine
 
@@ -169,7 +169,7 @@ Pasos de `marketScan`:
 
 ## V1.4-A — Transaction Cost Core
 
-La primera pieza del modelo de costos vive desacoplada del pipeline principal. No usa PostgreSQL, no expone endpoint y no modifica Evidence, Strategy Profiles ni las reglas de scoring.
+La primera pieza del modelo de costos vive desacoplada del pipeline principal. No usa PostgreSQL y no modifica Evidence, Strategy Profiles ni las reglas de scoring.
 
 Componentes:
 
@@ -241,18 +241,61 @@ Net return: +0.4244%
 
 El Transaction Cost Model existe para separar comportamiento del mercado de viabilidad económica después de los costos de ejecución modelados.
 
+### Endpoint de evaluación de costos
+
+`POST /api/transaction-costs/evaluate` permite evaluar, bajo demanda, cuánto queda de un movimiento bruto después de costos modelados. Es read-only: no consulta mercado, no escribe PostgreSQL, no envía Telegram y no crea órdenes.
+
+Request mínimo:
+
+```json
+{
+  "brokerProfileId": "BITSO_CRYPTO_MXN",
+  "entryNotional": {
+    "amount": 5000,
+    "currency": "MXN"
+  },
+  "grossTargetPercent": 2,
+  "buyExecution": "TAKER",
+  "sellExecution": "TAKER",
+  "asOf": "2026-08-28T12:00:00.000Z"
+}
+```
+
+Response exitoso:
+
+```json
+{
+  "ok": true,
+  "result": {
+    "grossTargetPercent": 2,
+    "netReturnPercent": 0.4244,
+    "breakEvenGrossTargetPercent": 1.572264,
+    "grossTargetBelowBreakEven": false
+  },
+  "interpretation": {
+    "grossMarketMovementPercent": 2,
+    "netInvestorReturnPercent": 0.4244,
+    "breakEvenPercent": 1.572264,
+    "targetCoversModeledCosts": true
+  }
+}
+```
+
+La sección `interpretation` no recalcula fórmulas; sólo traduce campos del resultado para lectura humana. No recomienda comprar, vender ni operar.
+
 ## Azure Functions
 
 El proyecto expone entradas independientes para producción, pruebas manuales y backtesting:
 
 ```text
-marketScan          -> Timer Trigger / cron para escaneo automático
-marketScanHttp      -> HTTP Trigger manual o webhook
-backtest            -> HTTP Trigger para simulación histórica
-forwardPerformance -> HTTP Trigger para métricas agregadas de Evidence
-strategyProfiles   -> HTTP Trigger para Strategy Profile Research
-researchSnapshot   -> HTTP Trigger read-only para corte diario de Research
-telegramTest       -> HTTP Trigger de prueba de Telegram
+marketScan                -> Timer Trigger / cron para escaneo automático
+marketScanHttp            -> HTTP Trigger manual o webhook
+backtest                  -> HTTP Trigger para simulación histórica
+forwardPerformance       -> HTTP Trigger para métricas agregadas de Evidence
+strategyProfiles         -> HTTP Trigger para Strategy Profile Research
+researchSnapshot         -> HTTP Trigger read-only para corte diario de Research
+transactionCostsEvaluate -> HTTP Trigger read-only para evaluar costos transaccionales
+telegramTest             -> HTTP Trigger de prueba de Telegram
 ```
 
 `marketScan` y `marketScanHttp` usan `MarketScanExecutor`, así que el pipeline cuantitativo vivo
