@@ -30,6 +30,8 @@ const baseSignal = (overrides: Partial<PersistedEvidenceSignalSnapshot> = {}): P
   market: 'US',
   isOperationalOpportunity: false,
   createdAt: new Date('2026-01-01T14:00:00.000Z'),
+  excludedFromResearch: false,
+  reviewRequired: false,
   ...overrides,
 });
 

@@ -114,7 +114,8 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
         ) AS evidence_with_mfe_mae_count
       FROM evidence_signals signal
       LEFT JOIN evidence_signal_evaluations evaluation ON evaluation.evidence_signal_id = signal.id
-      WHERE signal.strategy_version = $1`,
+      WHERE signal.strategy_version = $1
+        AND signal.excluded_from_research = false`,
       [strategyVersion],
     );
 
@@ -146,6 +147,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
           COUNT(*) AS count
         FROM evidence_signals
         WHERE strategy_version = $1
+          AND excluded_from_research = false
           AND score >= 80
           AND score <= 100
         GROUP BY bucket`,
@@ -155,6 +157,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
         `SELECT COUNT(*) AS operational_opportunities
          FROM evidence_signals
          WHERE strategy_version = $1
+           AND excluded_from_research = false
            AND score >= $2`,
         [strategyVersion, operationalThreshold],
       ),
@@ -181,6 +184,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
        FROM evidence_signal_evaluations evaluation
        JOIN evidence_signals signal ON signal.id = evaluation.evidence_signal_id
        WHERE signal.strategy_version = $1
+         AND signal.excluded_from_research = false
        GROUP BY evaluation.status`,
       [strategyVersion],
     );
@@ -210,6 +214,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
         COUNT(*) AS sample_size
        FROM evidence_signals
        WHERE strategy_version = $1
+         AND excluded_from_research = false
          AND score >= 80
          AND score <= 100
        GROUP BY asset_type, timeframe, score_bucket, strategy_version
@@ -232,6 +237,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
         `SELECT COUNT(*) AS evidence_count
          FROM evidence_signals
          WHERE strategy_version = $1
+           AND excluded_from_research = false
            AND score >= 80
            AND score <= 100`,
         [strategyVersion],
@@ -241,6 +247,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
          FROM evidence_target_evaluations target
          JOIN evidence_signals signal ON signal.id = target.evidence_signal_id
          WHERE signal.strategy_version = $1
+           AND signal.excluded_from_research = false
            AND signal.score >= 80
            AND signal.score <= 100
          GROUP BY target.target_percent, target.outcome
@@ -296,6 +303,7 @@ export class PostgresResearchSnapshotProvider implements ResearchSnapshotProvide
        FROM evidence_signals signal
        JOIN evidence_signal_evaluations evaluation ON evaluation.evidence_signal_id = signal.id
        WHERE signal.strategy_version = $1
+         AND signal.excluded_from_research = false
          AND signal.score >= 80
          AND signal.score <= 100
          AND evaluation.max_favorable_excursion_percent IS NOT NULL

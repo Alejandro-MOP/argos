@@ -37,6 +37,19 @@ Nunca modificar retrospectivamente estos campos con base en lo que ocurrió desp
 
 Esto protege el experimento contra look-ahead bias y data leakage.
 
+## Nota metodológica — reparación no destructiva de duplicados históricos
+
+Durante la fase de auditoría se detectó un bug histórico que podía registrar Evidence duplicada antes de que existiera la identidad por candle. La reparación aprobada no borra ni reescribe observaciones pasadas: conserva Raw Evidence y excluye de métricas solo los registros duplicados de alta confianza.
+
+Estado de la reparación:
+
+- 13 Evidence históricas de alta confianza quedaron excluidas de investigación.
+- 2 posibles duplicados quedaron marcados para revisión humana y siguen participando en métricas.
+- Las evaluaciones dependientes se conservan como audit trail.
+- No se hizo backfill de `signal_candle_timestamp` para registros legacy.
+
+A partir de esta nota, Strategy Profiles, Research Snapshot y Forward Performance deben leerse como métricas sobre Research Eligible Evidence, no sobre Raw Evidence completa.
+
 ## Estados conceptuales para hipótesis
 
 | Estado       | Uso                                                             |

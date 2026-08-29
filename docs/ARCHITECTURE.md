@@ -177,6 +177,17 @@ PostgreSQL protege `signals` y `evidence_signals` con índices únicos parciales
 cuando `signal_candle_timestamp IS NOT NULL`. Los registros legacy con `NULL` permanecen intactos y
 no se reescriben automáticamente.
 
+### Raw Evidence vs Research Eligible Evidence
+
+ARGOS conserva dos lecturas distintas de Evidence:
+
+- **Raw Evidence**: todo lo que el motor registró históricamente. Se conserva como bitácora/auditoría y no se borra aunque después se detecte que una señal fue duplicada.
+- **Research Eligible Evidence**: subconjunto que puede participar en métricas de investigación como Strategy Profiles, Research Snapshot, Forward Performance, winRate, reachRate, MFE, MAE y sampleSize.
+
+La columna `excluded_from_research` no es un soft-delete global. Solo significa que esa Evidence no debe alimentar métricas de investigación. Las consultas raw, debugging y auditoría pueden seguir viendo esos registros.
+
+La reparación histórica de duplicados conserva los registros originales, marca duplicados de alta confianza con su `canonical_evidence_signal_id` y deja posibles duplicados como `review_required=true` sin excluirlos automáticamente. No hace backfill de `signal_candle_timestamp`.
+
 ## Forward Evaluation
 
 Forward Evaluation significa observar qué ocurrió después de una señal real previamente registrada.

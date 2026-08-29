@@ -23,6 +23,8 @@ export class MemoryEvidenceSignalRepository implements EvidenceSignalRepository 
       ...signal,
       id: signal.id ?? randomUUID(),
       createdAt: new Date(),
+      excludedFromResearch: false,
+      reviewRequired: false,
     });
 
     return true;

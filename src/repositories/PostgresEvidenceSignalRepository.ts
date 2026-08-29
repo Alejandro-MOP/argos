@@ -36,6 +36,12 @@ interface EvidenceSignalRow {
   market: string | null;
   is_operational_opportunity: boolean;
   created_at: Date;
+  excluded_from_research: boolean;
+  duplicate_classification: PersistedEvidenceSignalSnapshot['duplicateClassification'] | null;
+  canonical_evidence_signal_id: string | null;
+  deduplication_reason: string | null;
+  review_required: boolean;
+  deduplicated_at: Date | null;
 }
 
 export class PostgresEvidenceSignalRepository implements EvidenceSignalRepository {
@@ -165,7 +171,13 @@ export class PostgresEvidenceSignalRepository implements EvidenceSignalRepositor
         signal.industry,
         signal.market,
         signal.is_operational_opportunity,
-        signal.created_at
+        signal.created_at,
+        signal.excluded_from_research,
+        signal.duplicate_classification,
+        signal.canonical_evidence_signal_id,
+        signal.deduplication_reason,
+        signal.review_required,
+        signal.deduplicated_at
       FROM evidence_signals signal
       LEFT JOIN evidence_signal_evaluations evaluation ON evaluation.evidence_signal_id = signal.id
       WHERE ${conditions.join(' AND ')}
@@ -207,4 +219,10 @@ export const mapEvidenceSignalRow = (row: EvidenceSignalRow): PersistedEvidenceS
   market: row.market ?? undefined,
   isOperationalOpportunity: row.is_operational_opportunity,
   createdAt: new Date(row.created_at),
+  excludedFromResearch: row.excluded_from_research,
+  duplicateClassification: row.duplicate_classification ?? undefined,
+  canonicalEvidenceSignalId: row.canonical_evidence_signal_id ?? undefined,
+  deduplicationReason: row.deduplication_reason ?? undefined,
+  reviewRequired: row.review_required,
+  deduplicatedAt: row.deduplicated_at ? new Date(row.deduplicated_at) : undefined,
 });

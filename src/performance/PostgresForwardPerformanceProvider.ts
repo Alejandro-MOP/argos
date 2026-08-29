@@ -75,7 +75,7 @@ export class PostgresForwardPerformanceProvider {
 
   private async fetchRows(filters: ForwardPerformanceFilters): Promise<EvidencePerformanceRow[]> {
     const values: unknown[] = [];
-    const conditions = ['evaluation.status IS NOT NULL'];
+    const conditions = ['evaluation.status IS NOT NULL', 'signal.excluded_from_research = false'];
 
     if (filters.ticker) {
       values.push(filters.ticker.toUpperCase());

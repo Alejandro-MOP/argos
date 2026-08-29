@@ -802,6 +802,19 @@ Filtros:
 - `strategyVersion`
 - `minimumSampleSize`
 
+## Reparación histórica de duplicados de Evidence ✅
+
+Se completó una reparación no destructiva del bug histórico de duplicación de Evidence:
+
+- Raw Evidence se preserva completo.
+- 13 registros históricos de alta confianza fueron marcados como `excluded_from_research=true`.
+- 2 registros posibles quedaron con `review_required=true` y siguen siendo elegibles para investigación.
+- Strategy Profiles, Research Snapshot y Forward Performance operan sobre Research Eligible Evidence.
+- No se eliminaron Evidence ni evaluaciones dependientes.
+- No se hizo backfill heurístico de `signal_candle_timestamp` en legacy.
+
+La limpieza histórica de `signals` y `opportunities` queda fuera de esta fase; por ahora se conservan como audit trail operacional.
+
 ## Protección de Evidence
 
 V1.3 es read-only sobre Evidence:

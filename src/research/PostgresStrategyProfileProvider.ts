@@ -64,7 +64,7 @@ export class PostgresStrategyProfileProvider {
 
   private async fetchRows(filters: StrategyProfileFilters): Promise<StrategyProfileEvidenceRow[]> {
     const values: unknown[] = [];
-    const conditions = ['signal.score >= 80'];
+    const conditions = ['signal.score >= 80', 'signal.excluded_from_research = false'];
 
     if (filters.assetType) {
       values.push(filters.assetType.toUpperCase());

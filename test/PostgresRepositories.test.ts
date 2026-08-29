@@ -142,6 +142,128 @@ describe('Postgres repositories', () => {
     expect(database.query.mock.calls[0][0]).toContain('ON CONFLICT DO NOTHING');
   });
 
+  it('keeps Memory Evidence research eligible by default for new normal and legacy signals', async () => {
+    const repository = new MemoryEvidenceSignalRepository();
+    const current = buildEvidenceSignal();
+    const legacy = {
+      ...buildEvidenceSignal(),
+      id: '77777777-7777-4777-8777-777777777777',
+      signalCandleTimestamp: undefined,
+    };
+
+    await expect(repository.saveIfNotDuplicate(current, 60)).resolves.toBe(true);
+    await expect(repository.saveIfNotDuplicate(legacy, 60)).resolves.toBe(true);
+
+    expect(repository.all()).toEqual([
+      expect.objectContaining({ excludedFromResearch: false, reviewRequired: false }),
+      expect.objectContaining({ excludedFromResearch: false, reviewRequired: false, signalCandleTimestamp: undefined }),
+    ]);
+  });
+
+  it('returns raw Evidence metadata including excluded and possible duplicate classifications', async () => {
+    const database = buildDatabase();
+    const deduplicatedAt = new Date('2026-08-29T18:00:00.000Z');
+    database.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          ticker: 'NVDA',
+          provider_symbol: 'NVDA',
+          timeframe: '1d',
+          detected_at: new Date('2026-08-27T21:00:10.127Z'),
+          signal_candle_timestamp: null,
+          signal_type: 'LONG',
+          score: '90',
+          trend_score: '25',
+          volume_score: '25',
+          momentum_score: '15',
+          structure_score: '25',
+          reasons: ['Breakout confirmado'],
+          entry: '227.98',
+          technical_stop_price: '220.9',
+          financial_stop_percent: '1',
+          financial_stop_price: '225.7',
+          tp1_percent: '2',
+          tp1_price: '232.54',
+          tp2_percent: '3',
+          tp2_price: '234.82',
+          strategy_version: 'v1',
+          asset_type: 'STOCK',
+          sector: 'Technology',
+          industry: 'Semiconductors',
+          market: 'US',
+          is_operational_opportunity: true,
+          created_at: new Date('2026-08-27T21:00:10.127Z'),
+          excluded_from_research: true,
+          duplicate_classification: 'HIGH_CONFIDENCE_DUPLICATE',
+          canonical_evidence_signal_id: '006c79f9-38a2-4d9e-925c-ea82a24e7ee3',
+          deduplication_reason: 'same-market-snapshot-nvda-1d-2026-08-27-vol255',
+          review_required: false,
+          deduplicated_at: deduplicatedAt,
+        },
+        {
+          id: '33333333-3333-4333-8333-333333333333',
+          ticker: 'NVDA',
+          provider_symbol: 'NVDA',
+          timeframe: '1d',
+          detected_at: new Date('2026-08-28T04:00:11.088Z'),
+          signal_candle_timestamp: null,
+          signal_type: 'LONG',
+          score: '90',
+          trend_score: '25',
+          volume_score: '25',
+          momentum_score: '15',
+          structure_score: '25',
+          reasons: ['Breakout confirmado'],
+          entry: '227.98',
+          technical_stop_price: '220.9',
+          financial_stop_percent: '1',
+          financial_stop_price: '225.7',
+          tp1_percent: '2',
+          tp1_price: '232.54',
+          tp2_percent: '3',
+          tp2_price: '234.82',
+          strategy_version: 'v1',
+          asset_type: 'STOCK',
+          sector: 'Technology',
+          industry: 'Semiconductors',
+          market: 'US',
+          is_operational_opportunity: true,
+          created_at: new Date('2026-08-28T04:00:11.088Z'),
+          excluded_from_research: false,
+          duplicate_classification: 'POSSIBLE_DUPLICATE',
+          canonical_evidence_signal_id: '006c79f9-38a2-4d9e-925c-ea82a24e7ee3',
+          deduplication_reason: 'same-core-market-snapshot-but-reasons-differ',
+          review_required: true,
+          deduplicated_at: deduplicatedAt,
+        },
+      ],
+      rowCount: 2,
+      command: '',
+      oid: 0,
+      fields: [],
+    });
+    const repository = new PostgresEvidenceSignalRepository(database);
+
+    const signals = await repository.findPending({ ticker: 'nvda', limit: 10 });
+
+    expect(database.query.mock.calls[0][0]).not.toContain('excluded_from_research = false');
+    expect(signals).toEqual([
+      expect.objectContaining({
+        excludedFromResearch: true,
+        duplicateClassification: 'HIGH_CONFIDENCE_DUPLICATE',
+        canonicalEvidenceSignalId: '006c79f9-38a2-4d9e-925c-ea82a24e7ee3',
+        reviewRequired: false,
+        deduplicatedAt,
+      }),
+      expect.objectContaining({
+        excludedFromResearch: false,
+        duplicateClassification: 'POSSIBLE_DUPLICATE',
+        reviewRequired: true,
+      }),
+    ]);
+  });
+
   it('keeps Memory forward signal persistence idempotent for concurrent same identities', async () => {
     const repository = new MemoryForwardSignalRepository();
     const signal = buildForwardSignal();

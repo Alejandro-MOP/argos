@@ -50,6 +50,7 @@ describe('PostgresStrategyProfileProvider', () => {
     expect(database.query).toHaveBeenCalledTimes(1);
     const executedSql = database.query.mock.calls[0][0] as string;
     expect(executedSql.trim().toUpperCase().startsWith('WITH')).toBe(true);
+    expect(executedSql).toContain('signal.excluded_from_research = false');
     expect(executedSql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER)\b/i);
     expect(result.profiles).toHaveLength(2);
     expect(result.profiles.map((profile) => profile.assetType)).toEqual(['CRYPTO', 'STOCK']);

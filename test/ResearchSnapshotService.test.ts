@@ -337,6 +337,7 @@ describe('PostgresResearchSnapshotProvider', () => {
     });
     expect(database.calls).toHaveLength(8);
     expect(database.calls.every((sql) => /^SELECT|^\s*SELECT/.test(sql))).toBe(true);
+    expect(database.calls.every((sql) => sql.includes('excluded_from_research = false'))).toBe(true);
     expect(database.calls.join('\n')).not.toMatch(/INSERT|UPDATE|DELETE|CREATE|ALTER|DROP/i);
   });
 });

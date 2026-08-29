@@ -55,6 +55,7 @@ describe('PostgresForwardPerformanceProvider', () => {
     const result = await provider.getPerformance({ timeframe: '15m', minimumScore: 90, strategyVersion: 'v1' });
 
     expect(database.query).toHaveBeenCalledWith(expect.stringContaining('signal.timeframe'), expect.arrayContaining(['15m', 90, 'v1']));
+    expect(database.query.mock.calls[0][0]).toContain('signal.excluded_from_research = false');
     expect(result.sampleSize).toBe(2);
     expect(result.smallSample).toBe(true);
     expect(result.tp1).toEqual({ wins: 1, losses: 1, expired: 0, ambiguous: 0, winRate: 50 });

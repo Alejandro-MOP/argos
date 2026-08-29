@@ -4,6 +4,12 @@ import type { SignalType } from './Signal';
 
 export const EXPERIMENTAL_TARGET_PERCENTS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 5] as const;
 
+export type EvidenceDuplicateClassification =
+  | 'HIGH_CONFIDENCE_DUPLICATE'
+  | 'POSSIBLE_DUPLICATE'
+  | 'DISTINCT'
+  | 'UNKNOWN';
+
 export interface EvidenceSignalSnapshot {
   id?: string;
   ticker: string;
@@ -37,6 +43,12 @@ export interface EvidenceSignalSnapshot {
 export interface PersistedEvidenceSignalSnapshot extends EvidenceSignalSnapshot {
   id: string;
   createdAt: Date;
+  excludedFromResearch: boolean;
+  duplicateClassification?: EvidenceDuplicateClassification;
+  canonicalEvidenceSignalId?: string;
+  deduplicationReason?: string;
+  reviewRequired: boolean;
+  deduplicatedAt?: Date;
 }
 
 export interface EvidenceSignalFilters {
