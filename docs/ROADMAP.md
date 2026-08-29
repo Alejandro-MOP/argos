@@ -77,7 +77,7 @@ El score representa:
 | V1.1.1 — Market Data Throughput            | Concurrencia controlada y retries seguros               | ✅ Completado                            |
 | V1.2 — Evidence                            | Medir estadísticamente la calidad de los setups         | 🧪 Implementado / recolectando evidencia |
 | V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
-| **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implementado como core aislado |
+| **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implemented & Functionally Validated |
 | **V1.4-B — Cost Application Layer** | Integración futura con research/endpoints sin cambiar scoring | 🔥 Siguiente desarrollo |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
@@ -866,6 +866,8 @@ V1.4 debe diseñarse como una capa independiente para estimar costos de ejecuci�
 
 ## V1.4-A — Transaction Cost Core ✅
 
+Status: **IMPLEMENTED & FUNCTIONALLY VALIDATED**.
+
 Estado: implementado como núcleo puro y aislado.
 
 Lo que ya existe:
@@ -911,7 +913,111 @@ Supuestos explícitos:
 - `slippageIncluded=false`
 - funding/deposit/withdrawal/FX costs no incluidos
 
-## V1.4-B — Integración pendiente
+## Cómo interpretar un cálculo de costos
+
+Esta sección explica cómo leer económicamente el resultado del `TransactionCostCalculator` sin asumir experiencia previa en trading.
+
+Primero, tres ideas simples:
+
+```text
+Gross = qué hizo el mercado antes de costos.
+Net = qué pasó con nuestro dinero después de los costos modelados.
+Break-even = cuánto debe moverse el mercado para que los costos modelados queden cubiertos.
+```
+
+Un `target` es el movimiento que estamos evaluando como objetivo. Por ejemplo, `grossTargetPercent = 2` significa: “¿qué pasaría si el activo sube 2% antes de costos?”.
+
+`TAKER` significa que asumimos una ejecución inmediata contra liquidez existente del mercado. Normalmente tiene una comisión mayor que `MAKER`.
+
+`MAKER` significa que asumimos una orden que agrega liquidez al libro. Normalmente tiene una comisión menor, aunque no siempre se ejecuta.
+
+Ejemplo real validado:
+
+```text
+profile: BITSO_CRYPTO_MXN
+entryNotional: 5000 MXN
+grossTargetPercent: 2%
+buyExecution: TAKER
+sellExecution: TAKER
+```
+
+```text
+────────────────────────────────────
+OPERACIÓN
+────────────────────────────────────
+
+Quiero comprar:                $5,000.00 MXN
+
+El activo sube:                  +2.00%
+
+Mi posición ahora vale:        $5,100.00 MXN
+
+────────────────────────────────────
+ANTES DE COSTOS
+────────────────────────────────────
+
+Ganancia bruta:                +$100.00 MXN
+
+────────────────────────────────────
+COSTOS
+────────────────────────────────────
+
+Comisión al comprar:            -$39.00 MXN
+Comisión al vender:             -$39.78 MXN
+
+Total comisiones:               -$78.78 MXN
+
+────────────────────────────────────
+RESULTADO DESPUÉS DE COSTOS
+────────────────────────────────────
+
+Ganancia neta:                  +$21.22 MXN
+
+Rendimiento neto:                +0.4244%
+
+────────────────────────────────────
+PUNTO DE EQUILIBRIO
+────────────────────────────────────
+
+El activo necesitaba subir:      +1.5723%
+para cubrir las comisiones modeladas.
+
+Nuestro objetivo era:            +2.0000%
+
+2.0000% > 1.5723%
+
+Resultado:
+El target supera el punto de equilibrio.
+────────────────────────────────────
+```
+
+Correspondencia con los campos técnicos:
+
+- `grossTargetPercent`: movimiento porcentual del activo que estamos evaluando antes de costos.
+- `grossProfit`: ganancia producida por ese movimiento antes de costos.
+- `buyCost`: comisión pagada al comprar.
+- `sellCost`: comisión pagada al vender.
+- `roundTripCost`: costo total de completar el ciclo compra + venta.
+- `totalCashRequired`: dinero necesario para abrir la posición, incluyendo la comisión de compra.
+- `netProfit`: dinero que queda de la ganancia después de restar las comisiones modeladas.
+- `netReturnPercent`: ganancia neta expresada como porcentaje del `entryNotional`.
+- `breakEvenGrossTargetPercent`: movimiento mínimo que necesita alcanzar el activo para cubrir las comisiones modeladas y quedar aproximadamente en cero.
+- `grossTargetBelowBreakEven`: indica si el target evaluado está por debajo del punto de equilibrio.
+
+Advertencia importante: “target viable” NO significa que sea un buen trade, que sea probable alcanzar el target ni que la estrategia sea rentable. Únicamente significa que, si el precio alcanza ese movimiento, dicho movimiento supera el punto de equilibrio de los costos actualmente modelados.
+
+V1.4-A todavía no modela:
+
+- `spread`: diferencia entre el precio al que alguien quiere comprar y el precio al que alguien quiere vender. En la práctica puede hacer que entres o salgas peor de lo esperado.
+- `slippage`: diferencia entre el precio esperado y el precio real de ejecución. Suele aparecer cuando el mercado se mueve rápido o hay poca liquidez.
+- `funding`: costos o pagos asociados a mantener ciertas posiciones, especialmente en derivados. V1.4-A sólo modela spot fees simples.
+- `withdrawal`: comisiones por retirar dinero o cripto desde el broker/exchange.
+- `FX`: costo de conversión entre monedas, por ejemplo MXN a USD o USD a MXN.
+
+## V1.4-B — Application Service + HTTP Evaluation Endpoint ⏳
+
+Status: **PENDING**.
+
 
 Siguiente paso recomendado: construir una capa de aplicación que use el core de costos para enriquecer research, Strategy Profiles o endpoints, sin mezclar comisiones con scoring técnico.
 

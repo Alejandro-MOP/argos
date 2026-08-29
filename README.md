@@ -227,6 +227,20 @@ Perfiles iniciales:
 
 Estos valores están encapsulados como schedules versionados y deben re-verificarse antes de usarse para decisiones reales.
 
+Resumen ejecutivo: el movimiento del mercado no es lo mismo que el rendimiento de tu dinero. Un movimiento de mercado de `+2.00%` no necesariamente produce un retorno de inversionista de `+2.00%`.
+
+Ejemplo validado con `BITSO_CRYPTO_MXN`, taker/taker y `5,000 MXN`:
+
+```text
+Gross market movement: +2.00%
+Gross profit: +100.00 MXN
+Transaction costs: -78.78 MXN
+Net profit: +21.22 MXN
+Net return: +0.4244%
+```
+
+El Transaction Cost Model existe para separar comportamiento del mercado de viabilidad económica después de los costos de ejecución modelados.
+
 ## Azure Functions
 
 El proyecto expone entradas independientes para producción, pruebas manuales y backtesting:
