@@ -10,6 +10,8 @@ import { OpportunityService } from '../src/services/OpportunityService';
 import { RankingService } from '../src/services/RankingService';
 
 const buildCandles = (): Candle[] => {
+  const firstTimestamp = new Date('2026-08-24T12:00:00.000Z');
+
   return Array.from({ length: 80 }, (_, index) => {
     const isLast = index === 79;
     const drift = index * 0.18;
@@ -18,7 +20,7 @@ const buildCandles = (): Candle[] => {
     const close = isLast ? 118 + drift + 4 : 118 + drift + lateConsolidation;
 
     return {
-      timestamp: new Date(),
+      timestamp: new Date(firstTimestamp.getTime() + index * 60_000),
       open: close - 0.45,
       high: close + (isLast ? 0.2 : 0.8),
       low: close - 1.1,
@@ -65,6 +67,7 @@ describe('Opportunity pipeline', () => {
 
     expect(opportunity.score).toBeGreaterThanOrEqual(80);
     expect(opportunity.reasons).toContain('Breakout confirmado');
+    expect(opportunity.signalCandleTimestamp).toEqual(new Date('2026-08-24T13:19:00.000Z'));
   });
 
   it('ranks opportunities by score descending', () => {

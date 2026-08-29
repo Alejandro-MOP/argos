@@ -51,6 +51,7 @@ export type MarketScanSkippedReason =
   | 'below-threshold'
   | 'below-telegram-threshold'
   | 'duplicate-window'
+  | 'duplicate-signal-identity'
   | 'insufficient-data'
   | 'invalid-risk'
   | 'market-closed'
@@ -250,7 +251,7 @@ export class MarketScanExecutor {
       }
 
       if (signal && shouldCaptureEvidence) {
-        await this.persistEvidenceSignal(
+        const evidenceCaptured = await this.persistEvidenceSignal(
           opportunity,
           signal,
           candidatesBySignalKey.get(this.buildSignalKey(opportunity.ticker, opportunity.timeframe)),
@@ -258,6 +259,17 @@ export class MarketScanExecutor {
           filterResult.shouldNotify,
           logger,
         );
+
+        if (evidenceCaptured === false) {
+          this.logDuplicateSignalIdentity(signal, runtimeServices.config, logger);
+          skipped.push({
+            ticker: opportunity.ticker,
+            timeframe: opportunity.timeframe,
+            score: opportunity.score,
+            reason: 'duplicate-signal-identity',
+          });
+          continue;
+        }
       }
 
       if (!filterResult.shouldNotify) {
@@ -286,8 +298,6 @@ export class MarketScanExecutor {
         continue;
       }
 
-      opportunitySignals.push(signal);
-
       const willNotify = runtimeServices.notificationService.shouldNotifyOpportunity(
         opportunity,
         options.telegramNotificationMinScore,
@@ -295,6 +305,7 @@ export class MarketScanExecutor {
       this.logNotificationDecisionDebug(opportunity, willNotify, logger, options, runtimeServices);
 
       if (!willNotify) {
+        opportunitySignals.push(signal);
         await this.dependencies.opportunityRepository.save(opportunity);
         skipped.push({
           ticker: opportunity.ticker,
@@ -305,11 +316,35 @@ export class MarketScanExecutor {
         continue;
       }
 
+      let forwardSignalSaved = true;
+
+      if (options.notify) {
+        forwardSignalSaved = await this.persistForwardSignal(
+          signal,
+          opportunity,
+          logger,
+          runtimeServices.config,
+          true,
+        );
+
+        if (!forwardSignalSaved) {
+          validOpportunities.pop();
+          this.logDuplicateSignalIdentity(signal, runtimeServices.config, logger);
+          skipped.push({
+            ticker: opportunity.ticker,
+            timeframe: opportunity.timeframe,
+            score: opportunity.score,
+            reason: 'duplicate-signal-identity',
+          });
+          continue;
+        }
+      }
+
+      opportunitySignals.push(signal);
       await this.dependencies.opportunityRepository.save(opportunity);
       await this.dependencies.signalRepository.save(signal);
 
       if (options.notify) {
-        await this.persistForwardSignal(signal, opportunity, logger, runtimeServices.config, true);
         const signalContext = await this.buildSignalContext(
           signal,
           opportunity,
@@ -503,9 +538,9 @@ export class MarketScanExecutor {
     config: EngineRuntimeConfig,
     isOperationalOpportunity: boolean,
     logger: MarketScanLogger,
-  ): Promise<void> {
+  ): Promise<boolean | undefined> {
     if (!this.dependencies.evidenceSignalRepository) {
-      return;
+      return undefined;
     }
 
     const snapshot = this.buildEvidenceSignalSnapshot(
@@ -517,7 +552,7 @@ export class MarketScanExecutor {
     );
 
     if (!snapshot) {
-      return;
+      return undefined;
     }
 
     try {
@@ -531,12 +566,16 @@ export class MarketScanExecutor {
           `Evidence captured ticker=${snapshot.ticker} timeframe=${snapshot.timeframe} score=${snapshot.score} operational=${snapshot.isOperationalOpportunity}`,
         );
       }
+
+      return captured;
     } catch (error) {
       logger.error(`No se pudo persistir evidence signal para ${signal.ticker}`, {
         ticker: signal.ticker,
         timeframe: signal.timeframe,
         message: error instanceof Error ? error.message : 'evidence-signal-persistence-failed',
       });
+
+      return undefined;
     }
   }
 
@@ -558,6 +597,7 @@ export class MarketScanExecutor {
       providerSymbol: candidate?.providerSymbol ?? signal.ticker,
       timeframe: signal.timeframe,
       detectedAt: opportunity.detectedAt,
+      signalCandleTimestamp: signal.signalCandleTimestamp ?? opportunity.signalCandleTimestamp,
       signalType: signal.signalType,
       score: opportunity.score,
       trendScore: opportunity.trendScore,
@@ -588,25 +628,27 @@ export class MarketScanExecutor {
     logger: MarketScanLogger,
     config: EngineRuntimeConfig,
     telegramSent: boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.dependencies.forwardSignalRepository) {
-      return;
+      return true;
     }
 
     const snapshot = this.buildForwardSignalSnapshot(signal, opportunity, config, telegramSent);
 
     if (!snapshot) {
-      return;
+      return true;
     }
 
     try {
-      await this.dependencies.forwardSignalRepository.save(snapshot);
+      return await this.dependencies.forwardSignalRepository.save(snapshot);
     } catch (error) {
       logger.error(`No se pudo persistir señal forward para ${signal.ticker}`, {
         ticker: signal.ticker,
         timeframe: signal.timeframe,
         message: error instanceof Error ? error.message : 'forward-signal-persistence-failed',
       });
+
+      return true;
     }
   }
 
@@ -627,6 +669,7 @@ export class MarketScanExecutor {
       timeframe: signal.timeframe,
       signalType: signal.signalType,
       signalAt: signal.createdAt,
+      signalCandleTimestamp: signal.signalCandleTimestamp ?? opportunity.signalCandleTimestamp,
       score: opportunity.score,
       trendScore: opportunity.trendScore,
       volumeScore: opportunity.volumeScore,
@@ -643,6 +686,23 @@ export class MarketScanExecutor {
       telegramSent,
       strategyVersion: config.strategyVersion,
     };
+  }
+
+  private logDuplicateSignalIdentity(
+    signal: Signal,
+    config: EngineRuntimeConfig,
+    logger: MarketScanLogger,
+  ): void {
+    logger.log(
+      [
+        '[MarketScan] duplicate signal identity skipped',
+        `ticker=${signal.ticker}`,
+        `timeframe=${signal.timeframe}`,
+        `signalCandleTimestamp=${signal.signalCandleTimestamp?.toISOString() ?? 'n/a'}`,
+        `strategyVersion=${signal.strategyVersion ?? config.strategyVersion}`,
+        `signalType=${signal.signalType}`,
+      ].join(' '),
+    );
   }
 
   private async buildSignalContext(

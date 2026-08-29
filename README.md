@@ -603,7 +603,8 @@ El objetivo es que ARGOS notifique primero lo mejor, no todo lo que apenas cumpl
 Reglas actuales:
 
 - `score >= OPPORTUNITY_MIN_SCORE`
-- Sin duplicados del mismo `ticker` y `timeframe` durante `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`
+- Sin duplicados recientes del mismo `ticker` y `timeframe` durante `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`
+- Sin duplicar una misma señal lógica ya persistida por `ticker + timeframe + signal_candle_timestamp + strategy_version + signal_type`
 
 `NotificationService` usa un threshold independiente para decidir si una oportunidad válida debe
 entrar a `notifiedSignals` y enviarse a Telegram:
@@ -678,16 +679,19 @@ Un setup con score `85` se guarda en `market_signal_engine.evidence_signals` con
 ### Tablas Evidence
 
 - `evidence_signals`: snapshot inmutable del análisis observado: score, sub-scores, reasons, entry,
-  stop técnico, stop financiero, TP1/TP2, metadata (`asset_type`, `sector`, `industry`, `market`) y
-  `strategy_version`.
+  stop técnico, stop financiero, TP1/TP2, metadata (`asset_type`, `sector`, `industry`, `market`),
+  `strategy_version` y `signal_candle_timestamp`, que identifica la vela real que originó la señal.
 - `evidence_signal_evaluations`: outcome TP1/TP2, estado, MFE, MAE, candles hasta cada target y
   `evaluated_until`.
 - `evidence_target_evaluations`: target ladder experimental normalizado por porcentaje.
 
-La deduplicación de Evidence usa la misma ventana conceptual de oportunidades:
-`ticker + timeframe + strategy_version` dentro de `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES`. Eso evita
-guardar el mismo setup cada vez que corre el Timer, pero permite guardar una observación nueva del mismo
-símbolo/timeframe fuera de esa ventana.
+La deduplicación fuerte de Evidence usa identidad de señal:
+`ticker + timeframe + signal_candle_timestamp + strategy_version + signal_type`.
+
+`signal_candle_timestamp` viene de la última candle usada para calcular la señal, no de `detectedAt`
+ni de `createdAt`. Esto evita que una misma vela diaria, intradía o semanal genere múltiples Evidence
+aunque ARGOS la escanee varias veces. `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` se conserva como throttling
+operativo adicional para oportunidades recientes, pero no reemplaza la identidad de señal.
 
 ### Target Ladder experimental
 

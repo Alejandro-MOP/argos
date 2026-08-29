@@ -13,6 +13,7 @@ interface EvidenceSignalRow {
   provider_symbol: string | null;
   timeframe: string;
   detected_at: Date;
+  signal_candle_timestamp: Date | null;
   signal_type: PersistedEvidenceSignalSnapshot['signalType'];
   score: string | number;
   trend_score: string | number;
@@ -42,8 +43,10 @@ export class PostgresEvidenceSignalRepository implements EvidenceSignalRepositor
 
   public async saveIfNotDuplicate(
     signal: EvidenceSignalSnapshot,
-    duplicateWindowMinutes: number,
+    duplicateWindowMinutes?: number,
   ): Promise<boolean> {
+    void duplicateWindowMinutes;
+
     const id = signal.id ?? randomUUID();
     const result = await this.database.query(
       `INSERT INTO evidence_signals (
@@ -52,6 +55,7 @@ export class PostgresEvidenceSignalRepository implements EvidenceSignalRepositor
         provider_symbol,
         timeframe,
         detected_at,
+        signal_candle_timestamp,
         signal_type,
         score,
         trend_score,
@@ -76,23 +80,16 @@ export class PostgresEvidenceSignalRepository implements EvidenceSignalRepositor
       )
       SELECT
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20,
-        $21, $22, $23, $24, $25, $26
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM evidence_signals existing
-        WHERE existing.ticker = $2
-          AND existing.timeframe = $4
-          AND existing.strategy_version = $21
-          AND existing.detected_at >= $5::timestamptz - ($27::int * interval '1 minute')
-          AND existing.detected_at <= $5::timestamptz + ($27::int * interval '1 minute')
-      )`,
+        $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25, $26, $27
+      ON CONFLICT DO NOTHING`,
       [
         id,
         signal.ticker,
         signal.providerSymbol ?? null,
         signal.timeframe,
         signal.detectedAt,
+        signal.signalCandleTimestamp ?? null,
         signal.signalType,
         signal.score,
         signal.trendScore,
@@ -114,7 +111,6 @@ export class PostgresEvidenceSignalRepository implements EvidenceSignalRepositor
         signal.industry ?? null,
         signal.market ?? null,
         signal.isOperationalOpportunity,
-        duplicateWindowMinutes,
       ],
     );
 
@@ -147,6 +143,7 @@ export class PostgresEvidenceSignalRepository implements EvidenceSignalRepositor
         signal.provider_symbol,
         signal.timeframe,
         signal.detected_at,
+        signal.signal_candle_timestamp,
         signal.signal_type,
         signal.score,
         signal.trend_score,
@@ -187,6 +184,7 @@ export const mapEvidenceSignalRow = (row: EvidenceSignalRow): PersistedEvidenceS
   providerSymbol: row.provider_symbol ?? undefined,
   timeframe: row.timeframe,
   detectedAt: new Date(row.detected_at),
+  signalCandleTimestamp: row.signal_candle_timestamp ? new Date(row.signal_candle_timestamp) : undefined,
   signalType: row.signal_type,
   score: Number(row.score),
   trendScore: Number(row.trend_score),

@@ -76,7 +76,7 @@ const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): Mark
       findAll: jest.fn(),
     },
     forwardSignalRepository: {
-      save: jest.fn(),
+      save: jest.fn().mockResolvedValue(true),
     },
     notificationService: {
       sendSignal: jest.fn(),
@@ -401,7 +401,7 @@ describe('MarketScanExecutor', () => {
       structureScore: 25,
       detectedAt,
     };
-    const forwardSignalRepository = { save: jest.fn().mockResolvedValue(undefined) };
+    const forwardSignalRepository = { save: jest.fn().mockResolvedValue(true) };
     const notificationService = {
       sendSignal: jest.fn(),
       shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
@@ -424,6 +424,7 @@ describe('MarketScanExecutor', () => {
           score: 85,
           signalType: 'LONG',
           createdAt: signalAt,
+          signalCandleTimestamp: new Date('2026-08-24T11:59:00.000Z'),
         }),
       },
       forwardSignalRepository,
@@ -440,6 +441,7 @@ describe('MarketScanExecutor', () => {
       timeframe: '15m',
       signalType: 'LONG',
       signalAt,
+      signalCandleTimestamp: new Date('2026-08-24T11:59:00.000Z'),
       score: 85,
       trendScore: 25,
       volumeScore: 20,
@@ -1251,6 +1253,145 @@ describe('MarketScanExecutor', () => {
     expect(result.opportunities).toEqual([opportunity]);
     expect(result.notifiedSignals).toHaveLength(1);
     expect(notificationService.sendSignal).toHaveBeenCalled();
+  });
+
+  it('skips duplicate logical signal identities before Forward and Telegram', async () => {
+    const logger = buildLogger();
+    const signalCandleTimestamp = new Date('2026-08-24T13:30:00.000Z');
+    const opportunity = {
+      ...buildOpportunity('NVDA', 90),
+      timeframe: '1d',
+      signalCandleTimestamp,
+    };
+    const evidenceSignalRepository = {
+      saveIfNotDuplicate: jest.fn().mockResolvedValue(false),
+      findPending: jest.fn(),
+    };
+    const forwardSignalRepository = {
+      save: jest.fn().mockResolvedValue(true),
+    };
+    const signalRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(90),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80, signalCandleTimestamp)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      riskService: {
+        calculateRisk: jest.fn().mockReturnValue({
+          ticker: 'NVDA',
+          timeframe: '1d',
+          entry: 100,
+          stop: 95,
+          target: 110,
+          score: 90,
+          signalType: 'LONG',
+          createdAt: opportunity.detectedAt,
+          signalCandleTimestamp,
+        }),
+      },
+      evidenceSignalRepository,
+      forwardSignalRepository,
+      signalRepository,
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['NVDA'], timeframe: '1d', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(result.skipped).toContainEqual(
+      expect.objectContaining({
+        ticker: 'NVDA',
+        timeframe: '1d',
+        reason: 'duplicate-signal-identity',
+      }),
+    );
+    expect(result.opportunities).toEqual([]);
+    expect(result.notifiedSignals).toEqual([]);
+    expect(forwardSignalRepository.save).not.toHaveBeenCalled();
+    expect(signalRepository.save).not.toHaveBeenCalled();
+    expect(notificationService.sendSignal).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining('duplicate signal identity skipped'),
+    );
+  });
+
+  it('does not send Telegram when Forward persistence reports duplicate identity', async () => {
+    const logger = buildLogger();
+    const signalCandleTimestamp = new Date('2026-08-24T13:30:00.000Z');
+    const opportunity = {
+      ...buildOpportunity('NVDA', 90),
+      timeframe: '1d',
+      signalCandleTimestamp,
+    };
+    const forwardSignalRepository = {
+      save: jest.fn().mockResolvedValue(false),
+    };
+    const signalRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+    };
+    const opportunityRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+      findRecentByTicker: jest.fn(),
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(true),
+      getMinimumScore: jest.fn().mockReturnValue(90),
+    };
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80, signalCandleTimestamp)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      riskService: {
+        calculateRisk: jest.fn().mockReturnValue({
+          ticker: 'NVDA',
+          timeframe: '1d',
+          entry: 100,
+          stop: 95,
+          target: 110,
+          score: 90,
+          signalType: 'LONG',
+          createdAt: opportunity.detectedAt,
+          signalCandleTimestamp,
+        }),
+      },
+      evidenceSignalRepository: undefined,
+      forwardSignalRepository,
+      signalRepository,
+      opportunityRepository,
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['NVDA'], timeframe: '1d', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(result.skipped).toContainEqual(
+      expect.objectContaining({ reason: 'duplicate-signal-identity' }),
+    );
+    expect(result.opportunities).toEqual([]);
+    expect(result.notifiedSignals).toEqual([]);
+    expect(opportunityRepository.save).not.toHaveBeenCalled();
+    expect(signalRepository.save).not.toHaveBeenCalled();
+    expect(notificationService.sendSignal).not.toHaveBeenCalled();
   });
 
 });

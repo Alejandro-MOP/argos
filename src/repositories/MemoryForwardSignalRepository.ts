@@ -5,8 +5,14 @@ import type { ForwardSignalFilters, ForwardSignalRepository } from '../ports/For
 export class MemoryForwardSignalRepository implements ForwardSignalRepository {
   private readonly signals: PersistedForwardSignalSnapshot[] = [];
 
-  public async save(signal: ForwardSignalSnapshot): Promise<void> {
+  public async save(signal: ForwardSignalSnapshot): Promise<boolean> {
+    if (isDuplicateSignalIdentity(this.signals, signal)) {
+      return false;
+    }
+
     this.signals.push({ ...signal, id: signal.id ?? randomUUID() });
+
+    return true;
   }
 
   public async findAll(): Promise<PersistedForwardSignalSnapshot[]> {
@@ -21,3 +27,23 @@ export class MemoryForwardSignalRepository implements ForwardSignalRepository {
       .map((signal) => ({ ...signal }));
   }
 }
+
+
+const isDuplicateSignalIdentity = (
+  signals: PersistedForwardSignalSnapshot[],
+  signal: ForwardSignalSnapshot,
+): boolean => {
+  if (!signal.signalCandleTimestamp) {
+    return false;
+  }
+
+  return signals.some(
+    (existing) =>
+      existing.signalCandleTimestamp !== undefined &&
+      existing.ticker === signal.ticker &&
+      existing.timeframe === signal.timeframe &&
+      existing.signalType === signal.signalType &&
+      existing.strategyVersion === signal.strategyVersion &&
+      existing.signalCandleTimestamp.getTime() === signal.signalCandleTimestamp?.getTime(),
+  );
+};

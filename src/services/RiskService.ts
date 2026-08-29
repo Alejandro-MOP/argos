@@ -45,6 +45,7 @@ export class RiskService {
         'detectedAt' in opportunityOrCandidate
           ? opportunityOrCandidate.detectedAt
           : opportunityOrCandidate.createdAt,
+      signalCandleTimestamp: lastCandle.timestamp,
       strategyVersion:
         'strategyVersion' in opportunityOrCandidate
           ? opportunityOrCandidate.strategyVersion

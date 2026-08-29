@@ -6,16 +6,17 @@ import type { Queryable } from '../db/postgres';
 export class PostgresSignalRepository implements ForwardSignalRepository {
   public constructor(private readonly database: Queryable) {}
 
-  public async save(signal: ForwardSignalSnapshot): Promise<void> {
+  public async save(signal: ForwardSignalSnapshot): Promise<boolean> {
     const id = signal.id ?? randomUUID();
 
-    await this.database.query(
+    const result = await this.database.query(
       `INSERT INTO signals (
         id,
         ticker,
         timeframe,
         signal_type,
         signal_at,
+        signal_candle_timestamp,
         score,
         trend_score,
         volume_score,
@@ -33,14 +34,17 @@ export class PostgresSignalRepository implements ForwardSignalRepository {
         strategy_version
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
-      )`,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        $21
+      )
+      ON CONFLICT DO NOTHING`,
       [
         id,
         signal.ticker,
         signal.timeframe,
         signal.signalType,
         signal.signalAt,
+        signal.signalCandleTimestamp ?? null,
         signal.score,
         signal.trendScore,
         signal.volumeScore,
@@ -58,6 +62,8 @@ export class PostgresSignalRepository implements ForwardSignalRepository {
         signal.strategyVersion ?? 'legacy',
       ],
     );
+
+    return (result.rowCount ?? 0) > 0;
   }
 
   public async findPending(filters: ForwardSignalFilters = {}): Promise<PersistedForwardSignalSnapshot[]> {
@@ -86,6 +92,7 @@ export class PostgresSignalRepository implements ForwardSignalRepository {
         signal.timeframe,
         signal.signal_type,
         signal.signal_at,
+        signal.signal_candle_timestamp,
         signal.score,
         signal.trend_score,
         signal.volume_score,
@@ -121,6 +128,7 @@ interface ForwardSignalRow {
   timeframe: string;
   signal_type: PersistedForwardSignalSnapshot['signalType'];
   signal_at: Date;
+  signal_candle_timestamp: Date | null;
   score: string | number;
   trend_score: string | number;
   volume_score: string | number;
@@ -144,6 +152,7 @@ const mapForwardSignalRow = (row: ForwardSignalRow): PersistedForwardSignalSnaps
   timeframe: row.timeframe,
   signalType: row.signal_type,
   signalAt: new Date(row.signal_at),
+  signalCandleTimestamp: row.signal_candle_timestamp ? new Date(row.signal_candle_timestamp) : undefined,
   score: Number(row.score),
   trendScore: Number(row.trend_score),
   volumeScore: Number(row.volume_score),

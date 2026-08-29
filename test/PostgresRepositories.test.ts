@@ -1,12 +1,15 @@
 import type { Opportunity } from '../src/models/Opportunity';
 import type { ForwardSignalSnapshot } from '../src/models/ForwardSignal';
+import type { EvidenceSignalSnapshot } from '../src/models/EvidenceSignal';
 import type { Queryable } from '../src/db/postgres';
 import { createRepositories } from '../src/config/repositories';
+import { MemoryEvidenceSignalRepository } from '../src/repositories/MemoryEvidenceSignalRepository';
 import { MemoryForwardSignalRepository } from '../src/repositories/MemoryForwardSignalRepository';
 import { MemorySignalEvaluationRepository } from '../src/repositories/MemorySignalEvaluationRepository';
 import { OpportunityMemoryRepository } from '../src/repositories/OpportunityMemoryRepository';
 import { PostgresOpportunityRepository } from '../src/repositories/PostgresOpportunityRepository';
 import { PostgresSignalEvaluationRepository } from '../src/repositories/PostgresSignalEvaluationRepository';
+import { PostgresEvidenceSignalRepository } from '../src/repositories/PostgresEvidenceSignalRepository';
 import { PostgresSignalRepository } from '../src/repositories/PostgresSignalRepository';
 
 const buildDatabase = (): Queryable & { query: jest.Mock } => ({
@@ -23,6 +26,38 @@ const buildOpportunity = (): Opportunity => ({
   structureScore: 25,
   reasons: ['Breakout confirmado'],
   detectedAt: new Date('2026-08-24T12:00:00.000Z'),
+  signalCandleTimestamp: new Date('2026-08-24T11:45:00.000Z'),
+});
+
+
+const buildEvidenceSignal = (): EvidenceSignalSnapshot => ({
+  id: '22222222-2222-4222-8222-222222222222',
+  ticker: 'NVDA',
+  providerSymbol: 'NVDA',
+  timeframe: '15m',
+  detectedAt: new Date('2026-08-24T12:01:00.000Z'),
+  signalCandleTimestamp: new Date('2026-08-24T12:00:00.000Z'),
+  signalType: 'LONG',
+  score: 85,
+  trendScore: 25,
+  volumeScore: 20,
+  momentumScore: 15,
+  structureScore: 25,
+  reasons: ['Breakout confirmado'],
+  entry: 180,
+  technicalStopPrice: 177.5,
+  financialStopPercent: 1,
+  financialStopPrice: 178.2,
+  tp1Percent: 2,
+  tp1Price: 183.6,
+  tp2Percent: 3,
+  tp2Price: 185.4,
+  strategyVersion: 'v1',
+  assetType: 'STOCK',
+  sector: 'Technology',
+  industry: 'Semiconductors',
+  market: 'US',
+  isOperationalOpportunity: true,
 });
 
 const buildForwardSignal = (): ForwardSignalSnapshot => ({
@@ -31,6 +66,7 @@ const buildForwardSignal = (): ForwardSignalSnapshot => ({
   timeframe: '15m',
   signalType: 'LONG',
   signalAt: new Date('2026-08-24T12:01:00.000Z'),
+  signalCandleTimestamp: new Date('2026-08-24T12:00:00.000Z'),
   score: 85,
   trendScore: 25,
   volumeScore: 20,
@@ -62,6 +98,7 @@ describe('Postgres repositories', () => {
       snapshot.timeframe,
       snapshot.signalType,
       snapshot.signalAt,
+      snapshot.signalCandleTimestamp,
       snapshot.score,
       snapshot.trendScore,
       snapshot.volumeScore,
@@ -81,6 +118,87 @@ describe('Postgres repositories', () => {
   });
 
 
+
+  it('returns false when PostgreSQL ignores a duplicate forward signal identity', async () => {
+    const database = buildDatabase();
+    database.query.mockResolvedValueOnce({ rows: [], rowCount: 0, command: '', oid: 0, fields: [] });
+    const repository = new PostgresSignalRepository(database);
+
+    const saved = await repository.save(buildForwardSignal());
+
+    expect(saved).toBe(false);
+    expect(database.query.mock.calls[0][0]).toContain('ON CONFLICT DO NOTHING');
+  });
+
+  it('returns false when PostgreSQL ignores a duplicate Evidence signal identity', async () => {
+    const database = buildDatabase();
+    database.query.mockResolvedValueOnce({ rows: [], rowCount: 0, command: '', oid: 0, fields: [] });
+    const repository = new PostgresEvidenceSignalRepository(database);
+
+    const saved = await repository.saveIfNotDuplicate(buildEvidenceSignal(), 60);
+
+    expect(saved).toBe(false);
+    expect(database.query.mock.calls[0][0]).toContain('signal_candle_timestamp');
+    expect(database.query.mock.calls[0][0]).toContain('ON CONFLICT DO NOTHING');
+  });
+
+  it('keeps Memory forward signal persistence idempotent for concurrent same identities', async () => {
+    const repository = new MemoryForwardSignalRepository();
+    const signal = buildForwardSignal();
+
+    const results = await Promise.all([repository.save(signal), repository.save({ ...signal })]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    await expect(repository.findAll()).resolves.toHaveLength(1);
+  });
+
+
+  it('allows new logical identities for new candles, strategy versions, timeframes, and symbols', async () => {
+    const repository = new MemoryEvidenceSignalRepository();
+    const base = buildEvidenceSignal();
+
+    await expect(repository.saveIfNotDuplicate(base, 60)).resolves.toBe(true);
+    await expect(
+      repository.saveIfNotDuplicate(
+        { ...base, id: '33333333-3333-4333-8333-333333333333', signalCandleTimestamp: new Date('2026-08-24T12:15:00.000Z') },
+        60,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      repository.saveIfNotDuplicate(
+        { ...base, id: '44444444-4444-4444-8444-444444444444', strategyVersion: 'v2' },
+        60,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      repository.saveIfNotDuplicate(
+        { ...base, id: '55555555-5555-4555-8555-555555555555', timeframe: '1d' },
+        60,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      repository.saveIfNotDuplicate(
+        { ...base, id: '66666666-6666-4666-8666-666666666666', ticker: 'AAPL', providerSymbol: 'AAPL' },
+        60,
+      ),
+    ).resolves.toBe(true);
+
+    expect(repository.all()).toHaveLength(5);
+  });
+
+  it('keeps Memory Evidence signal persistence idempotent for concurrent same identities', async () => {
+    const repository = new MemoryEvidenceSignalRepository();
+    const signal = buildEvidenceSignal();
+
+    const results = await Promise.all([
+      repository.saveIfNotDuplicate(signal, 60),
+      repository.saveIfNotDuplicate({ ...signal }, 60),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(repository.all()).toHaveLength(1);
+  });
+
   it('finds only pending forward signals and excludes terminal evaluations', async () => {
     const database = buildDatabase();
     database.query.mockResolvedValueOnce({
@@ -91,6 +209,7 @@ describe('Postgres repositories', () => {
           timeframe: '15m',
           signal_type: 'LONG',
           signal_at: new Date('2026-08-24T12:01:00.000Z'),
+          signal_candle_timestamp: new Date('2026-08-24T12:00:00.000Z'),
           score: '85',
           trend_score: '25',
           volume_score: '20',
@@ -215,6 +334,7 @@ describe('Postgres repositories', () => {
       opportunity.ticker,
       opportunity.timeframe,
       opportunity.detectedAt,
+      opportunity.signalCandleTimestamp,
       opportunity.score,
       opportunity.trendScore,
       opportunity.volumeScore,
@@ -233,6 +353,7 @@ describe('Postgres repositories', () => {
           ticker: 'NVDA',
           timeframe: '15m',
           detected_at: new Date('2026-08-24T12:00:00.000Z'),
+          signal_candle_timestamp: new Date('2026-08-24T11:45:00.000Z'),
           score: '85',
           trend_score: '25',
           volume_score: '20',

@@ -7,6 +7,7 @@ export interface ForwardSignalSnapshot {
   timeframe: string;
   signalType: SignalType;
   signalAt: Date;
+  signalCandleTimestamp?: Date;
   score: number;
   trendScore: number;
   volumeScore: number;

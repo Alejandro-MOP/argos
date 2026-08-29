@@ -11,17 +11,11 @@ export class MemoryEvidenceSignalRepository implements EvidenceSignalRepository 
 
   public async saveIfNotDuplicate(
     signal: EvidenceSignalSnapshot,
-    duplicateWindowMinutes: number,
+    duplicateWindowMinutes?: number,
   ): Promise<boolean> {
-    const duplicateWindowMs = duplicateWindowMinutes * 60_000;
-    const duplicate = this.signals.some((existing) =>
-      existing.ticker === signal.ticker &&
-      existing.timeframe === signal.timeframe &&
-      existing.strategyVersion === signal.strategyVersion &&
-      Math.abs(existing.detectedAt.getTime() - signal.detectedAt.getTime()) <= duplicateWindowMs,
-    );
+    void duplicateWindowMinutes;
 
-    if (duplicate) {
+    if (isDuplicateSignalIdentity(this.signals, signal)) {
       return false;
     }
 
@@ -47,3 +41,23 @@ export class MemoryEvidenceSignalRepository implements EvidenceSignalRepository 
     return [...this.signals];
   }
 }
+
+
+const isDuplicateSignalIdentity = (
+  signals: PersistedEvidenceSignalSnapshot[],
+  signal: EvidenceSignalSnapshot,
+): boolean => {
+  if (!signal.signalCandleTimestamp) {
+    return false;
+  }
+
+  return signals.some(
+    (existing) =>
+      existing.signalCandleTimestamp !== undefined &&
+      existing.ticker === signal.ticker &&
+      existing.timeframe === signal.timeframe &&
+      existing.signalType === signal.signalType &&
+      existing.strategyVersion === signal.strategyVersion &&
+      existing.signalCandleTimestamp.getTime() === signal.signalCandleTimestamp?.getTime(),
+  );
+};

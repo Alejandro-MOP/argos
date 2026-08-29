@@ -6,6 +6,7 @@ interface OpportunityRow {
   ticker: string;
   timeframe: string;
   detected_at: Date;
+  signal_candle_timestamp: Date | null;
   score: string | number;
   trend_score: string | number;
   volume_score: string | number;
@@ -24,6 +25,7 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         ticker,
         timeframe,
         detected_at,
+        signal_candle_timestamp,
         score,
         trend_score,
         volume_score,
@@ -31,11 +33,12 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         structure_score,
         reasons,
         strategy_version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)`,
       [
         opportunity.ticker,
         opportunity.timeframe,
         opportunity.detectedAt,
+        opportunity.signalCandleTimestamp ?? null,
         opportunity.score,
         opportunity.trendScore,
         opportunity.volumeScore,
@@ -53,6 +56,7 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         ticker,
         timeframe,
         detected_at,
+        signal_candle_timestamp,
         score,
         trend_score,
         volume_score,
@@ -77,6 +81,7 @@ export class PostgresOpportunityRepository implements OpportunityRepository {
         ticker,
         timeframe,
         detected_at,
+        signal_candle_timestamp,
         score,
         trend_score,
         volume_score,
@@ -100,6 +105,7 @@ const mapOpportunityRow = (row: OpportunityRow): Opportunity => ({
   ticker: row.ticker,
   timeframe: row.timeframe,
   detectedAt: new Date(row.detected_at),
+  signalCandleTimestamp: row.signal_candle_timestamp ? new Date(row.signal_candle_timestamp) : undefined,
   score: Number(row.score),
   trendScore: Number(row.trend_score),
   volumeScore: Number(row.volume_score),

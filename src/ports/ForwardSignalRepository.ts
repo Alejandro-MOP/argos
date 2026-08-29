@@ -7,6 +7,6 @@ export interface ForwardSignalFilters {
 }
 
 export interface ForwardSignalRepository {
-  save(signal: ForwardSignalSnapshot): Promise<void>;
+  save(signal: ForwardSignalSnapshot): Promise<boolean>;
   findPending(filters?: ForwardSignalFilters): Promise<PersistedForwardSignalSnapshot[]>;
 }

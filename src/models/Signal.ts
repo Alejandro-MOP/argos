@@ -9,5 +9,6 @@ export interface Signal {
   score: number;
   signalType: SignalType;
   createdAt: Date;
+  signalCandleTimestamp?: Date;
   strategyVersion?: string;
 }

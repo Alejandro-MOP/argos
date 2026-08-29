@@ -435,24 +435,28 @@ TP2
 metadata de mercado
 strategy_version
 detected_at
+signal_candle_timestamp
 ```
 
 ### Deduplicación
 
-Evidence deduplica por:
+Evidence deduplica por identidad lógica de señal:
 
 ```text
 ticker
 +
 timeframe
 +
+signal_candle_timestamp
++
 strategy_version
 +
-duplicate window
+signal_type
 ```
 
-Esto evita registrar repetidamente el mismo setup durante ejecuciones
-consecutivas.
+`signal_candle_timestamp` viene de la vela real usada por el motor. La ventana
+`OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` se conserva como protección operativa adicional,
+pero la integridad de Evidence y Forward Signals depende de identidad de señal.
 
 ---
 

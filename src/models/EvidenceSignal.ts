@@ -10,6 +10,7 @@ export interface EvidenceSignalSnapshot {
   providerSymbol?: string;
   timeframe: string;
   detectedAt: Date;
+  signalCandleTimestamp?: Date;
   signalType: SignalType;
   score: number;
   trendScore: number;

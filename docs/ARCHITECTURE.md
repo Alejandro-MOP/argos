@@ -152,6 +152,7 @@ Información persistida de Evidence:
 - provider symbol;
 - timeframe;
 - fecha de detección;
+- timestamp de la candle que originó la señal (`signal_candle_timestamp`);
 - tipo de señal;
 - score total y scores parciales;
 - razones técnicas;
@@ -165,6 +166,16 @@ Tablas relacionadas:
 - `evidence_signals`
 - `evidence_signal_evaluations`
 - `evidence_target_evaluations`
+
+Identidad de señal:
+
+```text
+ticker + timeframe + signal_candle_timestamp + strategy_version + signal_type
+```
+
+PostgreSQL protege `signals` y `evidence_signals` con índices únicos parciales sobre esa identidad
+cuando `signal_candle_timestamp IS NOT NULL`. Los registros legacy con `NULL` permanecen intactos y
+no se reescriben automáticamente.
 
 ## Forward Evaluation
 

@@ -32,6 +32,7 @@ export class OpportunityService {
       structureScore,
       reasons: this.getReasons(candles),
       detectedAt: new Date(),
+      signalCandleTimestamp: candles.at(-1)?.timestamp,
     };
   }
 

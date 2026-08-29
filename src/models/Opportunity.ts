@@ -8,5 +8,6 @@ export interface Opportunity {
   structureScore: number;
   reasons: string[];
   detectedAt: Date;
+  signalCandleTimestamp?: Date;
   strategyVersion?: string;
 }
