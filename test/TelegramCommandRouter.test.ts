@@ -72,15 +72,15 @@ describe('TelegramCommandRouter', () => {
     [CALLBACKS.mainMenu, 'OK', 'ARGOS Control'],
     [CALLBACKS.researchMenu, 'OK', 'Research'],
     [CALLBACKS.marketMenu, 'OK', 'Market'],
-    [CALLBACKS.costsMenu, 'OK', 'Costs'],
+    [CALLBACKS.costsMenu, 'OK', 'TRANSACTION COSTS'],
     [CALLBACKS.systemMenu, 'OK', 'System'],
     [CALLBACKS.researchSnapshot, 'ERROR', 'ARGOS no pudo consultar Research Snapshot'],
     [CALLBACKS.researchProfiles, 'ERROR', 'ARGOS no pudo consultar Strategy Profiles'],
     [CALLBACKS.researchPerformance, 'ERROR', 'ARGOS no pudo consultar Forward Performance'],
     [CALLBACKS.marketScan, 'NOT_IMPLEMENTED', 'Market Scan integration is not available yet.'],
     [CALLBACKS.marketAnalyze, 'NOT_IMPLEMENTED', 'Analyze Symbol integration is not available yet.'],
-    [CALLBACKS.costsBitsoMxn, 'NOT_IMPLEMENTED', 'Bitso MXN costs integration is not available yet.'],
-    [CALLBACKS.costsBitsoUsdc, 'NOT_IMPLEMENTED', 'Bitso USDC costs integration is not available yet.'],
+    [CALLBACKS.costsBitsoMxn, 'INPUT_REQUIRED', 'BITSO MXN'],
+    [CALLBACKS.costsBitsoUsdc, 'INPUT_REQUIRED', 'BITSO USDC'],
     [CALLBACKS.systemStatus, 'ERROR', 'ARGOS no pudo consultar System Status'],
     [CALLBACKS.systemHelp, 'HELP', 'ARGOS Control Help'],
     [CALLBACKS.back, 'OK', 'ARGOS Control'],
@@ -134,6 +134,7 @@ describe('TelegramCommandRouter read-only integrations', () => {
       new TelegramControlPresenter(),
       new TelegramConversationStateService(),
       readOnlyQueries,
+      undefined,
       logger,
     );
 
@@ -205,6 +206,236 @@ describe('TelegramCommandRouter read-only integrations', () => {
     expect(response.text).not.toContain('postgres://');
     expect(logger.error).toHaveBeenCalledWith(expect.not.stringContaining('secret'));
   });
+});
+
+
+describe('TelegramCommandRouter transaction cost flow', () => {
+  const buildCostsRouter = (transactionCostService: { evaluate: jest.Mock } = { evaluate: jest.fn((request) => sampleTransactionCostEvaluation(request?.entryNotional?.currency === 'USDC' ? 'USDC' : 'MXN')) }) => {
+    const conversationState = new TelegramConversationStateService();
+    const logger = { error: jest.fn() };
+    const router = new TelegramCommandRouter(
+      new TelegramAuthorizationService('123'),
+      new TelegramControlPresenter(),
+      conversationState,
+      undefined,
+      transactionCostService,
+      logger,
+    );
+
+    return { router, conversationState, transactionCostService, logger };
+  };
+
+  it('starts BITSO MXN flow and asks for capital', async () => {
+    const { router, conversationState } = buildCostsRouter();
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(response.text).toContain('BITSO MXN');
+    expect(response.text).toContain('Ingresa el capital');
+    expect(conversationState.get('123')).toEqual(expect.objectContaining({
+      flow: 'costs:evaluate',
+      step: 'awaiting-capital',
+      data: expect.objectContaining({ brokerProfileId: 'BITSO_CRYPTO_MXN', currency: 'MXN' }),
+    }));
+  });
+
+  it('keeps the capital step when capital is invalid', async () => {
+    const { router, conversationState } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    const response = await router.route(update({ message: { text: 'casi cinco mil' } }));
+
+    expect(response.code).toBe('VALIDATION_ERROR');
+    expect(response.text).toContain('Capital inválido');
+    expect(conversationState.get('123')?.step).toBe('awaiting-capital');
+  });
+
+  it('accepts friendly numeric input and asks for execution mode', async () => {
+    const { router, conversationState } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    const capitalResponse = await router.route(update({ message: { text: '5,000' } }));
+    const targetResponse = await router.route(update({ message: { text: '2' } }));
+
+    expect(capitalResponse.text).toContain('$5,000.00 MXN');
+    expect(targetResponse.text).toContain('Tipo de ejecución');
+    expect(targetResponse.keyboard?.rows.flat()).toContainEqual({ text: 'Taker', callbackData: CALLBACKS.costsTaker });
+    expect(conversationState.get('123')).toEqual(expect.objectContaining({
+      step: 'awaiting-execution',
+      data: expect.objectContaining({ capital: 5000, grossTargetPercent: 2 }),
+    }));
+  });
+
+  it('evaluates BITSO MXN taker/taker through TransactionCostService and clears state', async () => {
+    const { router, conversationState, transactionCostService } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+    await router.route(update({ message: { text: '5000' } }));
+    await router.route(update({ message: { text: '2' } }));
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.costsTaker } }));
+
+    expect(transactionCostService.evaluate).toHaveBeenCalledWith({
+      brokerProfileId: 'BITSO_CRYPTO_MXN',
+      entryNotional: { amount: 5000, currency: 'MXN' },
+      grossTargetPercent: 2,
+      buyExecution: 'TAKER',
+      sellExecution: 'TAKER',
+    });
+    expect(response.code).toBe('OK');
+    expect(response.text).toContain('Net profit:');
+    expect(response.text).toContain('+$21.22 MXN');
+    expect(response.text).toContain('Break-even:');
+    expect(response.text).toContain('✅ El target supera los costos modelados.');
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('evaluates BITSO USDC maker/maker without showing ambiguous dollar symbol', async () => {
+    const { router, transactionCostService } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoUsdc } }));
+    await router.route(update({ message: { text: '5000,50' } }));
+    await router.route(update({ message: { text: '0,78' } }));
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.costsMaker } }));
+
+    expect(transactionCostService.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      brokerProfileId: 'BITSO_CRYPTO_USDC',
+      entryNotional: { amount: 5000.5, currency: 'USDC' },
+      grossTargetPercent: 0.78,
+      buyExecution: 'MAKER',
+      sellExecution: 'MAKER',
+    }));
+    expect(response.text).toContain('5,000.00 USDC');
+    expect(response.text).not.toContain('$5,000.00 USDC');
+  });
+
+  it('does not call TransactionCostService for unauthorized users', async () => {
+    const { router, transactionCostService } = buildCostsRouter();
+
+    const response = await router.route(update({ user: { id: '999' }, callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    expect(response.code).toBe('UNAUTHORIZED');
+    expect(transactionCostService.evaluate).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe message and clears state when TransactionCostService fails', async () => {
+    const transactionCostService = { evaluate: jest.fn(() => { throw new Error('token=super-secret failed'); }) };
+    const { router, conversationState, logger } = buildCostsRouter(transactionCostService);
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+    await router.route(update({ message: { text: '5000' } }));
+    await router.route(update({ message: { text: '2' } }));
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.costsTaker } }));
+
+    expect(response.code).toBe('ERROR');
+    expect(response.text).toContain('ARGOS no pudo calcular los costos');
+    expect(response.text).not.toContain('super-secret');
+    expect(logger.error).toHaveBeenCalledWith(expect.not.stringContaining('super-secret'));
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('cancels the cost flow from /cancel', async () => {
+    const { router, conversationState } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    const response = await router.route(update({ message: { text: '/cancel' } }));
+
+    expect(response.code).toBe('CANCELLED');
+    expect(response.text).toContain('Operación cancelada');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '⬅️ Back to Costs', callbackData: CALLBACKS.costsMenu });
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('keeps the target step when target is invalid', async () => {
+    const { router, conversationState } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+    await router.route(update({ message: { text: '5000' } }));
+
+    const response = await router.route(update({ message: { text: '-2%' } }));
+
+    expect(response.code).toBe('VALIDATION_ERROR');
+    expect(response.text).toContain('Target inválido');
+    expect(conversationState.get('123')?.step).toBe('awaiting-target');
+  });
+
+  it('evaluates Maker through TransactionCostService', async () => {
+    const { router, transactionCostService } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+    await router.route(update({ message: { text: '5000' } }));
+    await router.route(update({ message: { text: '2' } }));
+
+    await router.route(update({ callback: { data: CALLBACKS.costsMaker } }));
+
+    expect(transactionCostService.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      buyExecution: 'MAKER',
+      sellExecution: 'MAKER',
+    }));
+  });
+
+  it('cancels the cost flow from the cancel button', async () => {
+    const { router, conversationState } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.costsCancel } }));
+
+    expect(response.code).toBe('CANCELLED');
+    expect(response.text).toContain('Operación cancelada');
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('does not calculate after TTL expiration', async () => {
+    let now = new Date('2026-08-30T10:00:00.000Z');
+    const conversationState = new TelegramConversationStateService(1000, () => now);
+    const transactionCostService = { evaluate: jest.fn((request) => sampleTransactionCostEvaluation(request?.entryNotional?.currency === 'USDC' ? 'USDC' : 'MXN')) };
+    const router = new TelegramCommandRouter(
+      new TelegramAuthorizationService('123'),
+      new TelegramControlPresenter(),
+      conversationState,
+      undefined,
+      transactionCostService,
+    );
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+    now = new Date('2026-08-30T10:00:02.000Z');
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.costsTaker } }));
+
+    expect(response.text).toContain('La operación expiró');
+    expect(transactionCostService.evaluate).not.toHaveBeenCalled();
+  });
+
+  it('does not treat random text outside flow as capital', async () => {
+    const { router, transactionCostService } = buildCostsRouter();
+
+    const response = await router.route(update({ message: { text: '5000' } }));
+
+    expect(response.code).toBe('UNKNOWN_COMMAND');
+    expect(transactionCostService.evaluate).not.toHaveBeenCalled();
+  });
+
+  it('keeps conversation state isolated by user', async () => {
+    const { router, conversationState } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+
+    const response = await router.route(update({ user: { id: '456' }, message: { text: '5000' } }));
+
+    expect(response.code).toBe('UNAUTHORIZED');
+    expect(conversationState.get('123')?.step).toBe('awaiting-capital');
+    expect(conversationState.get('456')).toBeUndefined();
+  });
+
+  it('passes very large valid numbers through the service request without Telegram-side math', async () => {
+    const { router, transactionCostService } = buildCostsRouter();
+    await router.route(update({ callback: { data: CALLBACKS.costsBitsoMxn } }));
+    await router.route(update({ message: { text: '1000000000000' } }));
+    await router.route(update({ message: { text: '2' } }));
+
+    await router.route(update({ callback: { data: CALLBACKS.costsTaker } }));
+
+    expect(transactionCostService.evaluate).toHaveBeenCalledWith(expect.objectContaining({
+      entryNotional: { amount: 1000000000000, currency: 'MXN' },
+    }));
+  });
+
 });
 
 const sampleSnapshot = () => ({
@@ -288,4 +519,60 @@ const sampleForwardPerformance = () => ({
   bySector: [],
   byIndustry: [],
   byStrategyVersion: [],
+});
+
+
+const sampleTransactionCostEvaluation = (currency: 'MXN' | 'USDC' = 'MXN') => ({
+  result: {
+    brokerProfileId: currency === 'USDC' ? 'BITSO_CRYPTO_USDC' as const : 'BITSO_CRYPTO_MXN' as const,
+    broker: 'BITSO' as const,
+    product: `Crypto spot vs ${currency}`,
+    feeScheduleVersion: 'bitso-crypto-base-tier-2026-08-28',
+    effectiveFrom: '2026-08-28T00:00:00.000Z',
+    sourceLabel: 'Bitso fees',
+    sourceUrl: 'https://bitso.com/fees',
+    verifiedAt: '2026-08-28T00:00:00.000Z',
+    entryNotional: { amount: 5000, currency },
+    grossTargetPercent: 2,
+    grossExitValue: { amount: 5100, currency },
+    exitNotional: { amount: 5100, currency },
+    grossProfit: { amount: 100, currency },
+    buyExecutionMode: 'TAKER' as const,
+    sellExecutionMode: 'TAKER' as const,
+    buyCost: {
+      notional: { amount: 5000, currency },
+      fee: { amount: currency === 'USDC' ? 18 : 39, currency },
+      feePercentOfNotional: currency === 'USDC' ? 0.36 : 0.78,
+      ruleType: 'PERCENTAGE_NOTIONAL' as const,
+      appliedMinimum: false,
+      appliedMaximum: false,
+    },
+    sellCost: {
+      notional: { amount: 5100, currency },
+      fee: { amount: currency === 'USDC' ? 18.36 : 39.78, currency },
+      feePercentOfNotional: currency === 'USDC' ? 0.36 : 0.78,
+      ruleType: 'PERCENTAGE_NOTIONAL' as const,
+      appliedMinimum: false,
+      appliedMaximum: false,
+    },
+    roundTripCost: { amount: currency === 'USDC' ? 36.36 : 78.78, currency },
+    totalCashRequired: { amount: currency === 'USDC' ? 5018 : 5039, currency },
+    netProfit: { amount: currency === 'USDC' ? 63.64 : 21.22, currency },
+    netReturnPercent: currency === 'USDC' ? 1.2728 : 0.4244,
+    breakEvenGrossTargetPercent: currency === 'USDC' ? 0.722601 : 1.572264,
+    grossTargetBelowBreakEven: false,
+    assumptions: {
+      spreadIncluded: false as const,
+      slippageIncluded: false as const,
+      fundingCostsIncluded: false as const,
+      withdrawalCostsIncluded: false as const,
+      fxCostsIncluded: false as const,
+    },
+  },
+  interpretation: {
+    grossMarketMovementPercent: 2,
+    netInvestorReturnPercent: currency === 'USDC' ? 1.2728 : 0.4244,
+    breakEvenPercent: currency === 'USDC' ? 0.722601 : 1.572264,
+    targetCoversModeledCosts: true,
+  },
 });

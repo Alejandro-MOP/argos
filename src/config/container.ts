@@ -106,6 +106,7 @@ const telegramCommandRouter = new TelegramCommandRouter(
   telegramControlPresenter,
   telegramConversationStateService,
   telegramControlReadOnlyQueryService,
+  transactionCostService,
 );
 
 export const postgresBackupService = database

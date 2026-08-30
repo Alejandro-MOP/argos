@@ -461,17 +461,21 @@ TelegramControlPresenter
 
 El router no llama endpoints HTTP locales. HTTP Functions y Telegram son adapters que reutilizan servicios/providers de aplicación.
 
-Ejemplo futuro correcto:
+Desde V1.5-D, Transaction Costs queda conectado al modelo real de V1.4 mediante un flujo conversacional read-only:
 
 ```text
 TelegramCommandRouter
         ↓
+TelegramConversationStateService
+        ↓
 TransactionCostService
         ↓
 TransactionCostCalculator
+        ↓
+TelegramControlPresenter
 ```
 
-No se deben duplicar fórmulas de costos, scoring, Evidence, Forward Evaluation ni Strategy Profiles dentro de Telegram. Las integraciones read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status existen desde V1.5-C. Market Scan, Analyze Symbol y Transaction Costs desde Telegram siguen pendientes.
+Telegram recoge perfil, capital, target y tipo de ejecución. No duplica fórmulas de fees, utilidad neta, break-even ni round-trip cost. Maker aplica entrada y salida Maker; Taker aplica entrada y salida Taker para mantener una UX simple. Las integraciones read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status existen desde V1.5-C. Market Scan y Analyze Symbol desde Telegram siguen pendientes.
 
 #### Callback routing
 
@@ -494,7 +498,7 @@ argos:v1:system:status
 - **callback_data**: identificador pequeño asociado al botón; no debe contener secretos, JSON grande ni estado sensible.
 - **Callback Query**: evento que Telegram produce cuando el usuario presiona un botón.
 
-Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Las acciones profundas todavía son placeholders `NOT_IMPLEMENTED`.
+Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Desde V1.5-D, `argos:v1:costs:bitso_mxn` y `argos:v1:costs:bitso_usdc` inician un cálculo conversacional real de costos; Market Scan y Analyze Symbol permanecen como placeholders `NOT_IMPLEMENTED`.
 
 #### Authorization
 
@@ -507,7 +511,7 @@ ARGOS Control utiliza `user_id` para decidir quién puede ejecutar comandos. No 
 
 #### Conversation state
 
-El estado conversacional actual es en memoria, aislado por `user_id`, con TTL default de 15 minutos. Se usa para preparar interacciones multi-step futuras. No usa PostgreSQL y se pierde al reiniciar el worker; esto es intencional en V1.5-B. Persistencia podría reconsiderarse para flujos futuros como Trade Companion.
+El estado conversacional actual es en memoria, aislado por `user_id`, con TTL default de 15 minutos. Desde V1.5-D se usa para el flujo de Transaction Costs: perfil → capital → target → Maker/Taker. No usa PostgreSQL y se pierde al reiniciar el worker; esto es intencional. Persistencia podría reconsiderarse para flujos futuros como Trade Companion.
 
 #### Long Polling vs Webhook
 

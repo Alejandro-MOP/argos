@@ -1136,6 +1136,31 @@ TelegramCommandRouter
 Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B. Hoy los botones profundos responden `NOT_IMPLEMENTED` y no ejecutan Market Scan ni consultas reales de Research desde Telegram.
 
 
+## V1.5-D — Telegram Transaction Costs Integration ✅
+
+Status: **COMPLETED / MANUALLY VALIDATED**.
+
+Implementado:
+
+- menú `💰 Transaction Costs` conectado a `TransactionCostService`;
+- callbacks `argos:v1:costs:bitso_mxn` y `argos:v1:costs:bitso_usdc`;
+- flujo conversacional en memoria con TTL de 15 minutos;
+- captura de capital como `entryNotional`;
+- captura de target bruto esperado en porcentaje humano;
+- selección Maker/Taker por inline keyboard;
+- Maker aplica entrada/salida Maker y Taker aplica entrada/salida Taker;
+- resultado compacto con gross profit, fees, round trip, net profit, net return y break-even;
+- manejo seguro de errores sin stack traces ni secretos;
+- sin llamadas HTTP localhost, sin PostgreSQL writes, sin migrations y sin órdenes reales.
+
+Validación manual:
+
+- flujo completo probado desde el Control Bot real;
+- Bitso MXN validado manualmente;
+- captura de capital y target validada;
+- Maker/Taker validado;
+- navegación y cancelación validadas.
+
 ## V1.5-C — Read-only Research Integrations 🚧
 
 Status: **IMPLEMENTED / PENDING MANUAL VALIDATION**.

@@ -30,6 +30,21 @@ export class TelegramConversationStateService {
     return state;
   }
 
+  public consumeExpired(userId: string): boolean {
+    const state = this.states.get(userId);
+
+    if (!state) {
+      return false;
+    }
+
+    if (state.expiresAt.getTime() <= this.now().getTime()) {
+      this.states.delete(userId);
+      return true;
+    }
+
+    return false;
+  }
+
   public set(input: SetTelegramConversationStateInput): TelegramConversationState {
     const state: TelegramConversationState = {
       userId: input.userId,

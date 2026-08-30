@@ -310,6 +310,12 @@ telegramTest             -> HTTP Trigger de prueba de Telegram
 vive en un solo lugar. `backtest` usa `BacktestEngine`, pero reutiliza los mismos analyzers,
 `OpportunityService` y `RiskService` para evitar reglas paralelas.
 
+### Telegram Control Bot
+
+Desde V1.5-D, el Control Bot también puede calcular Transaction Costs desde Telegram en modo read-only. El flujo pide perfil Bitso, capital de entrada, target bruto esperado y ejecución Maker/Taker; después llama al `TransactionCostService` real. Telegram no recalcula fees, utilidad neta, round-trip cost ni break-even.
+
+El capital capturado representa `entryNotional`: valor nominal de la posición antes de costos. El resultado no recomienda operar; solo indica si el target bruto supera los costos modelados. No incluye spread, slippage, funding, withdrawals ni FX.
+
 ### Research Snapshot
 
 `GET /api/research-snapshot` entrega un único JSON autocontenido para el corte experimental diario.

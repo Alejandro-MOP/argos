@@ -44,6 +44,8 @@ export type ControlResponseCode =
   | 'UNAUTHORIZED'
   | 'HELP'
   | 'CANCELLED'
+  | 'INPUT_REQUIRED'
+  | 'VALIDATION_ERROR'
   | 'NOT_IMPLEMENTED'
   | 'INVALID_CALLBACK'
   | 'UNKNOWN_COMMAND'

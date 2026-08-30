@@ -1,7 +1,9 @@
 import type { ForwardPerformanceSummary } from '../models/EvidenceSignal';
+import type { CurrencyCode } from '../models/TransactionCost';
 import type { ResearchSnapshot } from '../models/ResearchSnapshot';
 import type { StrategyProfile, StrategyProfileSummary } from '../models/StrategyProfile';
 import type { ControlResponse, InlineKeyboard } from '../models/TelegramControl';
+import type { TransactionCostEvaluationResponse } from './TransactionCostService';
 import type { TelegramControlSystemStatus } from './TelegramControlReadOnlyQueryService';
 
 export const CALLBACKS = {
@@ -17,6 +19,10 @@ export const CALLBACKS = {
   marketAnalyze: 'argos:v1:market:analyze',
   costsBitsoMxn: 'argos:v1:costs:bitso_mxn',
   costsBitsoUsdc: 'argos:v1:costs:bitso_usdc',
+  costsMaker: 'argos:v1:costs:maker',
+  costsTaker: 'argos:v1:costs:taker',
+  costsCancel: 'argos:v1:costs:cancel',
+  costsNew: 'argos:v1:costs:new',
   systemStatus: 'argos:v1:system:status',
   systemHelp: 'argos:v1:system:help',
   back: 'argos:v1:navigation:back',
@@ -74,12 +80,167 @@ export class TelegramControlPresenter {
   public costsMenu(): ControlResponse {
     return {
       code: 'OK',
-      text: 'Costs\n\nElige el perfil de costos:',
+      text: '💰 TRANSACTION COSTS\n\nElige el perfil de costos:',
       keyboard: this.singleColumnKeyboard([
         ['🇲🇽 Bitso MXN', CALLBACKS.costsBitsoMxn],
         ['💵 Bitso USDC', CALLBACKS.costsBitsoUsdc],
         ['⬅️ Back', CALLBACKS.back],
       ]),
+    };
+  }
+
+  public costsCapitalPrompt(profileLabel: string): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        `💰 ${profileLabel}`,
+        '',
+        'Ingresa el capital de entrada.',
+        '',
+        'Capital = valor nominal de la posición antes de costos.',
+        '',
+        'Ejemplo:',
+        '5000',
+      ].join('\n'),
+      keyboard: this.costsCancelKeyboard(),
+    };
+  }
+
+  public costsTargetPrompt(profileLabel: string, capital: number, currency: CurrencyCode): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        `💰 ${profileLabel}`,
+        '',
+        `Capital: ${formatMoney({ amount: capital, currency })}`,
+        '',
+        'Target bruto esperado (%)',
+        '',
+        'Ejemplo:',
+        '2',
+      ].join('\n'),
+      keyboard: this.costsCancelKeyboard(),
+    };
+  }
+
+  public costsExecutionPrompt(profileLabel: string): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        `💰 ${profileLabel}`,
+        '',
+        'Tipo de ejecución:',
+        '',
+        'Maker: la orden espera en el libro.',
+        'Taker: la orden ejecuta contra liquidez disponible.',
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [
+            { text: 'Maker', callbackData: CALLBACKS.costsMaker },
+            { text: 'Taker', callbackData: CALLBACKS.costsTaker },
+          ],
+          [{ text: '❌ Cancel', callbackData: CALLBACKS.costsCancel }],
+        ],
+      },
+    };
+  }
+
+  public invalidCostCapital(profileLabel: string): ControlResponse {
+    return {
+      code: 'VALIDATION_ERROR',
+      text: [`💰 ${profileLabel}`, '', '⚠️ Capital inválido.', '', 'Ingresa un número mayor a 0.', '', 'Ejemplo:', '5000'].join('\n'),
+      keyboard: this.costsCancelKeyboard(),
+    };
+  }
+
+  public invalidCostTarget(profileLabel: string): ControlResponse {
+    return {
+      code: 'VALIDATION_ERROR',
+      text: [`💰 ${profileLabel}`, '', '⚠️ Target inválido.', '', 'Ingresa un porcentaje mayor a 0.', '', 'Ejemplo:', '2'].join('\n'),
+      keyboard: this.costsCancelKeyboard(),
+    };
+  }
+
+  public costsExpired(): ControlResponse {
+    return {
+      code: 'ERROR',
+      text: ['⏱️ La operación expiró.', '', 'Inicia un nuevo cálculo desde 💰 Costos.'].join('\n'),
+      keyboard: this.costsMenuKeyboard(),
+    };
+  }
+
+  public costsCancelled(): ControlResponse {
+    return {
+      code: 'CANCELLED',
+      text: 'Operación cancelada.',
+      keyboard: this.costsMenuKeyboard(),
+    };
+  }
+
+  public costsCalculationError(): ControlResponse {
+    return {
+      code: 'ERROR',
+      text: ['⚠️ ARGOS no pudo calcular los costos.', '', 'Intenta nuevamente.'].join('\n'),
+      keyboard: this.costsMenuKeyboard(),
+    };
+  }
+
+  public transactionCostResult(evaluation: TransactionCostEvaluationResponse, profileLabel?: string): ControlResponse {
+    const { result, interpretation } = evaluation;
+    const targetCoversCosts = interpretation.targetCoversModeledCosts;
+
+    return {
+      code: 'OK',
+      text: [
+        '💰 TRANSACTION COSTS',
+        '',
+        'Profile:',
+        profileLabel ?? result.brokerProfileId,
+        '',
+        'Capital:',
+        formatMoney(result.entryNotional),
+        '',
+        'Cash required:',
+        formatMoney(result.totalCashRequired),
+        '',
+        'Target:',
+        `+${formatFixedPercent(result.grossTargetPercent)}`,
+        '',
+        'Execution:',
+        formatExecution(result.buyExecutionMode, result.sellExecutionMode),
+        '',
+        'Gross exit:',
+        formatMoney(result.grossExitValue),
+        '',
+        'Gross profit:',
+        formatMoney(result.grossProfit),
+        '',
+        'Fees',
+        `Buy: ${formatMoney(result.buyCost.fee)}`,
+        `Sell: ${formatMoney(result.sellCost.fee)}`,
+        `Round trip: ${formatMoney(result.roundTripCost)}`,
+        '',
+        'Net profit:',
+        formatSignedMoney(result.netProfit),
+        '',
+        'Net return:',
+        formatSignedPercent(result.netReturnPercent),
+        '',
+        'Break-even:',
+        `+${formatFixedPercent(result.breakEvenGrossTargetPercent)}`,
+        '',
+        targetCoversCosts ? '✅ El target supera los costos modelados.' : '⚠️ El target no cubre los costos modelados.',
+        '',
+        'Modelado: fees de compra/venta.',
+        'No incluye spread, slippage, funding, withdrawals ni FX.',
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '🔄 New Calculation', callbackData: CALLBACKS.costsNew }],
+          [{ text: '⬅️ Costs Menu', callbackData: CALLBACKS.costsMenu }],
+        ],
+      },
     };
   }
 
@@ -217,18 +378,14 @@ export class TelegramControlPresenter {
         '/start o /menu abre el menú principal.',
         '/cancel cancela cualquier flujo activo.',
         '',
-        'V1.5-C permite consultar Research Snapshot, Strategy Profiles, Forward Performance y System Status en modo read-only.',
+        'V1.5-D permite consultar Research y calcular Transaction Costs desde Telegram en modo read-only.',
       ].join('\n'),
       keyboard: this.backKeyboard(),
     };
   }
 
   public cancelled(): ControlResponse {
-    return {
-      code: 'CANCELLED',
-      text: 'Operación cancelada. Puedes volver al menú principal con /menu.',
-      keyboard: this.backKeyboard(),
-    };
+    return this.costsCancelled();
   }
 
   public unauthorized(): ControlResponse {
@@ -271,6 +428,18 @@ export class TelegramControlPresenter {
   private backKeyboard(): InlineKeyboard {
     return {
       rows: [[{ text: '⬅️ Back', callbackData: CALLBACKS.back }]],
+    };
+  }
+
+  private costsMenuKeyboard(): InlineKeyboard {
+    return {
+      rows: [[{ text: '⬅️ Back to Costs', callbackData: CALLBACKS.costsMenu }]],
+    };
+  }
+
+  private costsCancelKeyboard(): InlineKeyboard {
+    return {
+      rows: [[{ text: '❌ Cancel', callbackData: CALLBACKS.costsCancel }]],
     };
   }
 
@@ -340,8 +509,42 @@ const formatPercent = (value: number | null | undefined): string => (value === n
 
 const formatPercentValue = (value: number): string => `${formatDecimal(value)}%`;
 
+const formatFixedPercent = (value: number): string => `${formatDecimalFixed(value)}%`;
+
+const formatSignedPercent = (value: number): string => `${value >= 0 ? '+' : ''}${formatFixedPercent(value)}`;
+
 const formatDecimal = (value: number): string =>
   new Intl.NumberFormat('en-US', {
     minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
     maximumFractionDigits: 2,
   }).format(value);
+
+const formatDecimalFixed = (value: number): string =>
+  new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+
+const formatMoney = (money: { amount: number; currency: CurrencyCode }): string => {
+  const amount = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(money.amount);
+
+  return money.currency === 'MXN' ? `$${amount} MXN` : `${amount} ${money.currency}`;
+};
+
+const formatSignedMoney = (money: { amount: number; currency: CurrencyCode }): string => {
+  const absoluteMoney = { ...money, amount: Math.abs(money.amount) };
+  return `${money.amount >= 0 ? '+' : '-'}${formatMoney(absoluteMoney)}`;
+};
+
+const formatExecution = (buyExecutionMode: string, sellExecutionMode: string): string => {
+  if (buyExecutionMode === sellExecutionMode) {
+    return capitalize(buyExecutionMode);
+  }
+
+  return `Buy ${capitalize(buyExecutionMode)} / Sell ${capitalize(sellExecutionMode)}`;
+};
+
+const capitalize = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
