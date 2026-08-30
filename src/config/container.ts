@@ -36,6 +36,7 @@ import { TelegramAuthorizationService } from '../services/TelegramAuthorizationS
 import { TelegramCommandRouter } from '../services/TelegramCommandRouter';
 import { TelegramConversationStateService } from '../services/TelegramConversationStateService';
 import { TelegramControlPresenter } from '../services/TelegramControlPresenter';
+import { TelegramControlReadOnlyQueryService } from '../services/TelegramControlReadOnlyQueryService';
 import { SignalContextService } from '../services/SignalContextService';
 import { WatchlistService } from '../services/WatchlistService';
 
@@ -54,11 +55,6 @@ const telegramControlAuthorizationService = new TelegramAuthorizationService(
 );
 const telegramConversationStateService = new TelegramConversationStateService();
 const telegramControlPresenter = new TelegramControlPresenter();
-const telegramCommandRouter = new TelegramCommandRouter(
-  telegramControlAuthorizationService,
-  telegramControlPresenter,
-  telegramConversationStateService,
-);
 const {
   opportunityRepository,
   signalRepository,
@@ -98,6 +94,19 @@ const researchSnapshotService =
         },
       )
     : undefined;
+
+const telegramControlReadOnlyQueryService = new TelegramControlReadOnlyQueryService({
+  researchSnapshotService,
+  strategyProfileProvider,
+  forwardPerformanceProvider: forwardPerformanceReportProvider,
+  database,
+});
+const telegramCommandRouter = new TelegramCommandRouter(
+  telegramControlAuthorizationService,
+  telegramControlPresenter,
+  telegramConversationStateService,
+  telegramControlReadOnlyQueryService,
+);
 
 export const postgresBackupService = database
   ? new PostgresBackupService(database, new ProcessCommandRunner(), {
@@ -226,5 +235,6 @@ export {
   telegramControlAuthorizationService,
   telegramConversationStateService,
   telegramControlPresenter,
+  telegramControlReadOnlyQueryService,
   telegramCommandRouter,
 };

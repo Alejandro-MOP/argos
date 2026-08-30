@@ -3,6 +3,7 @@ import type { TelegramAuthorizationService } from './TelegramAuthorizationServic
 import type { TelegramConversationStateService } from './TelegramConversationStateService';
 import { CALLBACKS } from './TelegramControlPresenter';
 import type { TelegramControlPresenter } from './TelegramControlPresenter';
+import type { TelegramControlReadOnlyQueryService } from './TelegramControlReadOnlyQueryService';
 
 const MAX_CALLBACK_DATA_BYTES = 64;
 const SUPPORTED_NAMESPACE = 'argos';
@@ -23,10 +24,16 @@ type CallbackDestination =
   | 'costs-bitso-usdc'
   | 'system-status'
   | 'system-help'
-  | 'back';
+  | 'back'
+  | 'back-research'
+  | 'back-system';
 
 interface ParsedCallback {
   destination: CallbackDestination;
+}
+
+export interface TelegramCommandRouterLogger {
+  error(message: string): void;
 }
 
 const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
@@ -45,6 +52,8 @@ const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.systemStatus]: 'system-status',
   [CALLBACKS.systemHelp]: 'system-help',
   [CALLBACKS.back]: 'back',
+  [CALLBACKS.backResearch]: 'back-research',
+  [CALLBACKS.backSystem]: 'back-system',
 };
 
 export class TelegramCommandRouter {
@@ -52,9 +61,14 @@ export class TelegramCommandRouter {
     private readonly authorizationService: Pick<TelegramAuthorizationService, 'isAuthorized'>,
     private readonly presenter: TelegramControlPresenter,
     private readonly conversationStateService: Pick<TelegramConversationStateService, 'clear'>,
+    private readonly readOnlyQueries?: Pick<
+      TelegramControlReadOnlyQueryService,
+      'getResearchSnapshot' | 'getStrategyProfiles' | 'getForwardPerformance' | 'getSystemStatus'
+    >,
+    private readonly logger: TelegramCommandRouterLogger = console,
   ) {}
 
-  public route(update: TelegramControlUpdate): ControlResponse {
+  public async route(update: TelegramControlUpdate): Promise<ControlResponse> {
     if (!this.authorizationService.isAuthorized(update.user)) {
       return this.presenter.unauthorized();
     }
@@ -88,7 +102,7 @@ export class TelegramCommandRouter {
     return this.presenter.unknownCommand();
   }
 
-  private routeCallback(callbackData: string | undefined, userId: string | undefined): ControlResponse {
+  private async routeCallback(callbackData: string | undefined, userId: string | undefined): Promise<ControlResponse> {
     const parsed = this.parseCallback(callbackData);
 
     if ('error' in parsed) {
@@ -99,22 +113,24 @@ export class TelegramCommandRouter {
       case 'main-menu':
       case 'back':
         return this.presenter.mainMenu();
+      case 'back-research':
       case 'research-menu':
         return this.presenter.researchMenu();
       case 'market-menu':
         return this.presenter.marketMenu();
       case 'costs-menu':
         return this.presenter.costsMenu();
+      case 'back-system':
       case 'system-menu':
         return this.presenter.systemMenu();
       case 'system-help':
         return this.presenter.help();
       case 'research-snapshot':
-        return this.presenter.notImplemented('Research Snapshot');
+        return this.queryResearchSnapshot();
       case 'research-profiles':
-        return this.presenter.notImplemented('Strategy Profiles');
+        return this.queryStrategyProfiles();
       case 'research-performance':
-        return this.presenter.notImplemented('Forward Performance');
+        return this.queryForwardPerformance();
       case 'market-scan':
         return this.presenter.notImplemented('Market Scan');
       case 'market-analyze':
@@ -126,7 +142,59 @@ export class TelegramCommandRouter {
         this.clearConversation(userId);
         return this.presenter.notImplemented('Bitso USDC costs');
       case 'system-status':
-        return this.presenter.notImplemented('System Status');
+        return this.querySystemStatus();
+    }
+  }
+
+  private async queryResearchSnapshot(): Promise<ControlResponse> {
+    if (!this.readOnlyQueries) {
+      return this.presenter.queryError('Research Snapshot');
+    }
+
+    try {
+      return this.presenter.researchSnapshot(await this.readOnlyQueries.getResearchSnapshot());
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.queryError('Research Snapshot');
+    }
+  }
+
+  private async queryStrategyProfiles(): Promise<ControlResponse> {
+    if (!this.readOnlyQueries) {
+      return this.presenter.queryError('Strategy Profiles');
+    }
+
+    try {
+      return this.presenter.strategyProfiles(await this.readOnlyQueries.getStrategyProfiles());
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.queryError('Strategy Profiles');
+    }
+  }
+
+  private async queryForwardPerformance(): Promise<ControlResponse> {
+    if (!this.readOnlyQueries) {
+      return this.presenter.queryError('Forward Performance');
+    }
+
+    try {
+      return this.presenter.forwardPerformance(await this.readOnlyQueries.getForwardPerformance());
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.queryError('Forward Performance');
+    }
+  }
+
+  private async querySystemStatus(): Promise<ControlResponse> {
+    if (!this.readOnlyQueries) {
+      return this.presenter.queryError('System Status');
+    }
+
+    try {
+      return this.presenter.systemStatus(await this.readOnlyQueries.getSystemStatus());
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.queryError('System Status');
     }
   }
 
@@ -176,3 +244,13 @@ export class TelegramCommandRouter {
     }
   }
 }
+
+export const sanitizeControlRouterError = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : 'telegram-control-router-error';
+
+  return message
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[REDACTED_DATABASE_URL]')
+    .replace(/\/bot[^/\s]+\//g, '/bot[redacted]/')
+    .replace(/(token|api_key|apikey|password)=([^&\s]+)/gi, '$1=[redacted]')
+    .slice(0, 220);
+};

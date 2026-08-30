@@ -82,6 +82,7 @@ El score representa:
 | **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | 🚧 In Progress |
 | **V1.5-A — Control Core** | Configuración dual, autorización, router, presenter y estado en memoria | ✅ Completed & Validated |
 | **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | ✅ Implemented & Validated |
+| **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | 🚧 Implemented / Pending Manual Validation |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1133,6 +1134,29 @@ TelegramCommandRouter
 ```
 
 Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B. Hoy los botones profundos responden `NOT_IMPLEMENTED` y no ejecutan Market Scan ni consultas reales de Research desde Telegram.
+
+
+## V1.5-C — Read-only Research Integrations 🚧
+
+Status: **IMPLEMENTED / PENDING MANUAL VALIDATION**.
+
+Alcance implementado:
+
+- Research Snapshot real desde `ResearchSnapshotService`;
+- Strategy Profiles real desde `PostgresStrategyProfileProvider`;
+- Forward Performance real desde `PostgresForwardPerformanceProvider`;
+- System Status read-only con health check mínimo `SELECT 1`;
+- botones `Refresh` para volver a consultar servicios reales;
+- navegación contextual de regreso a Research/System menus;
+- manejo seguro de errores sin stack traces ni secretos al usuario;
+- sin llamadas HTTP localhost desde Telegram;
+- sin writes en PostgreSQL;
+- sin cambios de Evidence, scoring, targets, Market Scan, costos o alertas.
+
+Pendiente antes de marcar Completed:
+
+- validación manual desde Telegram real;
+- comparación funcional con `GET /api/research-snapshot`, `GET /api/strategy-profiles` y `GET /api/forward-performance`.
 
 ---
 

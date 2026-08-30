@@ -46,7 +46,8 @@ export type ControlResponseCode =
   | 'CANCELLED'
   | 'NOT_IMPLEMENTED'
   | 'INVALID_CALLBACK'
-  | 'UNKNOWN_COMMAND';
+  | 'UNKNOWN_COMMAND'
+  | 'ERROR';
 
 export interface ControlResponse {
   text: string;

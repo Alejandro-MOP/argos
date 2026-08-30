@@ -443,15 +443,23 @@ Componentes reales de V1.5-A/V1.5-B:
 - `TelegramControlPollingService`: coordina Long Polling, autorización previa al router, offset en memoria, backoff y shutdown.
 - `telegramControlWorker`: proceso Node persistente para correr Control Bot fuera de Azure Functions.
 
-Telegram es una interfaz, no una capa de lógica de negocio. La arquitectura objetivo es:
+Telegram es una interfaz, no una capa de lógica de negocio. Desde V1.5-C, las primeras consultas read-only se conectan así:
 
 ```text
-Telegram
+Telegram Control
    ↓
-Command Router
+TelegramCommandRouter
    ↓
-ARGOS Application Services
+TelegramControlReadOnlyQueryService
+   ↓
+ResearchSnapshotService / StrategyProfileProvider / ForwardPerformanceProvider / System Status
+   ↓
+PostgreSQL
+   ↓
+TelegramControlPresenter
 ```
+
+El router no llama endpoints HTTP locales. HTTP Functions y Telegram son adapters que reutilizan servicios/providers de aplicación.
 
 Ejemplo futuro correcto:
 
@@ -463,7 +471,7 @@ TransactionCostService
 TransactionCostCalculator
 ```
 
-No se deben duplicar fórmulas de costos, scoring, Evidence, Forward Evaluation ni Strategy Profiles dentro de Telegram. Las integraciones reales con servicios de ARGOS siguen pendientes.
+No se deben duplicar fórmulas de costos, scoring, Evidence, Forward Evaluation ni Strategy Profiles dentro de Telegram. Las integraciones read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status existen desde V1.5-C. Market Scan, Analyze Symbol y Transaction Costs desde Telegram siguen pendientes.
 
 #### Callback routing
 
@@ -640,4 +648,4 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core y V1.5-B agrega transporte real por Long Polling para una interfaz Telegram interactiva. Las integraciones reales con Research Snapshot, Strategy Profiles, Transaction Costs o Market Scan desde Telegram todavía no están implementadas.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling y V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram. Transaction Costs, Market Scan y Analyze Symbol desde Telegram todavía no están implementados.

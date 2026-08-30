@@ -184,7 +184,7 @@ export class TelegramControlPollingService {
     }
 
     try {
-      const response = this.dependencies.router.route(update);
+      const response = await this.dependencies.router.route(update);
       await this.sendControlResponse(update.chat?.id, response);
       if (callbackQueryId) {
         await this.answerCallbackSafely(callbackQueryId);

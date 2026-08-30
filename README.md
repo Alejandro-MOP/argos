@@ -1632,7 +1632,7 @@ Comandos soportados por ahora:
 - `/help`
 - `/cancel`
 
-Los botones inline funcionan y responden mediante callbacks, pero las integraciones reales de Research Snapshot, Strategy Profiles, Forward Performance, Market Scan y costos desde Telegram siguen como `NOT_IMPLEMENTED`. Esto es intencional: V1.5-B sólo agrega el transporte seguro.
+Los botones inline funcionan y responden mediante callbacks. Desde V1.5-C, Research Snapshot, Strategy Profiles, Forward Performance y System Status consultan servicios reales en modo read-only. Market Scan, Analyze Symbol y costos desde Telegram siguen como `NOT_IMPLEMENTED` por diseño.
 
 Notas operativas:
 
