@@ -14,7 +14,8 @@
     "db:migrate": "npm run build && node dist/src/db/migrate.js",
     "db:backup": "npm run build && node dist/src/db/backupCli.js",
     "db:backup:verify": "npm run build && node dist/src/db/verifyBackupCli.js",
-    "db:backup:restore-test": "npm run build && node dist/src/db/restoreTestCli.js"
+    "db:backup:restore-test": "npm run build && node dist/src/db/restoreTestCli.js",
+    "telegram:control": "npm run build && node dist/src/workers/telegramControlWorker.js"
   },
   "engines": {
     "node": ">=22.0.0"

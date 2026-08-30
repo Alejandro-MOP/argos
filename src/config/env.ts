@@ -1,9 +1,43 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import dotenv from 'dotenv';
 import type { WatchlistName } from '../services/WatchlistService';
 import type { EngineRuntimeConfig } from '../models/EngineConfig';
 import type { TradePlanConfig } from '../utils/tradeSizing.utils';
 
 dotenv.config();
+loadLocalSettingsValues();
+
+interface AzureLocalSettingsFile {
+  Values?: Record<string, unknown>;
+}
+
+function loadLocalSettingsValues(): void {
+  const isJestRuntime = process.argv.some((argument) => argument.includes('jest'));
+
+  if (process.env.NODE_ENV === 'test' || isJestRuntime) {
+    return;
+  }
+
+  const localSettingsPath = join(process.cwd(), 'local.settings.json');
+
+  if (!existsSync(localSettingsPath)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(localSettingsPath, 'utf8')) as AzureLocalSettingsFile;
+
+    for (const [key, value] of Object.entries(parsed.Values ?? {})) {
+      if (process.env[key] === undefined && typeof value === 'string') {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // Ignore malformed local.settings.json here. Azure Functions/Core Tools will surface
+    // local settings issues when running the Functions host.
+  }
+}
 
 const parseInteger = (value: string | undefined, fallback: number): number => {
   if (!value) {

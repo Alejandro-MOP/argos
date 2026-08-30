@@ -429,15 +429,19 @@ Presenter
 ControlResponse
 ```
 
-Este flujo puede probarse internamente mediante unit tests. Todavía no recibe Telegram Updates reales.
+Este flujo puede probarse internamente mediante unit tests y, desde V1.5-B, también mediante updates reales de Telegram recibidos por Long Polling local.
 
-Componentes reales de V1.5-A:
+Componentes reales de V1.5-A/V1.5-B:
 
 - `TelegramControl` models: update interno, response e inline keyboard models.
 - `TelegramAuthorizationService`: autorización por Telegram `user_id`.
 - `TelegramCommandRouter`: enruta comandos y callbacks.
 - `TelegramControlPresenter`: construye textos, menús, errores y placeholders.
 - `TelegramConversationStateService`: estado en memoria con TTL de 15 minutos.
+- `TelegramControlClient`: cliente dedicado para Telegram Bot API usando `fetch` nativo.
+- `TelegramControlUpdateMapper`: convierte raw Telegram JSON a `TelegramControlUpdate`.
+- `TelegramControlPollingService`: coordina Long Polling, autorización previa al router, offset en memoria, backoff y shutdown.
+- `telegramControlWorker`: proceso Node persistente para correr Control Bot fuera de Azure Functions.
 
 Telegram es una interfaz, no una capa de lógica de negocio. La arquitectura objetivo es:
 
@@ -482,7 +486,7 @@ argos:v1:system:status
 - **callback_data**: identificador pequeño asociado al botón; no debe contener secretos, JSON grande ni estado sensible.
 - **Callback Query**: evento que Telegram produce cuando el usuario presiona un botón.
 
-En V1.5-A el routing interno existe, pero Telegram todavía no envía esos callbacks al sistema porque el transporte no está implementado.
+Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Las acciones profundas todavía son placeholders `NOT_IMPLEMENTED`.
 
 #### Authorization
 
@@ -495,16 +499,18 @@ ARGOS Control utiliza `user_id` para decidir quién puede ejecutar comandos. No 
 
 #### Conversation state
 
-El estado conversacional actual es en memoria, aislado por `user_id`, con TTL default de 15 minutos. Se usa para preparar interacciones multi-step futuras. No usa PostgreSQL y se pierde al reiniciar el proceso; esto es intencional en V1.5-A. Persistencia podría reconsiderarse para flujos futuros como Trade Companion.
+El estado conversacional actual es en memoria, aislado por `user_id`, con TTL default de 15 minutos. Se usa para preparar interacciones multi-step futuras. No usa PostgreSQL y se pierde al reiniciar el worker; esto es intencional en V1.5-B. Persistencia podría reconsiderarse para flujos futuros como Trade Companion.
 
 #### Long Polling vs Webhook
 
-Decisión arquitectónica registrada para próximas etapas:
+Decisión arquitectónica implementada en V1.5-B:
 
-- **Local**: Long Polling Worker. ARGOS consultará periódicamente a Telegram buscando nuevos updates.
+- **Local**: Long Polling Worker. ARGOS consulta a Telegram buscando nuevos updates mediante `getUpdates` con timeout largo.
 - **Cloud futuro**: Webhook. Telegram llamará a una URL pública de ARGOS cuando exista un update.
 
-Long Polling no debe ejecutarse como loop infinito dentro de una Azure Function. La implementación real será V1.5-B.
+Long Polling no se ejecuta como loop infinito dentro de una Azure Function. Corre como proceso Node persistente con `npm run telegram:control`. Antes de iniciar valida `getWebhookInfo`; si existe un webhook activo, se detiene para no mezclar transportes.
+
+El offset de Telegram vive en memoria: `nextOffset = max(update_id procesado) + 1`. Si el worker reinicia, Telegram puede reenviar updates pendientes. En V1.5-B se procesan normalmente; no se hace flush silencioso al arranque.
 
 #### Future Trade Companion
 
@@ -634,4 +640,4 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core para una futura interfaz Telegram interactiva, pero el transporte real y las integraciones con Research Snapshot, Strategy Profiles, Transaction Costs o Market Scan todavía no están implementadas.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core y V1.5-B agrega transporte real por Long Polling para una interfaz Telegram interactiva. Las integraciones reales con Research Snapshot, Strategy Profiles, Transaction Costs o Market Scan desde Telegram todavía no están implementadas.

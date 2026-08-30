@@ -22,7 +22,7 @@ ARGOS es hoy un motor cuantitativo experimental que observa el mercado, detecta 
 
 V1.4-A agrega el primer núcleo puro de costos transaccionales. V1.4-B expone ese cálculo mediante un endpoint HTTP read-only. Ninguna de estas piezas cambia decisiones del motor, scoring, Evidence ni Telegram; sirven para responder, de forma aislada, si un target bruto tendría sentido después de comisiones maker/taker.
 
-V1.5 inicia la evolución de Telegram desde un canal únicamente de salida hacia una interfaz separada en dos responsabilidades: Alerts Bot para notificaciones automáticas y Control Bot para una futura interacción usuario ↔ ARGOS. Actualmente sólo está implementado y validado **V1.5-A — Control Core**: modelos internos, autorización, routing, presenter, inline keyboard response models y estado conversacional en memoria. El transporte real del Control Bot todavía no existe; ARGOS aún no puede recibir comandos reales desde Telegram.
+V1.5 inicia la evolución de Telegram desde un canal únicamente de salida hacia una interfaz separada en dos responsabilidades: Alerts Bot para notificaciones automáticas y Control Bot para interacción privada usuario ↔ ARGOS. Actualmente están implementados **V1.5-A — Control Core** y **V1.5-B — Control Transport**: el Control Bot puede recibir comandos reales por Long Polling local mediante un worker Node separado de Azure Functions. Las integraciones profundas con Research, Market Scan, costos reales y performance todavía responden placeholders `NOT_IMPLEMENTED` por diseño.
 
 ## ARGOS Engine
 
@@ -53,7 +53,7 @@ flowchart TD
   A --> F[Notifications<br/>Implemented]
   A --> G[Data Protection<br/>Implemented]
   A --> H[Broker / Cost Model<br/>Implemented]
-  A --> I[ARGOS Control Core<br/>Implemented]
+  A --> I[ARGOS Control<br/>Core + Long Polling Implemented]
   A --> J[Product Platform<br/>Future]
 ```
 
@@ -1487,9 +1487,9 @@ Telegram está separado en dos responsabilidades conceptuales:
 - **ARGOS Alerts Bot**: canal operativo actual para notificaciones automáticas. Flujo principalmente ARGOS → usuario.
 - **ARGOS Control Bot**: futura interfaz interactiva privada. Flujo usuario ↔ ARGOS.
 
-El Alerts Bot sigue siendo el único bot operativo contra Telegram Bot API. `NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Si el Alerts Bot está habilitado y configurado, envía el mensaje real por Telegram. Si falta configuración o Telegram responde con error, el escaneo no falla y el mensaje se escribe en consola.
+El Alerts Bot sigue siendo el canal operativo de notificaciones automáticas. `NotificationService` acepta `Signal` y opcionalmente `Opportunity`. Si el Alerts Bot está habilitado y configurado, envía el mensaje real por Telegram. Si falta configuración o Telegram responde con error, el escaneo no falla y el mensaje se escribe en consola.
 
-V1.5-A implementa únicamente el **Control Core**: modelos internos, autorización por `user_id`, command/callback routing, presenter, inline keyboard response models y estado conversacional en memoria. Todavía no existe transporte real para Control Bot: no hay `getUpdates`, no hay Long Polling Worker, no hay Webhook y Telegram todavía no envía callbacks reales al sistema.
+El Control Bot es un bot independiente para control privado. V1.5-A implementó el core interno: modelos, autorización por `user_id`, command/callback routing, presenter, inline keyboards y estado conversacional en memoria. V1.5-B agrega el transporte real por Telegram Bot API usando Long Polling local en un worker Node dedicado. No corre como loop infinito dentro de Azure Functions.
 
 Cuando recibe ambas entidades, envía un formato enriquecido:
 
@@ -1572,16 +1572,16 @@ https://api.telegram.org/bot<TELEGRAM_ALERTS_BOT_TOKEN>/getUpdates
     "TELEGRAM_ALERTS_ENABLED": "true",
     "TELEGRAM_ALERTS_BOT_TOKEN": "<alerts-bot-token>",
     "TELEGRAM_ALERTS_CHAT_ID": "<alerts-chat-id>",
-    "TELEGRAM_CONTROL_ENABLED": "false",
-    "TELEGRAM_CONTROL_BOT_TOKEN": "",
-    "TELEGRAM_CONTROL_ALLOWED_USER_IDS": ""
+    "TELEGRAM_CONTROL_ENABLED": "true",
+    "TELEGRAM_CONTROL_BOT_TOKEN": "<control-bot-token>",
+    "TELEGRAM_CONTROL_ALLOWED_USER_IDS": "<telegram-user-id>"
   }
 }
 ```
 
 Compatibilidad: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `TELEGRAM_ENABLED` siguen funcionando como fallback del Alerts Bot. Las variables `TELEGRAM_ALERTS_*` tienen precedencia si existen. `TELEGRAM_NOTIFICATION_MIN_SCORE` conserva su comportamiento: define el score mínimo para entrar a `notifiedSignals` y enviar Telegram cuando `notify=true`.
 
-Para el futuro Control Bot, la autorización será por `user_id` de Telegram: identifica la cuenta del usuario. `chat_id` identifica una conversación/chat y se usa actualmente para enviar alertas, pero no debe ser la única base de autorización del Control Bot.
+El Control Bot autoriza por `user_id` de Telegram: identifica la cuenta del usuario. `chat_id` identifica una conversación/chat y sólo se usa como destino de respuesta. Si `TELEGRAM_CONTROL_ALLOWED_USER_IDS` está vacío, el worker puede arrancar, pero todos los usuarios serán rechazados con `Unauthorized.`. No documentes IDs reales ni tokens.
 
 ### Probar Telegram
 
@@ -1602,6 +1602,43 @@ Debe enviar:
 ```text
 ✅ ARGOS conectado a Telegram
 ```
+
+### Probar ARGOS Control Bot
+
+El Control Bot corre como proceso Node separado. Para levantar Azure Functions usa:
+
+```bash
+npm start
+```
+
+Para levantar el worker de control en otra terminal usa:
+
+```bash
+npm run telegram:control
+```
+
+El worker carga `.env` y, para desarrollo local, también `local.settings.json` si existe. `.env` tiene prioridad cuando una variable ya está definida.
+
+Al iniciar, el worker valida `TELEGRAM_CONTROL_ENABLED`, `TELEGRAM_CONTROL_BOT_TOKEN`, `TELEGRAM_CONTROL_ALLOWED_USER_IDS` y consulta `getWebhookInfo`. Si el bot tiene un webhook activo, Long Polling se bloquea con este mensaje para evitar consumir updates por dos transportes a la vez:
+
+```text
+Telegram Control Bot has active webhook. Long polling cannot start safely.
+```
+
+Comandos soportados por ahora:
+
+- `/start`
+- `/menu`
+- `/help`
+- `/cancel`
+
+Los botones inline funcionan y responden mediante callbacks, pero las integraciones reales de Research Snapshot, Strategy Profiles, Forward Performance, Market Scan y costos desde Telegram siguen como `NOT_IMPLEMENTED`. Esto es intencional: V1.5-B sólo agrega el transporte seguro.
+
+Notas operativas:
+
+- El offset de `getUpdates` vive en memoria. Si el worker se reinicia, Telegram puede reenviar updates pendientes.
+- Los updates pendientes al arranque se procesan normalmente; no se hace flush silencioso.
+- Los logs de descubrimiento muestran `userId`, `chatId` y `type`, pero no imprimen payloads completos ni tokens.
 
 ### Notificar Señales
 
@@ -1869,9 +1906,9 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `TELEGRAM_ALERTS_BOT_TOKEN`            | Token explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_BOT_TOKEN`.                             |
 | `TELEGRAM_ALERTS_CHAT_ID`              | Chat destino explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_CHAT_ID`.                        |
 | `TELEGRAM_ALERTS_ENABLED`              | Activa/desactiva explícitamente el Alerts Bot; tiene precedencia sobre `TELEGRAM_ENABLED`.                |
-| `TELEGRAM_CONTROL_BOT_TOKEN`           | Token reservado para el futuro Control Bot. En V1.5-A aún no se usa para llamadas reales a Telegram.      |
-| `TELEGRAM_CONTROL_ENABLED`             | Habilita/deshabilita conceptualmente Control Bot; default `false`. V1.5-A no implementa transporte real.  |
-| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`    | Lista CSV de `user_id` autorizados para el futuro Control Bot. No incluir IDs reales en documentación.    |
+| `TELEGRAM_CONTROL_BOT_TOKEN`           | Token del Control Bot usado por el worker `npm run telegram:control`. No debe subirse a git.              |
+| `TELEGRAM_CONTROL_ENABLED`             | Habilita/deshabilita el Control Bot Long Polling Worker; default `false`.                                 |
+| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`    | Lista CSV de `user_id` autorizados para usar Control Bot. Si está vacía, todos quedan denegados.          |
 | `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                                      |
 | `MARKET_SCAN_TIMEFRAMES`               | Lista CSV de temporalidades para el scan vivo; si no existe, se usa `MARKET_SCAN_TIMEFRAME`.              |
 | `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.                      |

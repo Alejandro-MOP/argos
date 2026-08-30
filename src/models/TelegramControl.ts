@@ -14,15 +14,21 @@ export interface TelegramControlMessage {
 }
 
 export interface TelegramControlCallback {
+  id?: string;
   data?: string;
 }
 
+export type TelegramControlUpdateType = 'message' | 'callback_query' | 'unsupported';
+
 export interface TelegramControlUpdate {
+  updateId?: number;
+  updateType?: TelegramControlUpdateType;
   user?: TelegramControlUser;
   chat?: TelegramControlChat;
   message?: TelegramControlMessage;
   callback?: TelegramControlCallback;
 }
+
 
 export interface InlineKeyboardButton {
   text: string;

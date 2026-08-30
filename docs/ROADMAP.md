@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.5-B — Control Transport`
+**Desarrollo siguiente:** `V1.5-C — Control Application Integrations`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -81,7 +81,7 @@ El score representa:
 | **V1.4-B — Cost Application Layer** | Servicio de aplicación y endpoint HTTP read-only para evaluar costos | ✅ Implemented & Functionally Validated |
 | **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | 🚧 In Progress |
 | **V1.5-A — Control Core** | Configuración dual, autorización, router, presenter y estado en memoria | ✅ Completed & Validated |
-| **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | 🔥 Next / Not Implemented |
+| **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | ✅ Implemented & Validated |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1090,36 +1090,29 @@ Implementado:
 - `TelegramConversationStateService` en memoria con TTL de 15 minutos;
 - tests de autorización, routing, presenter, estado y regresión del Alerts Bot.
 
-V1.5-A **no** incluye transporte real. El Control Bot todavía no recibe comandos desde Telegram.
+V1.5-A no incluyó transporte real. Esa responsabilidad queda cerrada por V1.5-B.
 
-No implementado todavía:
+## V1.5-B — Control Transport ✅
 
-- `TelegramControlClient`;
-- Telegram Bot API para Control;
-- `getUpdates`;
-- Long Polling;
-- Telegram Control Worker;
-- Webhook;
-- mapping de raw Telegram Update a `TelegramControlUpdate`;
-- envío real de `ControlResponse` como mensaje Telegram;
-- integración real con Transaction Costs, Research Snapshot, Strategy Profiles, Forward Performance o Market Scan.
+Status: **IMPLEMENTED & VALIDATED**.
 
-## V1.5-B — Control Transport 🔥
+Validación manual con Control Bot real de Telegram: **PASS**. El worker conecta, `/start` responde, los menús inline aparecen, los callbacks responden y la navegación funciona. Las opciones profundas permanecen `NOT_IMPLEMENTED`, esperado para V1.5-B.
 
-Status: **NEXT / NOT IMPLEMENTED**.
+Implementado:
 
-Alcance conceptual:
-
-- `TelegramControlClient`;
-- Telegram Bot API;
-- `getUpdates`;
-- Long Polling local;
-- Telegram Control Worker local;
-- offset management;
-- graceful shutdown;
-- conversión raw Telegram Update → `TelegramControlUpdate`;
-- conversión `ControlResponse` → mensaje/inline keyboard real;
-- validación manual real desde Telegram.
+- `TelegramControlClient` dedicado con `fetch` nativo;
+- Telegram Bot API para Control Bot;
+- `getUpdates` por Long Polling local con timeout largo;
+- `TelegramControlPollingService` con offset en memoria, backoff y shutdown seguro;
+- `telegramControlWorker` como proceso Node persistente separado de Azure Functions;
+- validación inicial de `getWebhookInfo` para bloquear Long Polling si existe webhook activo;
+- mapper raw Telegram Update → `TelegramControlUpdate` para mensajes y callback queries;
+- autorización antes del router usando Telegram `user_id`;
+- respuesta al `chat_id` entrante;
+- envío de `ControlResponse` como mensaje Telegram con inline keyboard;
+- `answerCallbackQuery` para limpiar spinner de callbacks;
+- manejo explícito de 401 fatal, 429 con `retry_after`, 5xx/network con backoff;
+- logs seguros sin tokens ni payload completo.
 
 Arquitectura local planeada:
 
@@ -1129,7 +1122,7 @@ Azure Functions local
 Telegram Control Worker local
 ```
 
-Long Polling no debe ejecutarse como loop infinito dentro de una Azure Function. En cloud, la alternativa futura natural será:
+Long Polling no se ejecuta como loop infinito dentro de una Azure Function. En cloud, la alternativa futura natural será:
 
 ```text
 Telegram Webhook
@@ -1139,7 +1132,7 @@ HTTP Function
 TelegramCommandRouter
 ```
 
-Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B.
+Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B. Hoy los botones profundos responden `NOT_IMPLEMENTED` y no ejecutan Market Scan ni consultas reales de Research desde Telegram.
 
 ---
 
@@ -2149,6 +2142,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.5-B — Control Transport`
+**Desarrollo siguiente:** `V1.5-C — Control Application Integrations`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
