@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.5-F — Telegram Full Market Scan`
+**Desarrollo siguiente:** `V1.6-A — Market Universe Expansion & Segmentation`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -85,7 +85,8 @@ El score representa:
 | **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Implemented & Validated |
 | **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Implemented & Validated |
 | **V1.5-E — Telegram Analyze Symbol** | Análisis técnico ad-hoc read-only desde Control Bot | ✅ Completed / Manually Validated |
-| **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | 🚧 Implemented / Pending Manual Validation |
+| **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | ✅ Completed / Manually Validated |
+| **V1.6-A — Market Universe Expansion & Segmentation** | Ampliar universo a 90-110 símbolos activos segmentados por asset/sector/industry/session | 🚧 Implemented / Pending Manual Validation |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -354,7 +355,6 @@ estado del producto
 hitos
 versiones
 backlog
-
 
 docs/bitacora_experimental.md
     ↓
@@ -1138,8 +1138,6 @@ TelegramCommandRouter
 
 Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B. Hoy los botones profundos responden `NOT_IMPLEMENTED` y no ejecutan Market Scan ni consultas reales de Research desde Telegram.
 
-
-
 ## V1.5-E — Telegram Analyze Symbol ✅
 
 Estado: **Completed / Manually Validated**.
@@ -1194,7 +1192,6 @@ Se confirmó:
 - `BTC-USD / 1m` con asset `CRYPTO`, price, score, component scores, reasons, 80 candles y última vela reciente coherente con mercado 24/7;
 - threshold operativo mostrado correctamente;
 - el flujo es read-only y no tiene rutas de persistencia.
-
 
 ## V1.5-F — Telegram Full Market Scan 🚧
 
@@ -1261,6 +1258,31 @@ Validación manual pendiente:
 - validar que Alerts, si existen, llegan por Alerts Bot y no mezcladas como respuesta del Control Bot;
 - probar Run Again y confirmar que vuelve a confirmación;
 - si el scan tarda suficiente, probar doble Confirm y verificar respuesta already-running.
+
+## V1.6-A — Market Universe Expansion & Segmentation 🚧
+
+Estado: **Implemented / Pending Manual Validation**.
+
+V1.6-A amplía el universo real usado por ARGOS Engine sin cambiar la lógica de scoring ni el pipeline de señales. La expansión conserva los símbolos existentes y agrega cobertura en segmentos que estaban débiles: Broad Market ETFs, sector ETFs, semiconductores, tasas/bonos, metales, utilities, real estate/REITs y líderes adicionales por sector.
+
+Principios aplicados:
+
+- migración data-only e idempotente;
+- no deletes, no truncate, no schema migration;
+- `provider_symbol` validado contra Yahoo Finance antes de insertar;
+- metadata conservadora: no inventar datos no confiables;
+- `GLD` conserva su registro previo y sólo completa sector `Metals` si estaba vacío;
+- no cambia Evidence, Strategy Profiles, Telegram, Transaction Costs, RiskService ni Market Scan;
+- la matriz final esperada queda dentro del rango operativo de 90-110 símbolos activos.
+
+Validación manual pendiente:
+
+- ejecutar migración en PostgreSQL local;
+- confirmar conteo activo final;
+- revisar distribución por `asset_type`, `sector`, `industry`, `market` y `session_type`;
+- ejecutar Full Market Scan con concurrencia controlada;
+- confirmar que STOCK/ETF intradía fuera de sesión se omite como `market-closed` sin llamar Yahoo;
+- confirmar que crypto permanece 24/7.
 
 ## V1.5-D — Telegram Transaction Costs Integration ✅
 
@@ -1795,7 +1817,6 @@ SIGNAL
 =
 el algoritmo detectó una oportunidad
 
-
 TRADE
 =
 el usuario decidió operar esa señal
@@ -1918,7 +1939,6 @@ Por lo tanto:
 Portfolio Risk
     ↓
 prioridad funcional
-
 
 Market Calendar
     ↓
@@ -2317,6 +2337,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.5-F — Telegram Full Market Scan`
+**Desarrollo siguiente:** `V1.6-A — Market Universe Expansion & Segmentation`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

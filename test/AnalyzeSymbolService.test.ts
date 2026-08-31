@@ -62,6 +62,21 @@ const marketUniverseSnapshot: MarketUniverseSnapshot = {
       isActive: true,
       timeframes: ['1m', '15m', '1d'],
     },
+    {
+      symbol: 'SPY',
+      providerSymbol: 'SPY',
+      displayName: 'SPY',
+      assetType: 'ETF',
+      sector: 'Broad Market',
+      industry: 'S&P 500 ETF',
+      exchange: 'NYSEARCA',
+      market: 'US',
+      timezone: 'America/New_York',
+      sessionType: 'US_REGULAR',
+      supportsIntraday: true,
+      isActive: true,
+      timeframes: ['1m', '5m', '15m', '1d', '1w'],
+    },
   ],
 };
 
@@ -115,6 +130,26 @@ describe('AnalyzeSymbolService', () => {
       assetType: 'CRYPTO',
       score: 85,
       aboveOperationalThreshold: false,
+    }));
+  });
+
+  it('analyzes expanded ETF symbols through the universe without persistence paths', async () => {
+    const expandedOpportunityService = {
+      analyze: jest.fn().mockReturnValue(buildOpportunity({ ticker: 'SPY', timeframe: '15m', score: 70 })),
+    };
+    const { service, marketDataService } = buildService({
+      opportunityService: expandedOpportunityService,
+    });
+
+    const result = await service.analyze({ symbol: 'spy', timeframe: '15m' });
+
+    expect(marketDataService.getCandles).toHaveBeenCalledWith('SPY', '15m', 80);
+    expect(expandedOpportunityService.analyze).toHaveBeenCalledWith('SPY', '15m', expect.any(Array));
+    expect(result).toEqual(expect.objectContaining({
+      symbol: 'SPY',
+      providerSymbol: 'SPY',
+      assetType: 'ETF',
+      score: 70,
     }));
   });
 

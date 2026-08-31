@@ -1033,6 +1033,22 @@ WHERE timeframe.symbol_id = symbol.id
   AND timeframe.timeframe = '1m';
 ```
 
+### Expansión del universo V1.6-A
+
+V1.6-A amplía el universo operativo a un rango objetivo de 90-110 símbolos activos, manteniendo
+el universo anterior y agregando segmentos que antes estaban subrepresentados: Broad Market ETFs,
+sector ETFs, semiconductores, tasas/bonos, utilities, real estate/REITs y metales.
+
+Esta etapa es **data-only**: no cambia scoring, analyzers, Evidence, Strategy Profiles, Telegram ni
+RiskService. El objetivo es que ARGOS tenga mejor cobertura y pueda observar más contextos de mercado
+sin alterar la metodología de decisión.
+
+Los nuevos símbolos fueron validados contra Yahoo Finance antes de insertarse. Si un `provider_symbol`
+no responde correctamente, no debe entrar al catálogo. La metadata debe mantenerse conservadora: si
+un dato no es confiable, se deja `NULL` en vez de inventarlo.
+
+Más detalle: [`docs/MARKET_UNIVERSE.md`](docs/MARKET_UNIVERSE.md).
+
 ### Market hours awareness
 
 ARGOS Engine separa `market-closed` de `stale-market-data`:

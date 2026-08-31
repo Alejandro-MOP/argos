@@ -653,4 +653,12 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling, V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram, V1.5-D conecta Transaction Costs, V1.5-E conecta Analyze Symbol y V1.5-F conecta Full Market Scan con confirmación explícita. Market Scan desde Telegram usa el pipeline operacional existente.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling, V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram, V1.5-D conecta Transaction Costs, V1.5-E conecta Analyze Symbol y V1.5-F conecta Full Market Scan con confirmación explícita. Market Scan desde Telegram usa el pipeline operacional existente. V1.6-A expande el Market Universe de forma data-only para mejorar cobertura por asset class, sector, industry y session type sin modificar scoring ni research.
+
+### V1.6-A — Market Universe Expansion & Segmentation
+
+El universo de mercado se administra como catálogo persistente en PostgreSQL. `market_symbols.symbol` representa el ticker lógico de ARGOS y `market_symbols.provider_symbol` representa el identificador enviado al proveedor de datos. Esta separación mantiene el engine desacoplado de Yahoo Finance aunque Yahoo sea el proveedor operativo actual.
+
+La expansión V1.6-A agrega símbolos curados en Broad Market ETFs, sector ETFs, semiconductores, rates/bonds, metals, utilities, real estate y líderes adicionales por sector. Es una migración data-only, idempotente y non-destructive: no borra históricos, no modifica señales/evidence y no cambia fórmulas ni thresholds.
+
+El flujo operacional sigue cargando un snapshot de configuración y un snapshot de universo al inicio de cada scan. Las reglas de sesión siguen filtrando combinaciones `market-closed` antes de llamar Yahoo.
