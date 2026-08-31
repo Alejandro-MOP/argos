@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.5-C — Control Application Integrations`
+**Desarrollo siguiente:** `V1.5-E — Telegram Analyze Symbol`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -82,7 +82,9 @@ El score representa:
 | **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | 🚧 In Progress |
 | **V1.5-A — Control Core** | Configuración dual, autorización, router, presenter y estado en memoria | ✅ Completed & Validated |
 | **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | ✅ Implemented & Validated |
-| **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | 🚧 Implemented / Pending Manual Validation |
+| **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Implemented & Validated |
+| **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Implemented & Validated |
+| **V1.5-E — Telegram Analyze Symbol** | Análisis técnico ad-hoc read-only desde Control Bot | ✅ Completed / Manually Validated |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1135,6 +1137,62 @@ TelegramCommandRouter
 
 Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B. Hoy los botones profundos responden `NOT_IMPLEMENTED` y no ejecutan Market Scan ni consultas reales de Research desde Telegram.
 
+
+
+## V1.5-E — Telegram Analyze Symbol ✅
+
+Estado: **Completed / Manually Validated**.
+
+V1.5-E agrega al Control Bot un flujo conversacional para analizar un símbolo bajo demanda sin ejecutar Market Scan.
+
+Alcance implementado:
+
+- menú `🔎 Market` → `🔎 Analyze Symbol`;
+- captura de símbolo por texto y normalización `trim + uppercase`;
+- selección de timeframe desde Telegram: `1m`, `5m`, `15m`, `1d`, `1w`;
+- `AnalyzeSymbolService` como servicio de aplicación read-only;
+- reutilización de `MarketDataService`, `MarketUniverseService` y `OpportunityService`;
+- resolución de `provider_symbol` desde el universo cuando existe;
+- fallback manual para símbolos desconocidos sin insertarlos en PostgreSQL;
+- uso de `MARKET_SCAN_CANDLE_LIMIT` y mínimo técnico de 60 velas;
+- respuesta enriquecida con precio, score, componentes, razones y timestamp de la última vela usada.
+
+Límites explícitos:
+
+- no usa `MarketScanExecutor`;
+- no persiste `signals`, `evidence_signals`, `forward_signals` ni `opportunities`;
+- no envía alertas por el Alerts Bot;
+- no usa `NotificationService`;
+- no crea órdenes ni operaciones reales;
+- no modifica scoring, target ladder, Evidence ni Strategy Research.
+
+Semántica:
+
+```text
+Telegram Control Bot
+  ↓
+TelegramCommandRouter
+  ↓
+AnalyzeSymbolService
+  ↓
+MarketUniverseService + MarketDataService
+  ↓
+OpportunityService / analyzers existentes
+  ↓
+TelegramControlPresenter
+```
+
+El timestamp mostrado en Telegram es `latestCandleTimestamp`: la última vela realmente usada para el análisis, no la hora en la que el usuario pidió el análisis.
+
+Validación manual real: **PASS**.
+
+Se confirmó:
+
+- `/start` → Market → Analyze Symbol;
+- `NVDA / 15m` con asset `STOCK`, price, score, component scores, reasons, 80 candles y última vela disponible con mercado cerrado;
+- `BTC-USD / 1m` con asset `CRYPTO`, price, score, component scores, reasons, 80 candles y última vela reciente coherente con mercado 24/7;
+- threshold operativo mostrado correctamente;
+- el flujo es read-only y no tiene rutas de persistencia.
 
 ## V1.5-D — Telegram Transaction Costs Integration ✅
 
@@ -2191,6 +2249,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.5-C — Control Application Integrations`
+**Desarrollo siguiente:** `V1.5-E — Telegram Analyze Symbol`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`

@@ -78,7 +78,7 @@ describe('TelegramCommandRouter', () => {
     [CALLBACKS.researchProfiles, 'ERROR', 'ARGOS no pudo consultar Strategy Profiles'],
     [CALLBACKS.researchPerformance, 'ERROR', 'ARGOS no pudo consultar Forward Performance'],
     [CALLBACKS.marketScan, 'NOT_IMPLEMENTED', 'Market Scan integration is not available yet.'],
-    [CALLBACKS.marketAnalyze, 'NOT_IMPLEMENTED', 'Analyze Symbol integration is not available yet.'],
+    [CALLBACKS.marketAnalyze, 'INPUT_REQUIRED', 'ANALYZE SYMBOL'],
     [CALLBACKS.costsBitsoMxn, 'INPUT_REQUIRED', 'BITSO MXN'],
     [CALLBACKS.costsBitsoUsdc, 'INPUT_REQUIRED', 'BITSO USDC'],
     [CALLBACKS.systemStatus, 'ERROR', 'ARGOS no pudo consultar System Status'],
@@ -134,6 +134,7 @@ describe('TelegramCommandRouter read-only integrations', () => {
       new TelegramControlPresenter(),
       new TelegramConversationStateService(),
       readOnlyQueries,
+      undefined,
       undefined,
       logger,
     );
@@ -209,6 +210,156 @@ describe('TelegramCommandRouter read-only integrations', () => {
 });
 
 
+describe('TelegramCommandRouter analyze symbol flow', () => {
+  const buildAnalyzeRouter = (analyzeSymbolService: { analyze: jest.Mock } = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) }) => {
+    const conversationState = new TelegramConversationStateService();
+    const logger = { error: jest.fn() };
+    const router = new TelegramCommandRouter(
+      new TelegramAuthorizationService('123'),
+      new TelegramControlPresenter(),
+      conversationState,
+      undefined,
+      undefined,
+      analyzeSymbolService,
+      logger,
+    );
+
+    return { router, conversationState, analyzeSymbolService, logger };
+  };
+
+  it('starts the analyze flow from the market menu callback', async () => {
+    const { router, conversationState } = buildAnalyzeRouter();
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(response.text).toContain('ANALYZE SYMBOL');
+    expect(response.text).toContain('Escribe el símbolo');
+    expect(conversationState.get('123')).toEqual(expect.objectContaining({
+      flow: 'analyze:symbol',
+      step: 'awaiting-symbol',
+    }));
+  });
+
+  it('normalizes symbol input and asks for timeframe', async () => {
+    const { router, conversationState } = buildAnalyzeRouter();
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+
+    const response = await router.route(update({ message: { text: ' nvda ' } }));
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(response.text).toContain('Symbol: NVDA');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '15m', callbackData: CALLBACKS.analyzeTf15m });
+    expect(conversationState.get('123')).toEqual(expect.objectContaining({
+      flow: 'analyze:symbol',
+      step: 'awaiting-timeframe',
+      data: { symbol: 'NVDA' },
+    }));
+  });
+
+  it('keeps the symbol step when the symbol is invalid', async () => {
+    const { router, conversationState, analyzeSymbolService } = buildAnalyzeRouter();
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+
+    const response = await router.route(update({ message: { text: 'NVDA/USD' } }));
+
+    expect(response.code).toBe('VALIDATION_ERROR');
+    expect(response.text).toContain('Símbolo inválido');
+    expect(conversationState.get('123')?.step).toBe('awaiting-symbol');
+    expect(analyzeSymbolService.analyze).not.toHaveBeenCalled();
+  });
+
+  it('runs AnalyzeSymbolService for the selected timeframe and clears state', async () => {
+    const { router, conversationState, analyzeSymbolService } = buildAnalyzeRouter();
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+    await router.route(update({ message: { text: 'nvda' } }));
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.analyzeTf15m } }));
+
+    expect(analyzeSymbolService.analyze).toHaveBeenCalledWith({ symbol: 'NVDA', timeframe: '15m' });
+    expect(response.code).toBe('OK');
+    expect(response.text).toContain('🔎 NVDA · 15m');
+    expect(response.text).toContain('Este análisis técnico no ejecuta ni registra una operación.');
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('does not call AnalyzeSymbolService for unauthorized users', async () => {
+    const { router, analyzeSymbolService } = buildAnalyzeRouter();
+
+    const response = await router.route(update({ user: { id: '999' }, callback: { data: CALLBACKS.marketAnalyze } }));
+
+    expect(response.code).toBe('UNAUTHORIZED');
+    expect(analyzeSymbolService.analyze).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe analyze error and clears state when analysis fails', async () => {
+    const analyzeSymbolService = { analyze: jest.fn().mockRejectedValue(new Error('token=super-secret provider failed')) };
+    const { router, conversationState, logger } = buildAnalyzeRouter(analyzeSymbolService);
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+    await router.route(update({ message: { text: 'NVDA' } }));
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.analyzeTf1d } }));
+
+    expect(response.code).toBe('ERROR');
+    expect(response.text).toContain('ARGOS no pudo completar el análisis');
+    expect(response.text).not.toContain('super-secret');
+    expect(logger.error).toHaveBeenCalledWith(expect.not.stringContaining('super-secret'));
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('cancels analyze flow from /cancel and from the cancel button', async () => {
+    const { router, conversationState } = buildAnalyzeRouter();
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+
+    const commandResponse = await router.route(update({ message: { text: '/cancel' } }));
+
+    expect(commandResponse.code).toBe('CANCELLED');
+    expect(commandResponse.text).toContain('Análisis cancelado');
+    expect(conversationState.get('123')).toBeUndefined();
+
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+    const buttonResponse = await router.route(update({ callback: { data: CALLBACKS.analyzeCancel } }));
+
+    expect(buttonResponse.code).toBe('CANCELLED');
+    expect(conversationState.get('123')).toBeUndefined();
+  });
+
+  it('does not analyze after TTL expiration', async () => {
+    let now = new Date('2026-08-30T10:00:00.000Z');
+    const conversationState = new TelegramConversationStateService(1000, () => now);
+    const analyzeSymbolService = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) };
+    const router = new TelegramCommandRouter(
+      new TelegramAuthorizationService('123'),
+      new TelegramControlPresenter(),
+      conversationState,
+      undefined,
+      undefined,
+      analyzeSymbolService,
+    );
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+    await router.route(update({ message: { text: 'NVDA' } }));
+    now = new Date('2026-08-30T10:00:02.000Z');
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.analyzeTf1m } }));
+
+    expect(response.text).toContain('El análisis expiró');
+    expect(analyzeSymbolService.analyze).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh analyze flow from Analyze Again', async () => {
+    const { router, conversationState } = buildAnalyzeRouter();
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.analyzeAgain } }));
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(conversationState.get('123')).toEqual(expect.objectContaining({
+      flow: 'analyze:symbol',
+      step: 'awaiting-symbol',
+    }));
+  });
+});
+
+
 describe('TelegramCommandRouter transaction cost flow', () => {
   const buildCostsRouter = (transactionCostService: { evaluate: jest.Mock } = { evaluate: jest.fn((request) => sampleTransactionCostEvaluation(request?.entryNotional?.currency === 'USDC' ? 'USDC' : 'MXN')) }) => {
     const conversationState = new TelegramConversationStateService();
@@ -219,6 +370,7 @@ describe('TelegramCommandRouter transaction cost flow', () => {
       conversationState,
       undefined,
       transactionCostService,
+      undefined,
       logger,
     );
 
@@ -575,4 +727,23 @@ const sampleTransactionCostEvaluation = (currency: 'MXN' | 'USDC' = 'MXN') => ({
     breakEvenPercent: currency === 'USDC' ? 0.722601 : 1.572264,
     targetCoversModeledCosts: true,
   },
+});
+
+
+const sampleAnalyzeSymbolResult = () => ({
+  symbol: 'NVDA',
+  providerSymbol: 'NVDA',
+  timeframe: '15m' as const,
+  assetType: 'STOCK' as const,
+  latestClose: 227.98,
+  latestCandleTimestamp: new Date('2026-08-30T15:45:00.000Z'),
+  candlesReturned: 80,
+  score: 90,
+  trendScore: 25,
+  volumeScore: 20,
+  momentumScore: 20,
+  structureScore: 25,
+  reasons: ['EMA20 sobre EMA50', 'Breakout confirmado'],
+  operationalThreshold: 90,
+  aboveOperationalThreshold: true,
 });

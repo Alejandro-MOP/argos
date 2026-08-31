@@ -17,6 +17,7 @@ import { PostgresStrategyProfileProvider } from '../research/PostgresStrategyPro
 import { PostgresResearchSnapshotProvider } from '../research/PostgresResearchSnapshotProvider';
 import { createRepositories } from './repositories';
 import { buildEnvRuntimeConfig, env } from './env';
+import { AnalyzeSymbolService } from '../services/AnalyzeSymbolService';
 import { EngineConfigService } from '../services/EngineConfigService';
 import { EvidenceSignalEvaluator } from '../services/EvidenceSignalEvaluator';
 import { ForwardSignalEvaluator } from '../services/ForwardSignalEvaluator';
@@ -101,14 +102,6 @@ const telegramControlReadOnlyQueryService = new TelegramControlReadOnlyQueryServ
   forwardPerformanceProvider: forwardPerformanceReportProvider,
   database,
 });
-const telegramCommandRouter = new TelegramCommandRouter(
-  telegramControlAuthorizationService,
-  telegramControlPresenter,
-  telegramConversationStateService,
-  telegramControlReadOnlyQueryService,
-  transactionCostService,
-);
-
 export const postgresBackupService = database
   ? new PostgresBackupService(database, new ProcessCommandRunner(), {
       databaseUrl: env.databaseUrl,
@@ -150,6 +143,24 @@ const createOpportunityFilter = (config: EngineRuntimeConfig): OpportunityFilter
     minimumScore: config.scoring.opportunityMinScore,
     duplicateWindowMinutes: config.scoring.duplicateWindowMinutes,
   });
+
+const analyzeSymbolService = new AnalyzeSymbolService({
+  marketDataService,
+  opportunityService: createOpportunityService(fallbackRuntimeConfig),
+  marketUniverseService,
+  candleLimit: fallbackRuntimeConfig.marketScanCandleLimit,
+  operationalThreshold: fallbackRuntimeConfig.scoring.opportunityMinScore,
+});
+
+const telegramCommandRouter = new TelegramCommandRouter(
+  telegramControlAuthorizationService,
+  telegramControlPresenter,
+  telegramConversationStateService,
+  telegramControlReadOnlyQueryService,
+  transactionCostService,
+  analyzeSymbolService,
+);
+
 
 const rankingService = new RankingService();
 const riskService = new RiskService();
@@ -238,4 +249,5 @@ export {
   telegramControlPresenter,
   telegramControlReadOnlyQueryService,
   telegramCommandRouter,
+  analyzeSymbolService,
 };

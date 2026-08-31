@@ -3,6 +3,7 @@ import type { CurrencyCode } from '../models/TransactionCost';
 import type { ResearchSnapshot } from '../models/ResearchSnapshot';
 import type { StrategyProfile, StrategyProfileSummary } from '../models/StrategyProfile';
 import type { ControlResponse, InlineKeyboard } from '../models/TelegramControl';
+import type { AnalyzeSymbolErrorCode, AnalyzeSymbolResult } from './AnalyzeSymbolService';
 import type { TransactionCostEvaluationResponse } from './TransactionCostService';
 import type { TelegramControlSystemStatus } from './TelegramControlReadOnlyQueryService';
 
@@ -17,6 +18,13 @@ export const CALLBACKS = {
   researchPerformance: 'argos:v1:research:performance',
   marketScan: 'argos:v1:market:scan',
   marketAnalyze: 'argos:v1:market:analyze',
+  analyzeTf1m: 'argos:v1:analyze:tf_1m',
+  analyzeTf5m: 'argos:v1:analyze:tf_5m',
+  analyzeTf15m: 'argos:v1:analyze:tf_15m',
+  analyzeTf1d: 'argos:v1:analyze:tf_1d',
+  analyzeTf1w: 'argos:v1:analyze:tf_1w',
+  analyzeCancel: 'argos:v1:analyze:cancel',
+  analyzeAgain: 'argos:v1:analyze:new',
   costsBitsoMxn: 'argos:v1:costs:bitso_mxn',
   costsBitsoUsdc: 'argos:v1:costs:bitso_usdc',
   costsMaker: 'argos:v1:costs:maker',
@@ -86,6 +94,150 @@ export class TelegramControlPresenter {
         ['💵 Bitso USDC', CALLBACKS.costsBitsoUsdc],
         ['⬅️ Back', CALLBACKS.back],
       ]),
+    };
+  }
+
+  public analyzeSymbolPrompt(): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        '🔎 ANALYZE SYMBOL',
+        '',
+        'Escribe el símbolo que quieres analizar.',
+        '',
+        'Ejemplos:',
+        'NVDA',
+        'BTC-USD',
+        'DOGE-USD',
+        '',
+        'Este análisis no guarda señales ni envía alertas.',
+      ].join('\n'),
+      keyboard: this.analyzeCancelKeyboard(),
+    };
+  }
+
+  public analyzeTimeframePrompt(symbol?: string): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        '🔎 ANALYZE SYMBOL',
+        '',
+        symbol ? `Symbol: ${symbol}` : 'Selecciona una temporalidad.',
+        '',
+        'Elige la temporalidad para el análisis técnico:',
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [
+            { text: '1m', callbackData: CALLBACKS.analyzeTf1m },
+            { text: '5m', callbackData: CALLBACKS.analyzeTf5m },
+            { text: '15m', callbackData: CALLBACKS.analyzeTf15m },
+          ],
+          [
+            { text: '1d', callbackData: CALLBACKS.analyzeTf1d },
+            { text: '1w', callbackData: CALLBACKS.analyzeTf1w },
+          ],
+          [{ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel }],
+        ],
+      },
+    };
+  }
+
+  public invalidAnalyzeSymbol(): ControlResponse {
+    return {
+      code: 'VALIDATION_ERROR',
+      text: [
+        '⚠️ Símbolo inválido.',
+        '',
+        'Escribe un ticker simple como:',
+        'NVDA',
+        'BTC-USD',
+        'DOGE-USD',
+      ].join('\n'),
+      keyboard: this.analyzeCancelKeyboard(),
+    };
+  }
+
+  public analyzeExpired(): ControlResponse {
+    return {
+      code: 'ERROR',
+      text: ['⏱️ El análisis expiró.', '', 'Inicia un nuevo análisis desde 🔎 Market.'].join('\n'),
+      keyboard: this.marketMenuKeyboard(),
+    };
+  }
+
+  public analyzeCancelled(): ControlResponse {
+    return {
+      code: 'CANCELLED',
+      text: 'Análisis cancelado.',
+      keyboard: this.marketMenuKeyboard(),
+    };
+  }
+
+  public analyzeError(code: AnalyzeSymbolErrorCode | 'analysis-failed', symbol?: string): ControlResponse {
+    const safeSymbol = symbol ? ` para ${symbol}` : '';
+    const messages: Record<AnalyzeSymbolErrorCode | 'analysis-failed', string> = {
+      'invalid-symbol': '⚠️ El símbolo no es válido. Verifica el ticker e intenta nuevamente.',
+      'unsupported-timeframe': '⚠️ La temporalidad seleccionada no está soportada para este análisis.',
+      'insufficient-candles': `⚠️ No hay suficientes velas${safeSymbol} para un análisis confiable.`,
+      'rate-limit-exceeded': '⚠️ El proveedor de mercado está limitando temporalmente las consultas. Intenta más tarde.',
+      'market-data-unavailable': `⚠️ No pude obtener datos${safeSymbol}. Verifica el ticker e intenta nuevamente.`,
+      'analysis-failed': '⚠️ ARGOS no pudo completar el análisis. Intenta nuevamente.',
+    };
+
+    return {
+      code: 'ERROR',
+      text: messages[code],
+      keyboard: {
+        rows: [
+          [{ text: '🔄 Analyze Again', callbackData: CALLBACKS.analyzeAgain }],
+          [{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }],
+        ],
+      },
+    };
+  }
+
+  public analyzeSymbolResult(result: AnalyzeSymbolResult): ControlResponse {
+    return {
+      code: 'OK',
+      text: [
+        `🔎 ${result.symbol} · ${result.timeframe}`,
+        '',
+        'Asset:',
+        result.assetType ?? 'UNKNOWN',
+        '',
+        'Price:',
+        formatPrice(result.latestClose),
+        '',
+        'Score:',
+        `${formatNumber(result.score)} / 100`,
+        '',
+        'Components',
+        `Trend: ${formatNumber(result.trendScore)} / 25`,
+        `Volume: ${formatNumber(result.volumeScore)} / 25`,
+        `Momentum: ${formatNumber(result.momentumScore)} / 25`,
+        `Structure: ${formatNumber(result.structureScore)} / 25`,
+        '',
+        'Reasons',
+        ...formatAnalyzeReasons(result.reasons),
+        '',
+        'Latest candle used:',
+        result.latestCandleTimestamp.toISOString(),
+        '',
+        `Candles analyzed: ${formatNumber(result.candlesReturned)}`,
+        '',
+        result.aboveOperationalThreshold
+          ? `🟢 Score above operational threshold (${formatNumber(result.operationalThreshold)})`
+          : `🟡 Score below operational threshold (${formatNumber(result.operationalThreshold)})`,
+        '',
+        'Este análisis técnico no ejecuta ni registra una operación.',
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '🔄 Analyze Again', callbackData: CALLBACKS.analyzeAgain }],
+          [{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }],
+        ],
+      },
     };
   }
 
@@ -437,9 +589,21 @@ export class TelegramControlPresenter {
     };
   }
 
+  private marketMenuKeyboard(): InlineKeyboard {
+    return {
+      rows: [[{ text: '⬅️ Back to Market', callbackData: CALLBACKS.marketMenu }]],
+    };
+  }
+
   private costsCancelKeyboard(): InlineKeyboard {
     return {
       rows: [[{ text: '❌ Cancel', callbackData: CALLBACKS.costsCancel }]],
+    };
+  }
+
+  private analyzeCancelKeyboard(): InlineKeyboard {
+    return {
+      rows: [[{ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel }]],
     };
   }
 
@@ -502,6 +666,22 @@ const formatForwardTargets = (targets: ForwardPerformanceSummary['experimentalTa
     `Expectancy: ${formatPercent(target.historicalForwardExpectancyPercent)}`,
   ]);
 };
+
+const formatAnalyzeReasons = (reasons: string[]): string[] => {
+  if (reasons.length === 0) {
+    return ['• Sin razones registradas.'];
+  }
+
+  return reasons.map((reason) => `• ${reason}`);
+};
+
+const formatPrice = (value: number): string =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: value < 1 ? 6 : 2,
+    maximumFractionDigits: value < 1 ? 6 : 2,
+  }).format(value);
 
 const formatNumber = (value: number): string => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value);
 

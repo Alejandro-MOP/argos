@@ -49,7 +49,7 @@ flowchart TD
   J[Supporting Services] --> K[Backtest]
   J --> L[Database Backup]
   J --> M[Telegram Alerts]
-  J --> N[ARGOS Control Core<br/>Implemented, transport pending]
+  J --> N[ARGOS Control Bot<br/>Read-only control interface]
 ```
 
 ## Data Flow actual
@@ -92,6 +92,7 @@ Implementación actual:
 Quién consume Market Data:
 
 - `MarketScanExecutor`, para detectar oportunidades nuevas.
+- `AnalyzeSymbolService`, para análisis ad-hoc desde el Control Bot sin persistir resultados.
 - `EvidenceSignalEvaluator`, para revisar qué ocurrió después de Evidence guardada.
 - `ForwardSignalEvaluator`, para revisar qué ocurrió después de señales reales notificables.
 - `BacktestEngine`, para simular escenarios históricos.
@@ -475,7 +476,7 @@ TransactionCostCalculator
 TelegramControlPresenter
 ```
 
-Telegram recoge perfil, capital, target y tipo de ejecución. No duplica fórmulas de fees, utilidad neta, break-even ni round-trip cost. Maker aplica entrada y salida Maker; Taker aplica entrada y salida Taker para mantener una UX simple. Las integraciones read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status existen desde V1.5-C. Market Scan y Analyze Symbol desde Telegram siguen pendientes.
+Telegram recoge perfil, capital, target y tipo de ejecución. No duplica fórmulas de fees, utilidad neta, break-even ni round-trip cost. Maker aplica entrada y salida Maker; Taker aplica entrada y salida Taker para mantener una UX simple. Las integraciones read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status existen desde V1.5-C. Desde V1.5-E, Analyze Symbol también está conectado como análisis técnico ad-hoc read-only. Market Scan desde Telegram sigue pendiente.
 
 #### Callback routing
 
@@ -498,7 +499,7 @@ argos:v1:system:status
 - **callback_data**: identificador pequeño asociado al botón; no debe contener secretos, JSON grande ni estado sensible.
 - **Callback Query**: evento que Telegram produce cuando el usuario presiona un botón.
 
-Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Desde V1.5-D, `argos:v1:costs:bitso_mxn` y `argos:v1:costs:bitso_usdc` inician un cálculo conversacional real de costos; Market Scan y Analyze Symbol permanecen como placeholders `NOT_IMPLEMENTED`.
+Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Desde V1.5-D, `argos:v1:costs:bitso_mxn` y `argos:v1:costs:bitso_usdc` inician un cálculo conversacional real de costos. Desde V1.5-E, `argos:v1:market:analyze` inicia Analyze Symbol. Market Scan permanece como placeholder `NOT_IMPLEMENTED`.
 
 #### Authorization
 
@@ -652,4 +653,4 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling y V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram. Transaction Costs, Market Scan y Analyze Symbol desde Telegram todavía no están implementados.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling, V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram, V1.5-D conecta Transaction Costs y V1.5-E conecta Analyze Symbol. Market Scan desde Telegram todavía no está implementado.

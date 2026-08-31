@@ -1,5 +1,7 @@
 import type { BrokerProductProfileId, CurrencyCode, ExecutionMode } from '../models/TransactionCost';
 import type { ControlResponse, TelegramControlUpdate } from '../models/TelegramControl';
+import type { AnalyzeSymbolService } from './AnalyzeSymbolService';
+import { AnalyzeSymbolServiceError, normalizeAnalyzeSymbol, type AnalyzeSymbolTimeframe } from './AnalyzeSymbolService';
 import type { TransactionCostService } from './TransactionCostService';
 import type { TelegramAuthorizationService } from './TelegramAuthorizationService';
 import type { TelegramConversationStateService } from './TelegramConversationStateService';
@@ -11,9 +13,12 @@ const MAX_CALLBACK_DATA_BYTES = 64;
 const SUPPORTED_NAMESPACE = 'argos';
 const SUPPORTED_VERSION = 'v1';
 const COSTS_FLOW = 'costs:evaluate';
+const ANALYZE_FLOW = 'analyze:symbol';
 const WAITING_FOR_CAPITAL = 'awaiting-capital';
 const WAITING_FOR_TARGET = 'awaiting-target';
 const WAITING_FOR_EXECUTION = 'awaiting-execution';
+const WAITING_FOR_SYMBOL = 'awaiting-symbol';
+const WAITING_FOR_TIMEFRAME = 'awaiting-timeframe';
 
 type CallbackDestination =
   | 'main-menu'
@@ -26,6 +31,13 @@ type CallbackDestination =
   | 'research-performance'
   | 'market-scan'
   | 'market-analyze'
+  | 'analyze-tf-1m'
+  | 'analyze-tf-5m'
+  | 'analyze-tf-15m'
+  | 'analyze-tf-1d'
+  | 'analyze-tf-1w'
+  | 'analyze-cancel'
+  | 'analyze-again'
   | 'costs-bitso-mxn'
   | 'costs-bitso-usdc'
   | 'costs-maker'
@@ -65,6 +77,17 @@ const COST_PROFILES: Record<'costs-bitso-mxn' | 'costs-bitso-usdc', CostProfileS
   },
 };
 
+const ANALYZE_TIMEFRAMES: Record<
+  'analyze-tf-1m' | 'analyze-tf-5m' | 'analyze-tf-15m' | 'analyze-tf-1d' | 'analyze-tf-1w',
+  AnalyzeSymbolTimeframe
+> = {
+  'analyze-tf-1m': '1m',
+  'analyze-tf-5m': '5m',
+  'analyze-tf-15m': '15m',
+  'analyze-tf-1d': '1d',
+  'analyze-tf-1w': '1w',
+};
+
 const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.mainMenu]: 'main-menu',
   [CALLBACKS.researchMenu]: 'research-menu',
@@ -76,6 +99,13 @@ const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.researchPerformance]: 'research-performance',
   [CALLBACKS.marketScan]: 'market-scan',
   [CALLBACKS.marketAnalyze]: 'market-analyze',
+  [CALLBACKS.analyzeTf1m]: 'analyze-tf-1m',
+  [CALLBACKS.analyzeTf5m]: 'analyze-tf-5m',
+  [CALLBACKS.analyzeTf15m]: 'analyze-tf-15m',
+  [CALLBACKS.analyzeTf1d]: 'analyze-tf-1d',
+  [CALLBACKS.analyzeTf1w]: 'analyze-tf-1w',
+  [CALLBACKS.analyzeCancel]: 'analyze-cancel',
+  [CALLBACKS.analyzeAgain]: 'analyze-again',
   [CALLBACKS.costsBitsoMxn]: 'costs-bitso-mxn',
   [CALLBACKS.costsBitsoUsdc]: 'costs-bitso-usdc',
   [CALLBACKS.costsMaker]: 'costs-maker',
@@ -93,12 +123,13 @@ export class TelegramCommandRouter {
   public constructor(
     private readonly authorizationService: Pick<TelegramAuthorizationService, 'isAuthorized'>,
     private readonly presenter: TelegramControlPresenter,
-    private readonly conversationStateService: Pick<TelegramConversationStateService, 'get' | 'set' | 'clear' | 'consumeExpired'>,
+    private readonly conversationStateService: Pick<TelegramConversationStateService, 'get' | 'set' | 'clear' | 'consumeExpired' | 'consumeExpiredState'>,
     private readonly readOnlyQueries?: Pick<
       TelegramControlReadOnlyQueryService,
       'getResearchSnapshot' | 'getStrategyProfiles' | 'getForwardPerformance' | 'getSystemStatus'
     >,
     private readonly transactionCostService?: Pick<TransactionCostService, 'evaluate'>,
+    private readonly analyzeSymbolService?: Pick<AnalyzeSymbolService, 'analyze'>,
     private readonly logger: TelegramCommandRouterLogger = console,
   ) {}
 
@@ -129,19 +160,25 @@ export class TelegramCommandRouter {
     }
 
     if (normalizedText === '/cancel') {
+      const state = userId ? this.conversationStateService.get(userId) : undefined;
       this.clearConversation(userId);
-      return this.presenter.costsCancelled();
+      return state?.flow === ANALYZE_FLOW ? this.presenter.analyzeCancelled() : this.presenter.costsCancelled();
     }
 
     if (userId) {
-      if (this.conversationStateService.consumeExpired(userId)) {
-        return this.presenter.costsExpired();
+      const expiredState = this.conversationStateService.consumeExpiredState(userId);
+      if (expiredState) {
+        return expiredState.flow === ANALYZE_FLOW ? this.presenter.analyzeExpired() : this.presenter.costsExpired();
       }
 
       const state = this.conversationStateService.get(userId);
 
       if (state?.flow === COSTS_FLOW) {
         return this.routeCostMessage(text, userId, state);
+      }
+
+      if (state?.flow === ANALYZE_FLOW) {
+        return this.routeAnalyzeMessage(text, userId, state);
       }
     }
 
@@ -164,6 +201,7 @@ export class TelegramCommandRouter {
       case 'research-menu':
         return this.presenter.researchMenu();
       case 'market-menu':
+        this.clearConversation(userId);
         return this.presenter.marketMenu();
       case 'costs-menu':
       case 'costs-new':
@@ -183,7 +221,17 @@ export class TelegramCommandRouter {
       case 'market-scan':
         return this.presenter.notImplemented('Market Scan');
       case 'market-analyze':
-        return this.presenter.notImplemented('Analyze Symbol');
+      case 'analyze-again':
+        return this.startAnalyzeFlow(userId);
+      case 'analyze-tf-1m':
+      case 'analyze-tf-5m':
+      case 'analyze-tf-15m':
+      case 'analyze-tf-1d':
+      case 'analyze-tf-1w':
+        return this.completeAnalyzeFlow(ANALYZE_TIMEFRAMES[parsed.destination], userId);
+      case 'analyze-cancel':
+        this.clearConversation(userId);
+        return this.presenter.analyzeCancelled();
       case 'costs-bitso-mxn':
       case 'costs-bitso-usdc':
         return this.startCostFlow(parsed.destination, userId);
@@ -196,6 +244,74 @@ export class TelegramCommandRouter {
         return this.presenter.costsCancelled();
       case 'system-status':
         return this.querySystemStatus();
+    }
+  }
+
+  private startAnalyzeFlow(userId: string | undefined): ControlResponse {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    this.conversationStateService.set({
+      userId,
+      flow: ANALYZE_FLOW,
+      step: WAITING_FOR_SYMBOL,
+      data: {},
+    });
+
+    return this.presenter.analyzeSymbolPrompt();
+  }
+
+  private routeAnalyzeMessage(text: string | undefined, userId: string, state: ReturnType<TelegramConversationStateService['get']>): ControlResponse {
+    if (!state || state.step !== WAITING_FOR_SYMBOL) {
+      return this.presenter.analyzeTimeframePrompt(parseAnalyzeSymbolState(state?.data));
+    }
+
+    try {
+      const symbol = normalizeAnalyzeSymbol(text ?? '');
+      this.conversationStateService.set({
+        userId,
+        flow: ANALYZE_FLOW,
+        step: WAITING_FOR_TIMEFRAME,
+        data: { symbol },
+      });
+
+      return this.presenter.analyzeTimeframePrompt(symbol);
+    } catch {
+      return this.presenter.invalidAnalyzeSymbol();
+    }
+  }
+
+  private async completeAnalyzeFlow(timeframe: AnalyzeSymbolTimeframe, userId: string | undefined): Promise<ControlResponse> {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const expiredState = this.conversationStateService.consumeExpiredState(userId);
+    if (expiredState) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const state = this.conversationStateService.get(userId);
+    const symbol = parseAnalyzeSymbolState(state?.data);
+
+    if (!state || state.flow !== ANALYZE_FLOW || state.step !== WAITING_FOR_TIMEFRAME || !symbol) {
+      return this.presenter.analyzeExpired();
+    }
+
+    if (!this.analyzeSymbolService) {
+      this.clearConversation(userId);
+      return this.presenter.analyzeError('analysis-failed', symbol);
+    }
+
+    try {
+      const result = await this.analyzeSymbolService.analyze({ symbol, timeframe });
+      this.clearConversation(userId);
+      return this.presenter.analyzeSymbolResult(result);
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      this.clearConversation(userId);
+      return this.presenter.analyzeError(error instanceof AnalyzeSymbolServiceError ? error.code : 'analysis-failed', symbol);
     }
   }
 
@@ -275,7 +391,8 @@ export class TelegramCommandRouter {
       return this.presenter.costsExpired();
     }
 
-    if (this.conversationStateService.consumeExpired(userId)) {
+    const expiredState = this.conversationStateService.consumeExpiredState(userId);
+    if (expiredState) {
       return this.presenter.costsExpired();
     }
 
@@ -394,7 +511,7 @@ export class TelegramCommandRouter {
       return { error: 'unknown version' };
     }
 
-    if (!['menu', 'research', 'market', 'costs', 'system', 'navigation'].includes(domain)) {
+    if (!['menu', 'research', 'market', 'costs', 'system', 'navigation', 'analyze'].includes(domain)) {
       return { error: 'unknown domain' };
     }
 
@@ -413,6 +530,12 @@ export class TelegramCommandRouter {
     }
   }
 }
+
+const parseAnalyzeSymbolState = (data: Record<string, unknown> | undefined): string | undefined => {
+  const symbol = data?.symbol;
+
+  return typeof symbol === 'string' && symbol.length > 0 ? symbol : undefined;
+};
 
 const parseCostProfileState = (data: Record<string, unknown>): CostProfileSelection | undefined => {
   const brokerProfileId = data.brokerProfileId;

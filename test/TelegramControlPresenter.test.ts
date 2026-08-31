@@ -73,6 +73,98 @@ describe('TelegramControlPresenter', () => {
 });
 
 
+describe('TelegramControlPresenter analyze symbol views', () => {
+  const presenter = new TelegramControlPresenter();
+
+  it('renders analyze symbol prompts and timeframe buttons', () => {
+    const symbolPrompt = presenter.analyzeSymbolPrompt();
+    expect(symbolPrompt.code).toBe('INPUT_REQUIRED');
+    expect(symbolPrompt.text).toContain('ANALYZE SYMBOL');
+    expect(symbolPrompt.text).toContain('Este análisis no guarda señales ni envía alertas.');
+    expect(symbolPrompt.keyboard?.rows.flat()).toContainEqual({ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel });
+
+    const timeframePrompt = presenter.analyzeTimeframePrompt('NVDA');
+    expect(timeframePrompt.text).toContain('Symbol: NVDA');
+    expect(timeframePrompt.keyboard?.rows.flat()).toContainEqual({ text: '1m', callbackData: CALLBACKS.analyzeTf1m });
+    expect(timeframePrompt.keyboard?.rows.flat()).toContainEqual({ text: '15m', callbackData: CALLBACKS.analyzeTf15m });
+    expect(timeframePrompt.keyboard?.rows.flat()).toContainEqual({ text: '1w', callbackData: CALLBACKS.analyzeTf1w });
+  });
+
+  it('renders enriched analyze result from service values', () => {
+    const response = presenter.analyzeSymbolResult({
+      symbol: 'NVDA',
+      providerSymbol: 'NVDA',
+      timeframe: '15m',
+      assetType: 'STOCK',
+      latestClose: 227.98123,
+      latestCandleTimestamp: new Date('2026-08-30T15:45:00.000Z'),
+      candlesReturned: 80,
+      score: 90,
+      trendScore: 25,
+      volumeScore: 20,
+      momentumScore: 20,
+      structureScore: 25,
+      reasons: ['EMA20 sobre EMA50', 'Breakout confirmado'],
+      operationalThreshold: 90,
+      aboveOperationalThreshold: true,
+    });
+
+    expect(response.code).toBe('OK');
+    expect(response.text).toContain('🔎 NVDA · 15m');
+    expect(response.text).toContain('Asset:\nSTOCK');
+    expect(response.text).toContain('Price:\n$227.98');
+    expect(response.text).toContain('Score:\n90 / 100');
+    expect(response.text).toContain('Trend: 25 / 25');
+    expect(response.text).toContain('Volume: 20 / 25');
+    expect(response.text).toContain('• EMA20 sobre EMA50');
+    expect(response.text).toContain('Latest candle used:\n2026-08-30T15:45:00.000Z');
+    expect(response.text).toContain('🟢 Score above operational threshold (90)');
+    expect(response.text).toContain('Este análisis técnico no ejecuta ni registra una operación.');
+    expect(response.text).not.toContain('{');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '🔄 Analyze Again', callbackData: CALLBACKS.analyzeAgain });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu });
+  });
+
+  it('renders low-priced crypto with enough decimals and empty reasons safely', () => {
+    const response = presenter.analyzeSymbolResult({
+      symbol: 'DOGE-USD',
+      providerSymbol: 'DOGE-USD',
+      timeframe: '1m',
+      assetType: 'CRYPTO',
+      latestClose: 0.0854400023818016,
+      latestCandleTimestamp: new Date('2026-08-30T15:45:00.000Z'),
+      candlesReturned: 80,
+      score: 70,
+      trendScore: 25,
+      volumeScore: 20,
+      momentumScore: 10,
+      structureScore: 15,
+      reasons: [],
+      operationalThreshold: 90,
+      aboveOperationalThreshold: false,
+    });
+
+    expect(response.text).toContain('$0.085440');
+    expect(response.text).toContain('• Sin razones registradas.');
+    expect(response.text).toContain('🟡 Score below operational threshold (90)');
+  });
+
+  it('renders safe analyze validation and provider errors without stack traces', () => {
+    expect(presenter.invalidAnalyzeSymbol().text).toContain('Símbolo inválido');
+
+    const unavailable = presenter.analyzeError('market-data-unavailable', 'XYZ');
+    expect(unavailable.text).toContain('No pude obtener datos para XYZ');
+    expect(unavailable.text).not.toContain('Error:');
+    expect(unavailable.text).not.toContain('at ');
+
+    expect(presenter.analyzeError('insufficient-candles', 'NVDA').text).toContain('No hay suficientes velas para NVDA');
+    expect(presenter.analyzeError('rate-limit-exceeded').text).toContain('limitando temporalmente');
+    expect(presenter.analyzeExpired().text).toContain('El análisis expiró');
+    expect(presenter.analyzeCancelled().text).toContain('Análisis cancelado');
+  });
+});
+
+
 describe('TelegramControlPresenter read-only research views', () => {
   const presenter = new TelegramControlPresenter();
 

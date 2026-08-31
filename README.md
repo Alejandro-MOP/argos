@@ -22,7 +22,7 @@ ARGOS es hoy un motor cuantitativo experimental que observa el mercado, detecta 
 
 V1.4-A agrega el primer núcleo puro de costos transaccionales. V1.4-B expone ese cálculo mediante un endpoint HTTP read-only. Ninguna de estas piezas cambia decisiones del motor, scoring, Evidence ni Telegram; sirven para responder, de forma aislada, si un target bruto tendría sentido después de comisiones maker/taker.
 
-V1.5 inicia la evolución de Telegram desde un canal únicamente de salida hacia una interfaz separada en dos responsabilidades: Alerts Bot para notificaciones automáticas y Control Bot para interacción privada usuario ↔ ARGOS. Actualmente están implementados **V1.5-A — Control Core** y **V1.5-B — Control Transport**: el Control Bot puede recibir comandos reales por Long Polling local mediante un worker Node separado de Azure Functions. Las integraciones profundas con Research, Market Scan, costos reales y performance todavía responden placeholders `NOT_IMPLEMENTED` por diseño.
+V1.5 inicia la evolución de Telegram desde un canal únicamente de salida hacia una interfaz separada en dos responsabilidades: Alerts Bot para notificaciones automáticas y Control Bot para interacción privada usuario ↔ ARGOS. Actualmente el Control Bot puede recibir comandos reales por Long Polling local mediante un worker Node separado de Azure Functions. Ya consulta Research read-only, calcula costos transaccionales y permite Analyze Symbol ad-hoc; Market Scan desde Telegram sigue como placeholder `NOT_IMPLEMENTED` por diseño.
 
 ## ARGOS Engine
 
@@ -313,6 +313,8 @@ vive en un solo lugar. `backtest` usa `BacktestEngine`, pero reutiliza los mismo
 ### Telegram Control Bot
 
 Desde V1.5-D, el Control Bot también puede calcular Transaction Costs desde Telegram en modo read-only. El flujo pide perfil Bitso, capital de entrada, target bruto esperado y ejecución Maker/Taker; después llama al `TransactionCostService` real. Telegram no recalcula fees, utilidad neta, round-trip cost ni break-even.
+
+Desde V1.5-E, el Control Bot puede hacer `Analyze Symbol`: pide un ticker, permite elegir `1m`, `5m`, `15m`, `1d` o `1w`, consulta Market Data y reutiliza `OpportunityService`/analyzers para devolver score, componentes, razones, precio más reciente y timestamp de la última vela usada. Este flujo es read-only: no ejecuta `MarketScanExecutor`, no persiste señales/evidence/opportunities y no envía alertas automáticas.
 
 El capital capturado representa `entryNotional`: valor nominal de la posición antes de costos. El resultado no recomienda operar; solo indica si el target bruto supera los costos modelados. No incluye spread, slippage, funding, withdrawals ni FX.
 
@@ -1638,7 +1640,7 @@ Comandos soportados por ahora:
 - `/help`
 - `/cancel`
 
-Los botones inline funcionan y responden mediante callbacks. Desde V1.5-C, Research Snapshot, Strategy Profiles, Forward Performance y System Status consultan servicios reales en modo read-only. Market Scan, Analyze Symbol y costos desde Telegram siguen como `NOT_IMPLEMENTED` por diseño.
+Los botones inline funcionan y responden mediante callbacks. Desde V1.5-C, Research Snapshot, Strategy Profiles, Forward Performance y System Status consultan servicios reales en modo read-only. Desde V1.5-D, Costs usa el servicio real de costos. Desde V1.5-E, Analyze Symbol usa el motor técnico real en modo read-only. Market Scan desde Telegram sigue como `NOT_IMPLEMENTED` por diseño.
 
 Notas operativas:
 

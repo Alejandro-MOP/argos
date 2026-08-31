@@ -31,18 +31,22 @@ export class TelegramConversationStateService {
   }
 
   public consumeExpired(userId: string): boolean {
+    return this.consumeExpiredState(userId) !== undefined;
+  }
+
+  public consumeExpiredState(userId: string): TelegramConversationState | undefined {
     const state = this.states.get(userId);
 
     if (!state) {
-      return false;
+      return undefined;
     }
 
     if (state.expiresAt.getTime() <= this.now().getTime()) {
       this.states.delete(userId);
-      return true;
+      return state;
     }
 
-    return false;
+    return undefined;
   }
 
   public set(input: SetTelegramConversationStateInput): TelegramConversationState {
