@@ -73,6 +73,63 @@ describe('TelegramControlPresenter', () => {
 });
 
 
+describe('TelegramControlPresenter full market scan views', () => {
+  const presenter = new TelegramControlPresenter();
+
+  it('renders Full Market Scan confirmation without executing anything', () => {
+    const response = presenter.marketScanConfirmation();
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(response.text).toContain('FULL MARKET SCAN');
+    expect(response.text).toContain('registrar Evidence');
+    expect(response.text).toContain('enviar Alerts');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '✅ Confirm', callbackData: CALLBACKS.marketScanConfirm });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '❌ Cancel', callbackData: CALLBACKS.marketScanCancel });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu });
+  });
+
+  it('renders immediate started and already-running responses', () => {
+    expect(presenter.marketScanStarted().text).toContain('Market Scan iniciado');
+    expect(presenter.marketScanAlreadyRunning().text).toContain('Ya hay un Market Scan en ejecución');
+    expect(presenter.marketScanCancelled().text).toContain('Market Scan cancelado');
+    expect(presenter.marketScanCannotCancelRunning().text).toContain('No puede cancelarse desde Telegram');
+  });
+
+  it('renders a completed summary only from the execution result', () => {
+    const response = presenter.marketScanCompleted(sampleMarketScanPresenterResult());
+
+    expect(response.code).toBe('OK');
+    expect(response.text).toContain('MARKET SCAN COMPLETED WITH WARNINGS');
+    expect(response.text).toContain('Duration:\n1m 42s');
+    expect(response.text).toContain('Candidates evaluated:\n5');
+    expect(response.text).toContain('Operational opportunities:\n1');
+    expect(response.text).toContain('Below threshold:\n1');
+    expect(response.text).toContain('Skipped:\n3');
+    expect(response.text).toContain('Duplicates suppressed:\n1');
+    expect(response.text).toContain('Market closed:\n1');
+    expect(response.text).toContain('Errors:\n1');
+    expect(response.text).toContain('Signals generated:\n1');
+    expect(response.text).toContain('4 request(s), 3 success, 1 failed');
+    expect(response.text).not.toContain('Trades');
+    expect(response.text).not.toContain('Evidence created');
+    expect(response.text).not.toContain('Alerts sent');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '🚀 Run Again', callbackData: CALLBACKS.marketScan });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '🔎 Analyze Symbol', callbackData: CALLBACKS.marketAnalyze });
+  });
+
+  it('renders safe failure response without stack traces', () => {
+    const response = presenter.marketScanFailed('Provider temporalmente no disponible.');
+
+    expect(response.code).toBe('ERROR');
+    expect(response.text).toContain('Market Scan failed');
+    expect(response.text).toContain('Provider temporalmente no disponible.');
+    expect(response.text).not.toContain('Error:');
+    expect(response.text).not.toContain('at ');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '🔄 Try Again', callbackData: CALLBACKS.marketScan });
+  });
+});
+
+
 describe('TelegramControlPresenter analyze symbol views', () => {
   const presenter = new TelegramControlPresenter();
 
@@ -465,5 +522,33 @@ const sampleTransactionCostEvaluation = (currency: 'MXN' | 'USDC' = 'MXN') => ({
     netInvestorReturnPercent: currency === 'USDC' ? 1.2728 : 0.4244,
     breakEvenPercent: currency === 'USDC' ? 0.722601 : 1.572264,
     targetCoversModeledCosts: true,
+  },
+});
+
+
+const sampleMarketScanPresenterResult = () => ({
+  scannedTickers: ['NVDA', 'BTC-USD'],
+  scanned: [
+    { ticker: 'NVDA', timeframe: '15m' },
+    { ticker: 'BTC-USD', timeframe: '1m' },
+  ],
+  opportunities: [{ ticker: 'NVDA', timeframe: '15m', score: 90, trendScore: 25, volumeScore: 25, momentumScore: 20, structureScore: 20, reasons: [], detectedAt: new Date('2026-08-30T10:00:00.000Z') }],
+  opportunitySignals: [{ ticker: 'NVDA', timeframe: '15m', entry: 100, stop: 99, target: 102, score: 90, signalType: 'LONG' as const, createdAt: new Date('2026-08-30T10:00:00.000Z') }],
+  notifiedSignals: [{ ticker: 'NVDA', timeframe: '15m', entry: 100, stop: 99, target: 102, score: 90, signalType: 'LONG' as const, createdAt: new Date('2026-08-30T10:00:00.000Z') }],
+  skipped: [
+    { ticker: 'MSFT', timeframe: '15m', score: 50, reason: 'below-threshold' as const },
+    { ticker: 'AAPL', timeframe: '15m', score: 90, reason: 'duplicate-signal-identity' as const },
+    { ticker: 'META', timeframe: '1m', score: 0, reason: 'market-closed' as const },
+  ],
+  errors: [{ ticker: 'XYZ', timeframe: '15m', message: 'provider unavailable' }],
+  metrics: {
+    totalCombinations: 5,
+    marketClosed: 1,
+    marketDataRequests: 4,
+    successfulRequests: 3,
+    failedRequests: 1,
+    rateLimitedRequests: 0,
+    retryAttempts: 0,
+    durationMs: 102_000,
   },
 });

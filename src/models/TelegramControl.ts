@@ -51,10 +51,17 @@ export type ControlResponseCode =
   | 'UNKNOWN_COMMAND'
   | 'ERROR';
 
+export interface TelegramControlResponseSender {
+  send(response: ControlResponse): Promise<void>;
+}
+
+export type TelegramControlBackgroundTask = (sender: TelegramControlResponseSender) => Promise<void>;
+
 export interface ControlResponse {
   text: string;
   keyboard?: InlineKeyboard;
   code: ControlResponseCode;
+  backgroundTasks?: TelegramControlBackgroundTask[];
 }
 
 export interface TelegramConversationState {

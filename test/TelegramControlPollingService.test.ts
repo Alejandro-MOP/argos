@@ -173,6 +173,52 @@ describe('TelegramControlPollingService', () => {
     expect(errors).toEqual(['router exploded']);
   });
 
+
+  it('sends the immediate response and starts background tasks without awaiting completion', async () => {
+    let finishBackground!: () => void;
+    const backgroundStarted = jest.fn();
+    const backgroundFinished = jest.fn();
+    const backgroundTask = jest.fn(async (sender) => {
+      backgroundStarted();
+      await new Promise<void>((resolve) => { finishBackground = resolve; });
+      await sender.send({ code: 'OK', text: 'MARKET SCAN COMPLETED' });
+      backgroundFinished();
+    });
+    const { service, client } = buildService({
+      updates: [callbackUpdate(77)],
+      routeResponse: { code: 'OK', text: 'Market Scan iniciado', backgroundTasks: [backgroundTask] },
+    });
+
+    await service.pollOnce();
+
+    expect(client.sendMessage).toHaveBeenCalledWith({ chatId: '456', text: 'Market Scan iniciado', keyboard: undefined });
+    expect(client.answerCallbackQuery).toHaveBeenCalledWith('callback-77', undefined);
+    expect(backgroundStarted).toHaveBeenCalledTimes(1);
+    expect(backgroundFinished).not.toHaveBeenCalled();
+
+    finishBackground();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(client.sendMessage).toHaveBeenCalledWith({ chatId: '456', text: 'MARKET SCAN COMPLETED', keyboard: undefined });
+    expect(backgroundFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs safe background task failures without breaking polling', async () => {
+    const { service, errors } = buildService({
+      updates: [callbackUpdate(78)],
+      routeResponse: {
+        code: 'OK',
+        text: 'Market Scan iniciado',
+        backgroundTasks: [async () => { throw new Error('token=super-secret failed'); }],
+      },
+    });
+
+    await service.pollOnce();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(errors).toEqual([expect.not.stringContaining('super-secret')]);
+  });
+
   it('advances the in-memory offset after the highest received update id', async () => {
     const { service, client } = buildService({
       updates: [messageUpdate(100), { update_id: 101 }, messageUpdate(102)],

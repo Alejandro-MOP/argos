@@ -1,6 +1,7 @@
 import type { ForwardPerformanceSummary } from '../models/EvidenceSignal';
 import type { CurrencyCode } from '../models/TransactionCost';
 import type { ResearchSnapshot } from '../models/ResearchSnapshot';
+import type { MarketScanResult } from './MarketScanExecutor';
 import type { StrategyProfile, StrategyProfileSummary } from '../models/StrategyProfile';
 import type { ControlResponse, InlineKeyboard } from '../models/TelegramControl';
 import type { AnalyzeSymbolErrorCode, AnalyzeSymbolResult } from './AnalyzeSymbolService';
@@ -17,6 +18,8 @@ export const CALLBACKS = {
   researchProfiles: 'argos:v1:research:profiles',
   researchPerformance: 'argos:v1:research:performance',
   marketScan: 'argos:v1:market:scan',
+  marketScanConfirm: 'argos:v1:market:scan_confirm',
+  marketScanCancel: 'argos:v1:market:scan_cancel',
   marketAnalyze: 'argos:v1:market:analyze',
   analyzeTf1m: 'argos:v1:analyze:tf_1m',
   analyzeTf5m: 'argos:v1:analyze:tf_5m',
@@ -94,6 +97,131 @@ export class TelegramControlPresenter {
         ['💵 Bitso USDC', CALLBACKS.costsBitsoUsdc],
         ['⬅️ Back', CALLBACKS.back],
       ]),
+    };
+  }
+
+  public marketScanConfirmation(): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        '⚠️ FULL MARKET SCAN',
+        '',
+        'Esto ejecutará el escaneo operacional completo de ARGOS.',
+        '',
+        'Puede:',
+        '• consultar múltiples símbolos y timeframes;',
+        '• crear oportunidades/señales según las reglas actuales;',
+        '• registrar Evidence;',
+        '• enviar Alerts si se cumplen las condiciones vigentes.',
+        '',
+        '¿Continuar?',
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '✅ Confirm', callbackData: CALLBACKS.marketScanConfirm }],
+          [{ text: '❌ Cancel', callbackData: CALLBACKS.marketScanCancel }],
+          [{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }],
+        ],
+      },
+    };
+  }
+
+  public marketScanStarted(): ControlResponse {
+    return {
+      code: 'OK',
+      text: ['🚀 Market Scan iniciado.', '', 'ARGOS está analizando el mercado...'].join('\n'),
+      keyboard: this.marketScanRunningKeyboard(),
+    };
+  }
+
+  public marketScanAlreadyRunning(): ControlResponse {
+    return {
+      code: 'OK',
+      text: ['⏳ Ya hay un Market Scan en ejecución.', '', 'Espera a que termine antes de iniciar otro.'].join('\n'),
+      keyboard: this.marketMenuKeyboard(),
+    };
+  }
+
+  public marketScanCancelled(): ControlResponse {
+    return {
+      code: 'CANCELLED',
+      text: 'Market Scan cancelado.',
+      keyboard: this.marketMenuKeyboard(),
+    };
+  }
+
+  public marketScanCannotCancelRunning(): ControlResponse {
+    return {
+      code: 'OK',
+      text: ['⏳ El Market Scan ya está en ejecución.', '', 'No puede cancelarse desde Telegram. Espera el resumen final.'].join('\n'),
+      keyboard: this.marketScanRunningKeyboard(),
+    };
+  }
+
+  public marketScanFailed(message?: string): ControlResponse {
+    return {
+      code: 'ERROR',
+      text: [
+        '⚠️ Market Scan failed.',
+        '',
+        'ARGOS no pudo completar el escaneo.',
+        ...(message ? ['', message] : []),
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '🔄 Try Again', callbackData: CALLBACKS.marketScan }],
+          [{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }],
+        ],
+      },
+    };
+  }
+
+  public marketScanCompleted(result: MarketScanResult): ControlResponse {
+    const hasWarnings = result.errors.length > 0 || result.metrics.failedRequests > 0 || result.metrics.rateLimitedRequests > 0;
+
+    return {
+      code: 'OK',
+      text: [
+        hasWarnings ? '🚀 MARKET SCAN COMPLETED WITH WARNINGS' : '🚀 MARKET SCAN COMPLETED',
+        '',
+        'Duration:',
+        formatDuration(result.metrics.durationMs),
+        '',
+        'Candidates evaluated:',
+        formatNumber(result.metrics.totalCombinations),
+        '',
+        'Operational opportunities:',
+        formatNumber(result.opportunities.length),
+        '',
+        'Below threshold:',
+        formatNumber(countSkipped(result, 'below-threshold')),
+        '',
+        'Skipped:',
+        formatNumber(result.skipped.length),
+        '',
+        'Duplicates suppressed:',
+        formatNumber(countSkipped(result, 'duplicate-window') + countSkipped(result, 'duplicate-signal-identity')),
+        '',
+        'Market closed:',
+        formatNumber(result.metrics.marketClosed),
+        '',
+        'Errors:',
+        formatNumber(result.errors.length),
+        '',
+        'Signals generated:',
+        formatNumber(result.notifiedSignals.length),
+        '',
+        'Market data requests:',
+        `${formatNumber(result.metrics.marketDataRequests)} request(s), ${formatNumber(result.metrics.successfulRequests)} success, ${formatNumber(result.metrics.failedRequests)} failed`,
+        ...(result.metrics.rateLimitedRequests > 0 ? ['', `Rate limited: ${formatNumber(result.metrics.rateLimitedRequests)}`] : []),
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '🚀 Run Again', callbackData: CALLBACKS.marketScan }],
+          [{ text: '🔎 Analyze Symbol', callbackData: CALLBACKS.marketAnalyze }],
+          [{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }],
+        ],
+      },
     };
   }
 
@@ -595,6 +723,12 @@ export class TelegramControlPresenter {
     };
   }
 
+  private marketScanRunningKeyboard(): InlineKeyboard {
+    return {
+      rows: [[{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }]],
+    };
+  }
+
   private costsCancelKeyboard(): InlineKeyboard {
     return {
       rows: [[{ text: '❌ Cancel', callbackData: CALLBACKS.costsCancel }]],
@@ -665,6 +799,25 @@ const formatForwardTargets = (targets: ForwardPerformanceSummary['experimentalTa
     `Win rate: ${formatPercent(target.winRate)}`,
     `Expectancy: ${formatPercent(target.historicalForwardExpectancyPercent)}`,
   ]);
+};
+
+const countSkipped = (result: MarketScanResult, reason: MarketScanResult['skipped'][number]['reason']): number =>
+  result.skipped.filter((item) => item.reason === reason).length;
+
+const formatDuration = (durationMs: number): string => {
+  if (durationMs < 1000) {
+    return `${formatNumber(durationMs)}ms`;
+  }
+
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
 };
 
 const formatAnalyzeReasons = (reasons: string[]): string[] => {

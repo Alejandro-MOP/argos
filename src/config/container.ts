@@ -36,6 +36,7 @@ import { TransactionCostService } from '../services/TransactionCostService';
 import { TelegramAuthorizationService } from '../services/TelegramAuthorizationService';
 import { TelegramCommandRouter } from '../services/TelegramCommandRouter';
 import { TelegramConversationStateService } from '../services/TelegramConversationStateService';
+import { TelegramMarketScanExecutionGuard } from '../services/TelegramMarketScanExecutionGuard';
 import { TelegramControlPresenter } from '../services/TelegramControlPresenter';
 import { TelegramControlReadOnlyQueryService } from '../services/TelegramControlReadOnlyQueryService';
 import { SignalContextService } from '../services/SignalContextService';
@@ -56,6 +57,7 @@ const telegramControlAuthorizationService = new TelegramAuthorizationService(
 );
 const telegramConversationStateService = new TelegramConversationStateService();
 const telegramControlPresenter = new TelegramControlPresenter();
+const telegramMarketScanExecutionGuard = new TelegramMarketScanExecutionGuard();
 const {
   opportunityRepository,
   signalRepository,
@@ -152,16 +154,6 @@ const analyzeSymbolService = new AnalyzeSymbolService({
   operationalThreshold: fallbackRuntimeConfig.scoring.opportunityMinScore,
 });
 
-const telegramCommandRouter = new TelegramCommandRouter(
-  telegramControlAuthorizationService,
-  telegramControlPresenter,
-  telegramConversationStateService,
-  telegramControlReadOnlyQueryService,
-  transactionCostService,
-  analyzeSymbolService,
-);
-
-
 const rankingService = new RankingService();
 const riskService = new RiskService();
 
@@ -239,6 +231,17 @@ export const marketScanExecutor = new MarketScanExecutor({
   defaultTimeframes: env.marketScanTimeframes,
 });
 
+const telegramCommandRouter = new TelegramCommandRouter(
+  telegramControlAuthorizationService,
+  telegramControlPresenter,
+  telegramConversationStateService,
+  telegramControlReadOnlyQueryService,
+  transactionCostService,
+  analyzeSymbolService,
+  marketScanExecutor,
+  telegramMarketScanExecutionGuard,
+);
+
 export {
   forwardPerformanceReportProvider,
   strategyProfileProvider,
@@ -250,4 +253,5 @@ export {
   telegramControlReadOnlyQueryService,
   telegramCommandRouter,
   analyzeSymbolService,
+  telegramMarketScanExecutionGuard,
 };

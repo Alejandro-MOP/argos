@@ -1,5 +1,5 @@
 import { TelegramControlApiError, type TelegramControlClient } from '../clients/TelegramControlClient';
-import type { ControlResponse, TelegramControlUser } from '../models/TelegramControl';
+import type { ControlResponse, TelegramControlResponseSender, TelegramControlUser } from '../models/TelegramControl';
 import type { TelegramAuthorizationService } from './TelegramAuthorizationService';
 import type { TelegramCommandRouter } from './TelegramCommandRouter';
 import type { TelegramControlMappedUpdate, TelegramControlUpdateMapper } from './TelegramControlUpdateMapper';
@@ -189,6 +189,7 @@ export class TelegramControlPollingService {
       if (callbackQueryId) {
         await this.answerCallbackSafely(callbackQueryId);
       }
+      this.runBackgroundTasks(update.chat?.id, response);
     } catch (error) {
       this.logger.error(sanitizeTelegramControlError(error));
       if (callbackQueryId) {
@@ -208,6 +209,27 @@ export class TelegramControlPollingService {
       text: response.text,
       keyboard: response.keyboard,
     });
+  }
+
+  private runBackgroundTasks(chatId: string | undefined, response: ControlResponse): void {
+    if (!response.backgroundTasks || response.backgroundTasks.length === 0) {
+      return;
+    }
+
+    if (!chatId) {
+      this.logger.warn('[TelegramControl] background tasks skipped because chatId is missing');
+      return;
+    }
+
+    const sender: TelegramControlResponseSender = {
+      send: (nextResponse) => this.sendControlResponse(chatId, nextResponse),
+    };
+
+    for (const task of response.backgroundTasks) {
+      void task(sender).catch((error: unknown) => {
+        this.logger.error(sanitizeTelegramControlError(error));
+      });
+    }
   }
 
   private async answerCallbackSafely(callbackQueryId: string, text?: string): Promise<void> {

@@ -77,7 +77,7 @@ describe('TelegramCommandRouter', () => {
     [CALLBACKS.researchSnapshot, 'ERROR', 'ARGOS no pudo consultar Research Snapshot'],
     [CALLBACKS.researchProfiles, 'ERROR', 'ARGOS no pudo consultar Strategy Profiles'],
     [CALLBACKS.researchPerformance, 'ERROR', 'ARGOS no pudo consultar Forward Performance'],
-    [CALLBACKS.marketScan, 'NOT_IMPLEMENTED', 'Market Scan integration is not available yet.'],
+    [CALLBACKS.marketScan, 'INPUT_REQUIRED', 'FULL MARKET SCAN'],
     [CALLBACKS.marketAnalyze, 'INPUT_REQUIRED', 'ANALYZE SYMBOL'],
     [CALLBACKS.costsBitsoMxn, 'INPUT_REQUIRED', 'BITSO MXN'],
     [CALLBACKS.costsBitsoUsdc, 'INPUT_REQUIRED', 'BITSO USDC'],
@@ -134,6 +134,8 @@ describe('TelegramCommandRouter read-only integrations', () => {
       new TelegramControlPresenter(),
       new TelegramConversationStateService(),
       readOnlyQueries,
+      undefined,
+      undefined,
       undefined,
       undefined,
       logger,
@@ -210,6 +212,146 @@ describe('TelegramCommandRouter read-only integrations', () => {
 });
 
 
+describe('TelegramCommandRouter full market scan flow', () => {
+  const buildMarketScanRouter = (marketScanExecutor: { run: jest.Mock } = { run: jest.fn().mockResolvedValue(sampleMarketScanResult()) }) => {
+    const conversationState = new TelegramConversationStateService();
+    const logger = { log: jest.fn(), error: jest.fn() };
+    const router = new TelegramCommandRouter(
+      new TelegramAuthorizationService('123'),
+      new TelegramControlPresenter(),
+      conversationState,
+      undefined,
+      undefined,
+      undefined,
+      marketScanExecutor,
+      undefined,
+      logger,
+    );
+
+    return { router, conversationState, marketScanExecutor, logger };
+  };
+
+  const runBackgroundTasks = async (response: { backgroundTasks?: Array<(sender: { send: jest.Mock }) => Promise<void>> }) => {
+    const sender = { send: jest.fn().mockResolvedValue(undefined) };
+    await Promise.all((response.backgroundTasks ?? []).map((task) => task(sender)));
+    return sender;
+  };
+
+  it('shows confirmation before running Full Market Scan', async () => {
+    const { router, marketScanExecutor } = buildMarketScanRouter();
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.marketScan } }));
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(response.text).toContain('FULL MARKET SCAN');
+    expect(response.text).toContain('registrar Evidence');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '✅ Confirm', callbackData: CALLBACKS.marketScanConfirm });
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+  });
+
+  it('does not execute scan on cancel', async () => {
+    const { router, marketScanExecutor } = buildMarketScanRouter();
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.marketScanCancel } }));
+
+    expect(response.code).toBe('CANCELLED');
+    expect(response.text).toContain('Market Scan cancelado');
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+  });
+
+  it('starts scan only after explicit confirm and schedules it in background', async () => {
+    const { router, marketScanExecutor } = buildMarketScanRouter();
+
+    const response = await router.route(update({ callback: { data: CALLBACKS.marketScanConfirm } }));
+
+    expect(response.code).toBe('OK');
+    expect(response.text).toContain('Market Scan iniciado');
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+    expect(response.backgroundTasks).toHaveLength(1);
+
+    const sender = await runBackgroundTasks(response);
+
+    expect(marketScanExecutor.run).toHaveBeenCalledWith({ notify: true }, expect.objectContaining({ log: expect.any(Function), error: expect.any(Function) }));
+    expect(sender.send).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'OK',
+      text: expect.stringContaining('MARKET SCAN COMPLETED WITH WARNINGS'),
+    }));
+  });
+
+  it('does not call MarketScanExecutor for unauthorized users', async () => {
+    const { router, marketScanExecutor } = buildMarketScanRouter();
+
+    const response = await router.route(update({ user: { id: '999' }, callback: { data: CALLBACKS.marketScanConfirm } }));
+
+    expect(response.code).toBe('UNAUTHORIZED');
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+  });
+
+  it('prevents double execution while a scan is running and releases guard after success', async () => {
+    let resolveScan!: (value: ReturnType<typeof sampleMarketScanResult>) => void;
+    const marketScanExecutor = {
+      run: jest.fn().mockReturnValue(new Promise((resolve) => { resolveScan = resolve; })),
+    };
+    const { router } = buildMarketScanRouter(marketScanExecutor);
+
+    const first = await router.route(update({ callback: { data: CALLBACKS.marketScanConfirm } }));
+    const second = await router.route(update({ callback: { data: CALLBACKS.marketScanConfirm } }));
+
+    expect(second.text).toContain('Ya hay un Market Scan en ejecución');
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+
+    const senderPromise = runBackgroundTasks(first);
+    expect(marketScanExecutor.run).toHaveBeenCalledTimes(1);
+    resolveScan(sampleMarketScanResult());
+    await senderPromise;
+
+    const third = await router.route(update({ callback: { data: CALLBACKS.marketScanConfirm } }));
+    expect(third.text).toContain('Market Scan iniciado');
+  });
+
+  it('releases guard after scan failure and allows retry', async () => {
+    const marketScanExecutor = { run: jest.fn().mockRejectedValueOnce(new Error('token=super-secret failed')).mockResolvedValueOnce(sampleMarketScanResult()) };
+    const { router, logger } = buildMarketScanRouter(marketScanExecutor);
+
+    const failed = await router.route(update({ callback: { data: CALLBACKS.marketScanConfirm } }));
+    const failedSender = await runBackgroundTasks(failed);
+
+    expect(failedSender.send).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'ERROR',
+      text: expect.stringContaining('Market Scan failed'),
+    }));
+    expect(logger.error).toHaveBeenCalledWith(expect.not.stringContaining('super-secret'));
+
+    const retry = await router.route(update({ callback: { data: CALLBACKS.marketScanConfirm } }));
+    await runBackgroundTasks(retry);
+
+    expect(marketScanExecutor.run).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps Analyze Symbol ad-hoc and does not mix it with Full Market Scan', async () => {
+    const marketScanExecutor = { run: jest.fn().mockResolvedValue(sampleMarketScanResult()) };
+    const analyzeSymbolService = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) };
+    const router = new TelegramCommandRouter(
+      new TelegramAuthorizationService('123'),
+      new TelegramControlPresenter(),
+      new TelegramConversationStateService(),
+      undefined,
+      undefined,
+      analyzeSymbolService,
+      marketScanExecutor,
+    );
+
+    await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
+    await router.route(update({ message: { text: 'NVDA' } }));
+    const response = await router.route(update({ callback: { data: CALLBACKS.analyzeTf15m } }));
+
+    expect(response.text).toContain('Este análisis técnico no ejecuta ni registra una operación.');
+    expect(analyzeSymbolService.analyze).toHaveBeenCalledTimes(1);
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+  });
+});
+
+
 describe('TelegramCommandRouter analyze symbol flow', () => {
   const buildAnalyzeRouter = (analyzeSymbolService: { analyze: jest.Mock } = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) }) => {
     const conversationState = new TelegramConversationStateService();
@@ -221,6 +363,8 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
       undefined,
       undefined,
       analyzeSymbolService,
+      undefined,
+      undefined,
       logger,
     );
 
@@ -370,6 +514,8 @@ describe('TelegramCommandRouter transaction cost flow', () => {
       conversationState,
       undefined,
       transactionCostService,
+      undefined,
+      undefined,
       undefined,
       logger,
     );
@@ -746,4 +892,55 @@ const sampleAnalyzeSymbolResult = () => ({
   reasons: ['EMA20 sobre EMA50', 'Breakout confirmado'],
   operationalThreshold: 90,
   aboveOperationalThreshold: true,
+});
+
+
+const sampleMarketScanResult = () => ({
+  scannedTickers: ['NVDA', 'BTC-USD'],
+  scanned: [
+    { ticker: 'NVDA', timeframe: '15m' },
+    { ticker: 'BTC-USD', timeframe: '1m' },
+  ],
+  opportunities: [buildOpportunityLike('NVDA', '15m', 90)],
+  opportunitySignals: [buildSignalLike('NVDA', '15m', 90)],
+  notifiedSignals: [buildSignalLike('NVDA', '15m', 90)],
+  skipped: [
+    { ticker: 'MSFT', timeframe: '15m', score: 50, reason: 'below-threshold' as const },
+    { ticker: 'AAPL', timeframe: '15m', score: 90, reason: 'duplicate-signal-identity' as const },
+    { ticker: 'META', timeframe: '1m', score: 0, reason: 'market-closed' as const },
+  ],
+  errors: [{ ticker: 'XYZ', timeframe: '15m', message: 'provider unavailable' }],
+  metrics: {
+    totalCombinations: 5,
+    marketClosed: 1,
+    marketDataRequests: 4,
+    successfulRequests: 3,
+    failedRequests: 1,
+    rateLimitedRequests: 0,
+    retryAttempts: 0,
+    durationMs: 102_000,
+  },
+});
+
+const buildOpportunityLike = (ticker: string, timeframe: string, score: number) => ({
+  ticker,
+  timeframe,
+  score,
+  trendScore: 25,
+  volumeScore: 25,
+  momentumScore: 20,
+  structureScore: 20,
+  reasons: ['Breakout confirmado'],
+  detectedAt: new Date('2026-08-30T10:00:00.000Z'),
+});
+
+const buildSignalLike = (ticker: string, timeframe: string, score: number) => ({
+  ticker,
+  timeframe,
+  entry: 100,
+  stop: 99,
+  target: 102,
+  score,
+  signalType: 'LONG' as const,
+  createdAt: new Date('2026-08-30T10:00:00.000Z'),
 });

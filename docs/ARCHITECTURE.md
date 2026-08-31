@@ -499,7 +499,7 @@ argos:v1:system:status
 - **callback_data**: identificador pequeño asociado al botón; no debe contener secretos, JSON grande ni estado sensible.
 - **Callback Query**: evento que Telegram produce cuando el usuario presiona un botón.
 
-Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Desde V1.5-D, `argos:v1:costs:bitso_mxn` y `argos:v1:costs:bitso_usdc` inician un cálculo conversacional real de costos. Desde V1.5-E, `argos:v1:market:analyze` inicia Analyze Symbol. Market Scan permanece como placeholder `NOT_IMPLEMENTED`.
+Desde V1.5-B el worker de Control Bot puede recibir esos callbacks reales desde Telegram y responderlos con mensajes/inline keyboards. Desde V1.5-D, `argos:v1:costs:bitso_mxn` y `argos:v1:costs:bitso_usdc` inician un cálculo conversacional real de costos. Desde V1.5-E, `argos:v1:market:analyze` inicia Analyze Symbol. Desde V1.5-F, `argos:v1:market:scan` muestra confirmación y `argos:v1:market:scan_confirm` ejecuta el Market Scan operacional real.
 
 #### Authorization
 
@@ -653,4 +653,4 @@ Trade Plan Research
 
 Trade Plan significa un plan previo de una posible operación que especificaría aspectos como entrada, objetivo de ganancia y límite de pérdida.
 
-V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling, V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram, V1.5-D conecta Transaction Costs y V1.5-E conecta Analyze Symbol. Market Scan desde Telegram todavía no está implementado.
+V1.4-B agrega una capa de aplicación y un endpoint HTTP para evaluar costos transaccionales de forma read-only. V1.5-A agrega Control Core, V1.5-B agrega transporte real por Long Polling, V1.5-C conecta consultas read-only de Research Snapshot, Strategy Profiles, Forward Performance y System Status desde Telegram, V1.5-D conecta Transaction Costs, V1.5-E conecta Analyze Symbol y V1.5-F conecta Full Market Scan con confirmación explícita. Market Scan desde Telegram usa el pipeline operacional existente.

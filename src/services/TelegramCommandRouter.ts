@@ -1,6 +1,7 @@
 import type { BrokerProductProfileId, CurrencyCode, ExecutionMode } from '../models/TransactionCost';
-import type { ControlResponse, TelegramControlUpdate } from '../models/TelegramControl';
+import type { ControlResponse, TelegramControlResponseSender, TelegramControlUpdate } from '../models/TelegramControl';
 import type { AnalyzeSymbolService } from './AnalyzeSymbolService';
+import type { MarketScanExecutor, MarketScanLogger } from './MarketScanExecutor';
 import { AnalyzeSymbolServiceError, normalizeAnalyzeSymbol, type AnalyzeSymbolTimeframe } from './AnalyzeSymbolService';
 import type { TransactionCostService } from './TransactionCostService';
 import type { TelegramAuthorizationService } from './TelegramAuthorizationService';
@@ -8,6 +9,7 @@ import type { TelegramConversationStateService } from './TelegramConversationSta
 import { CALLBACKS } from './TelegramControlPresenter';
 import type { TelegramControlPresenter } from './TelegramControlPresenter';
 import type { TelegramControlReadOnlyQueryService } from './TelegramControlReadOnlyQueryService';
+import { TelegramMarketScanExecutionGuard } from './TelegramMarketScanExecutionGuard';
 
 const MAX_CALLBACK_DATA_BYTES = 64;
 const SUPPORTED_NAMESPACE = 'argos';
@@ -30,6 +32,8 @@ type CallbackDestination =
   | 'research-profiles'
   | 'research-performance'
   | 'market-scan'
+  | 'market-scan-confirm'
+  | 'market-scan-cancel'
   | 'market-analyze'
   | 'analyze-tf-1m'
   | 'analyze-tf-5m'
@@ -55,6 +59,7 @@ interface ParsedCallback {
 }
 
 export interface TelegramCommandRouterLogger {
+  log?(message: string): void;
   error(message: string): void;
 }
 
@@ -98,6 +103,8 @@ const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.researchProfiles]: 'research-profiles',
   [CALLBACKS.researchPerformance]: 'research-performance',
   [CALLBACKS.marketScan]: 'market-scan',
+  [CALLBACKS.marketScanConfirm]: 'market-scan-confirm',
+  [CALLBACKS.marketScanCancel]: 'market-scan-cancel',
   [CALLBACKS.marketAnalyze]: 'market-analyze',
   [CALLBACKS.analyzeTf1m]: 'analyze-tf-1m',
   [CALLBACKS.analyzeTf5m]: 'analyze-tf-5m',
@@ -130,6 +137,8 @@ export class TelegramCommandRouter {
     >,
     private readonly transactionCostService?: Pick<TransactionCostService, 'evaluate'>,
     private readonly analyzeSymbolService?: Pick<AnalyzeSymbolService, 'analyze'>,
+    private readonly marketScanExecutor?: Pick<MarketScanExecutor, 'run'>,
+    private readonly marketScanExecutionGuard = new TelegramMarketScanExecutionGuard(),
     private readonly logger: TelegramCommandRouterLogger = console,
   ) {}
 
@@ -141,7 +150,7 @@ export class TelegramCommandRouter {
     const userId = update.user?.id;
 
     if (update.callback) {
-      return this.routeCallback(update.callback.data, userId);
+      return this.routeCallback(update.callback.data, userId, update.chat?.id);
     }
 
     return this.routeMessage(update.message?.text, userId);
@@ -162,6 +171,9 @@ export class TelegramCommandRouter {
     if (normalizedText === '/cancel') {
       const state = userId ? this.conversationStateService.get(userId) : undefined;
       this.clearConversation(userId);
+      if (this.marketScanExecutionGuard.isRunning()) {
+        return this.presenter.marketScanCannotCancelRunning();
+      }
       return state?.flow === ANALYZE_FLOW ? this.presenter.analyzeCancelled() : this.presenter.costsCancelled();
     }
 
@@ -185,7 +197,7 @@ export class TelegramCommandRouter {
     return this.presenter.unknownCommand();
   }
 
-  private async routeCallback(callbackData: string | undefined, userId: string | undefined): Promise<ControlResponse> {
+  private async routeCallback(callbackData: string | undefined, userId: string | undefined, chatId: string | undefined): Promise<ControlResponse> {
     const parsed = this.parseCallback(callbackData);
 
     if ('error' in parsed) {
@@ -219,7 +231,13 @@ export class TelegramCommandRouter {
       case 'research-performance':
         return this.queryForwardPerformance();
       case 'market-scan':
-        return this.presenter.notImplemented('Market Scan');
+        this.clearConversation(userId);
+        return this.presenter.marketScanConfirmation();
+      case 'market-scan-confirm':
+        return this.confirmMarketScan(userId, chatId);
+      case 'market-scan-cancel':
+        this.clearConversation(userId);
+        return this.presenter.marketScanCancelled();
       case 'market-analyze':
       case 'analyze-again':
         return this.startAnalyzeFlow(userId);
@@ -245,6 +263,59 @@ export class TelegramCommandRouter {
       case 'system-status':
         return this.querySystemStatus();
     }
+  }
+
+  private confirmMarketScan(userId: string | undefined, chatId: string | undefined): ControlResponse {
+    if (!userId) {
+      return this.presenter.marketScanFailed('Usuario no disponible para ejecutar el escaneo.');
+    }
+
+    const marketScanExecutor = this.marketScanExecutor;
+
+    if (!marketScanExecutor) {
+      return this.presenter.marketScanFailed('Market Scan no está disponible en este entorno.');
+    }
+
+    const release = this.marketScanExecutionGuard.tryAcquire();
+
+    if (!release) {
+      return this.presenter.marketScanAlreadyRunning();
+    }
+
+    const startedAt = new Date();
+    this.logger.log?.(
+      `[TelegramControl] market scan requested userId=${safeLogValue(userId)} chatId=${safeLogValue(chatId)} startedAt=${startedAt.toISOString()}`,
+    );
+
+    return {
+      ...this.presenter.marketScanStarted(),
+      backgroundTasks: [
+        async (sender: TelegramControlResponseSender) => {
+          try {
+            const result = await marketScanExecutor.run({ notify: true }, this.buildMarketScanLogger(userId, chatId));
+            this.logger.log?.(
+              `[TelegramControl] market scan completed userId=${safeLogValue(userId)} chatId=${safeLogValue(chatId)} durationMs=${result.metrics.durationMs} status=completed`,
+            );
+            await sender.send(this.presenter.marketScanCompleted(result));
+          } catch (error) {
+            this.logger.error(sanitizeControlRouterError(error));
+            this.logger.log?.(
+              `[TelegramControl] market scan completed userId=${safeLogValue(userId)} chatId=${safeLogValue(chatId)} status=failed`,
+            );
+            await sender.send(this.presenter.marketScanFailed());
+          } finally {
+            release();
+          }
+        },
+      ],
+    };
+  }
+
+  private buildMarketScanLogger(userId: string, chatId: string | undefined): MarketScanLogger {
+    return {
+      log: (message) => this.logger.log?.(`[TelegramControl][MarketScan] userId=${safeLogValue(userId)} chatId=${safeLogValue(chatId)} ${sanitizeControlRouterError(message)}`),
+      error: (message, error) => this.logger.error(`[TelegramControl][MarketScan] ${sanitizeControlRouterError(message)} ${sanitizeControlRouterError(error)}`),
+    };
   }
 
   private startAnalyzeFlow(userId: string | undefined): ControlResponse {
@@ -530,6 +601,8 @@ export class TelegramCommandRouter {
     }
   }
 }
+
+const safeLogValue = (value: string | undefined): string => value ?? 'n/a';
 
 const parseAnalyzeSymbolState = (data: Record<string, unknown> | undefined): string | undefined => {
   const symbol = data?.symbol;

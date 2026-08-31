@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.5-E — Telegram Analyze Symbol`
+**Desarrollo siguiente:** `V1.5-F — Telegram Full Market Scan`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -85,6 +85,7 @@ El score representa:
 | **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Implemented & Validated |
 | **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Implemented & Validated |
 | **V1.5-E — Telegram Analyze Symbol** | Análisis técnico ad-hoc read-only desde Control Bot | ✅ Completed / Manually Validated |
+| **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | 🚧 Implemented / Pending Manual Validation |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1194,6 +1195,73 @@ Se confirmó:
 - threshold operativo mostrado correctamente;
 - el flujo es read-only y no tiene rutas de persistencia.
 
+
+## V1.5-F — Telegram Full Market Scan 🚧
+
+Estado: **Implemented / Pending Manual Validation**.
+
+V1.5-F conecta el botón `🚀 Full Market Scan` del Control Bot con el pipeline operacional real de ARGOS.
+
+Flujo implementado:
+
+```text
+Telegram Control Bot
+  ↓
+Full Market Scan confirmation
+  ↓
+MarketScanExecutor.run({ notify: true })
+  ↓
+Watchlist / Market Universe
+  ↓
+Market Data / analyzers / scoring
+  ↓
+OpportunityFilter / RiskService
+  ↓
+Persistence / Evidence / Signals / Alerts según reglas actuales
+  ↓
+Telegram Control summary
+```
+
+Principios respetados:
+
+- no existe un segundo Market Scan;
+- no se duplica resolución de watchlist/universo;
+- no se duplican analyzers, scoring, filtros, risk, dedupe ni notificaciones;
+- `MarketScanExecutor` sigue siendo la fuente operacional;
+- el Alerts Bot sigue separado del Control Bot;
+- Control Bot muestra solo confirmación, estado iniciado y summary final;
+- no hay migrations nuevas ni persistencia específica del Control Bot.
+
+UX implementada:
+
+- `🚀 Full Market Scan` muestra advertencia y no ejecuta todavía;
+- `✅ Confirm` dispara el scan real;
+- `❌ Cancel` vuelve al menú Market sin ejecutar;
+- `🚀 Run Again` vuelve a la pantalla de confirmación, no ejecuta directo;
+- si ya hay un scan lanzado por Control Bot en curso, responde `Ya hay un Market Scan en ejecución`.
+
+Concurrencia:
+
+El guard de V1.5-F es in-memory y protege únicamente ejecuciones lanzadas desde el Control Bot en el proceso actual. No es un lock distribuido y no impide por sí solo que el Timer normal o un HTTP Market Scan se solapen. Esa coordinación global queda fuera de alcance de V1.5-F.
+
+Polling:
+
+El Control Bot responde rápido `Market Scan iniciado` y ejecuta el scan en background con manejo explícito de errores y liberación del guard en `finally`. Esto evita dejar al usuario sin feedback y reduce el riesgo de congelar el loop de polling durante scans largos.
+
+Side effects esperados:
+
+A diferencia de Analyze Symbol, Full Market Scan sí puede crear oportunidades, signals, Evidence y Alerts si el pipeline operacional actual decide hacerlo. V1.5-F no agrega side effects nuevos; solo expone la ejecución confirmada del pipeline existente desde Telegram.
+
+Validación manual pendiente:
+
+- abrir `/start` → Market → Full Market Scan;
+- probar Cancel y confirmar que no ejecuta scan;
+- probar Confirm y recibir mensaje de inicio;
+- esperar summary final;
+- validar que Alerts, si existen, llegan por Alerts Bot y no mezcladas como respuesta del Control Bot;
+- probar Run Again y confirmar que vuelve a confirmación;
+- si el scan tarda suficiente, probar doble Confirm y verificar respuesta already-running.
+
 ## V1.5-D — Telegram Transaction Costs Integration ✅
 
 Status: **COMPLETED / MANUALLY VALIDATED**.
@@ -2249,6 +2317,6 @@ el objeto que estamos intentando medir.
 
 **Última actualización conceptual:** 2026-08-28
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.5-E — Telegram Analyze Symbol`
+**Desarrollo siguiente:** `V1.5-F — Telegram Full Market Scan`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
