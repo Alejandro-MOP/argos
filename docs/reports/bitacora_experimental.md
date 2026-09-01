@@ -1366,3 +1366,453 @@ Sin embargo, también obliga a evitar conclusiones causales prematuras.
 
 El objetivo futuro será comparar múltiples cortes y determinar si los patrones
 observados permanecen cuando cambia el régimen de mercado.
+
+---
+
+# 2026-08-31 — Corte experimental semanal oficial
+
+## CORTE EXPERIMENTAL OFICIAL — 31-AGO-2026
+
+Este corte fue realizado externamente el **31-AGO-2026** mediante:
+
+1. `POST /api/forward-evaluate`
+2. `GET /api/research-snapshot`
+
+Los valores registrados en esta entrada provienen de esas respuestas del sistema durante el corte experimental. No fueron recalculados por Codex directamente desde PostgreSQL para esta actualización documental.
+
+Objetivo del corte:
+
+- registrar qué observamos;
+- registrar con cuántos datos;
+- separar salud operacional de calidad estratégica;
+- documentar cambios recientes de ingeniería;
+- marcar una frontera experimental por expansión del Market Universe;
+- definir qué comparar contra el siguiente corte semanal.
+
+## Estado general de Evidence
+
+| Métrica | Valor |
+| ------- | ----: |
+| strategyVersion | v1 |
+| Evidence total / elegible | 473 |
+| Evidence evaluada | 356 |
+| Evidence sin evaluación | 117 |
+| Señales/oportunidades con operational threshold >= 90 | 191 |
+
+### Distribución por scoreBucket
+
+| Score bucket | Evidence |
+| ------------ | -------: |
+| 80-84 | 163 |
+| 85-89 | 119 |
+| 90-94 | 124 |
+| 95-100 | 67 |
+
+### Estados de evaluación
+
+| Estado | Total |
+| ------ | ----: |
+| OPEN | 87 |
+| PARTIALLY_RESOLVED | 9 |
+| CLOSED | 214 |
+| EXPIRED | 42 |
+| AMBIGUOUS | 4 |
+
+## Forward Evaluation del corte
+
+La ejecución manual de `POST /api/forward-evaluate` realizada inmediatamente antes del Research Snapshot produjo:
+
+| Métrica | Total |
+| ------- | ----: |
+| Evidence pendientes | 100 |
+| Evaluadas | 100 |
+| PARTIALLY_RESOLVED | 9 |
+| OPEN | 91 |
+| Provider errors | 0 |
+| Evaluation errors | 0 |
+| Casos sin future candles | 0 |
+
+### Lectura permitida
+
+La ejecución 100/100 y la ausencia de errores indican que el pipeline de Forward Evaluation se encontraba operativamente saludable durante este corte.
+
+### Lectura NO permitida
+
+Esto no demuestra rentabilidad, no demuestra calidad predictiva de la estrategia y no demuestra que el score funcione como predictor.
+
+Separación metodológica:
+
+```text
+Salud del sistema
+  !=
+Calidad de la estrategia
+```
+
+## Target Ladder — observación global
+
+Definición breve:
+
+- **Target**: movimiento porcentual favorable desde el entry que el evaluador observa después de una señal.
+- **Win Rate**: entre resultados resueltos como WIN o LOSS para ese target, porcentaje donde el target fue alcanzado antes que el stop.
+
+Win Rate no significa automáticamente rentabilidad.
+
+| Target | Wins | Losses | Win Rate |
+| ------ | ---: | -----: | -------: |
+| +0.50% | 181 | 105 | 63.29% |
+| +0.75% | 152 | 118 | 56.30% |
+| +1.00% | 123 | 131 | 48.43% |
+| +1.25% | 105 | 143 | 42.34% |
+| +1.50% | 93 | 145 | 39.08% |
+| +2.00% | 67 | 165 | 28.88% |
+| +3.00% | 41 | 174 | 19.07% |
+| +5.00% | 10 | 176 | 5.38% |
+
+Observación descriptiva:
+
+En la muestra global actual, los targets pequeños presentan una frecuencia de éxito considerablemente mayor que los targets grandes.
+
+Esto es una observación, no una decisión de estrategia.
+
+No concluir todavía:
+
+- que `+0.50%` debe ser el Take Profit;
+- que la estrategia ya es rentable;
+- que debe modificarse el Stop Loss;
+- que debe modificarse el scoring;
+- que debe modificarse el Target Ladder.
+
+Para evaluar posteriormente un Trade Plan será necesario analizar conjuntamente:
+
+- Target;
+- Stop;
+- MFE;
+- MAE;
+- transaction costs;
+- assetType;
+- timeframe;
+- scoreBucket;
+- sector;
+- industry;
+- market regime;
+- tamaño de muestra.
+
+## MFE y MAE
+
+Definiciones:
+
+- **MFE — Maximum Favorable Excursion**: mayor movimiento favorable observado después de la señal.
+- **MAE — Maximum Adverse Excursion**: mayor movimiento adverso observado después de la señal.
+
+En este corte no se mezclan valores de MFE/MAE provenientes de poblaciones distintas. Research Snapshot y Forward Performance pueden representar agregaciones diferentes; por eso no deben compararse como si fueran necesariamente la misma métrica poblacional.
+
+## Cambios de ingeniería recientes
+
+### ARGOS Control Interface — V1.5
+
+Durante el periodo se desarrolló la interfaz privada de control bidireccional mediante Telegram.
+
+Estado real observado en repositorio y commits recientes:
+
+| Hito | Estado | Impacto experimental |
+| ---- | ------ | -------------------- |
+| V1.5-A — Control Core | Implementado y validado | Ingeniería / observabilidad |
+| V1.5-B — Telegram Control Transport / Long Polling | Implementado y validado | Ingeniería / observabilidad |
+| V1.5-C — Read-Only Research Integrations | Implementado y validado | Observabilidad read-only |
+| V1.5-D — Telegram Transaction Costs | Implementado y validado | Simulación/costos read-only |
+| V1.5-E — Analyze Symbol | Implementado y validado | Análisis ad-hoc read-only |
+| V1.5-F — Full Market Scan from Telegram | Implementado; commit presente | Mecanismo de ejecución/recolección |
+
+`Analyze Symbol` es read-only: no persiste signals, no crea Evidence, no crea Forward Signals, no envía Alerts y no modifica scoring.
+
+`Telegram Transaction Costs` tampoco modifica la generación de señales.
+
+`Full Market Scan from Telegram` es distinto: utiliza el pipeline operacional real de `MarketScanExecutor`. Por lo tanto, un scan manual confirmado desde Telegram puede generar nuevas oportunidades, signals, Evidence y Alerts mediante las reglas normales del sistema. Esto puede afectar la cantidad de Evidence recolectada, pero no cambia la estrategia.
+
+Clasificación:
+
+```text
+Cambio en mecanismo de ejecución / recolección
+  !=
+Cambio de estrategia
+```
+
+No cambiaron por V1.5-F:
+
+- scoring;
+- analyzers;
+- thresholds;
+- Target Ladder;
+- strategyVersion.
+
+### V1.6-A — Market Universe Expansion
+
+Este es el cambio experimental más importante del periodo.
+
+Antes:
+
+| Concepto | Valor |
+| -------- | ----: |
+| Símbolos activos | 61 |
+| Timeframes | 5 |
+| Combinaciones símbolo-timeframe aproximadas | 305 |
+
+Después:
+
+| Concepto | Valor |
+| -------- | ----: |
+| Símbolos activos | 103 |
+| Timeframes | 5 |
+| Combinaciones símbolo-timeframe | 515 |
+| Símbolos nuevos | 42 |
+
+Composición final:
+
+| Asset type | Total |
+| ---------- | ----: |
+| STOCK | 72 |
+| ETF | 22 |
+| CRYPTO | 9 |
+
+Mercados:
+
+| Market | Total |
+| ------ | ----: |
+| US | 94 |
+| Crypto | 9 |
+
+Sesiones:
+
+| Session type | Total |
+| ------------ | ----: |
+| US_REGULAR | 94 |
+| TWENTY_FOUR_SEVEN | 9 |
+
+Cobertura actual incluye exposición a:
+
+- Technology;
+- Financial Services;
+- Consumer Cyclical;
+- Crypto;
+- Communication Services;
+- Consumer Defensive;
+- Healthcare;
+- Industrials;
+- Energy;
+- Broad Market;
+- Real Estate;
+- Utilities;
+- Metals;
+- Rates;
+- Semiconductors.
+
+Los nuevos `provider_symbol` fueron validados contra Yahoo Finance antes de su incorporación.
+
+## 31-AGO-2026 — MARKET UNIVERSE EXPANSION BOUNDARY
+
+```text
+ANTES DE ESTA FECHA
+61 símbolos activos
+≈ 305 combinaciones símbolo-timeframe
+
+DESDE ESTA FECHA
+103 símbolos activos
+515 combinaciones símbolo-timeframe
+```
+
+La Evidence histórica no se elimina, no se reinicia y no se reclasifica solamente por este cambio.
+
+La estrategia continúa siendo:
+
+```text
+strategyVersion = v1
+```
+
+No cambiaron:
+
+- scoring;
+- analyzers;
+- operational threshold;
+- Target Ladder;
+- Forward Evaluation;
+- Evidence methodology.
+
+Lo que cambió fue la amplitud y diversidad del universo observado.
+
+Clasificación metodológica:
+
+```text
+EXPOSURE / SAMPLING CHANGE
+```
+
+No clasificar como:
+
+```text
+STRATEGY CHANGE
+```
+
+## Posible impacto del Market Universe expandido
+
+Hipótesis, no conclusión:
+
+A partir de esta frontera podría cambiar la distribución de Evidence porque ARGOS observa una muestra más amplia del mercado.
+
+Posibles efectos:
+
+- mayor cantidad de Evidence por unidad de tiempo;
+- mayor presencia de ETF;
+- mayor diversidad sectorial;
+- incorporación significativa de Rates;
+- incorporación significativa de Metals;
+- mayor representación de Real Estate;
+- mayor representación de Utilities;
+- mejor cobertura de Semiconductors;
+- menor concentración relativa en un pequeño conjunto de acciones;
+- cambios en distribución de scoreBucket;
+- cambios en MFE/MAE globales simplemente por composición de muestra.
+
+Si estas métricas cambian durante septiembre, no asumir automáticamente que la estrategia mejoró o empeoró. Primero distinguir si cambió la estrategia o si cambió la población observada.
+
+En este caso:
+
+```text
+Cambió la estrategia: NO
+Cambió la población observada: SÍ
+```
+
+## Observación sobre score
+
+Hipótesis vigente:
+
+Un score mayor todavía no ha demostrado una relación monotónica con mejor comportamiento futuro.
+
+Relación monotónica esperada conceptualmente:
+
+```text
+score 95-100
+  mejor que
+score 90-94
+  mejor que
+score 85-89
+  mejor que
+score 80-84
+```
+
+Hasta ahora no existe evidencia suficiente para afirmar esa relación.
+
+El score podría estar midiendo principalmente intensidad/confluencia de condiciones técnicas presentes, no necesariamente magnitud futura del movimiento.
+
+No modificar scoring durante este periodo.
+
+## Data maturity
+
+Data maturity significa que existe suficiente cantidad y diversidad de datos para realizar análisis estadísticos más serios.
+
+No significa:
+
+- que la estrategia ya funciona;
+- que ARGOS está listo para operar dinero real;
+- que la estrategia es rentable.
+
+Estado del corte:
+
+473 Evidence totales y 356 evaluadas representan un avance considerable respecto a los primeros cortes.
+
+Sin embargo, mantener Strategy Research como **INSUFFICIENT** cuando los perfiles individuales todavía no cumplan los criterios existentes de madurez.
+
+No modificar criterios de data maturity para hacer que la muestra parezca madura.
+
+## Comparación con cortes anteriores
+
+La documentación previa muestra que Evidence y evaluaciones continúan aumentando. No se recalculan valores faltantes y no se comparan métricas incompatibles.
+
+El corte previo verificable del 27/28-AGO-2026 incluye métricas de poblaciones y agregaciones que no deben mezclarse automáticamente con este corte. Por lo tanto, no se calcula porcentaje de crecimiento aquí.
+
+Lectura segura:
+
+> La Evidence y las evaluaciones continúan aumentando bajo `strategyVersion=v1`.
+
+## Interpretación del corte
+
+ARGOS Evidence Build V1 continúa operativamente saludable.
+
+El Forward Evaluator procesó correctamente las 100 Evidence pendientes del corte sin errores del provider ni errores de evaluación.
+
+La muestra experimental continúa creciendo.
+
+El Target Ladder muestra una reducción progresiva de frecuencia de éxito conforme aumenta la magnitud del target.
+
+Esto es descriptivo y todavía no constituye una política de Take Profit.
+
+La expansión del Market Universe introduce una nueva frontera experimental: la estrategia permanece sin cambios, pero la población observada aumenta de 61 a 103 símbolos.
+
+Por lo tanto, cambios futuros en distribución de Evidence, MFE, MAE, assetType o scoreBucket deberán analizarse considerando esta expansión.
+
+## Decisiones diferidas
+
+No seleccionar todavía:
+
+- Take Profit definitivo;
+- Stop Loss definitivo;
+- nuevo score threshold;
+- nuevos score weights;
+- reglas específicas por sector;
+- reglas específicas por assetType;
+- reglas específicas por timeframe;
+- Trade Plan definitivo.
+
+Regla metodológica:
+
+No realizar cambios de estrategia basados en Evidence antes de contar con una muestra suficientemente madura, salvo:
+
+- corrección de bugs;
+- contaminación de datos;
+- problemas metodológicos demostrables.
+
+## Siguiente corte semanal propuesto
+
+Próxima revisión semanal propuesta:
+
+```text
+07-SEP-2026
+```
+
+Baseline para comparar:
+
+| Métrica | 31-AGO-2026 |
+| ------- | ----------: |
+| Evidence | 473 |
+| Evaluadas | 356 |
+| Operacionales >= 90 | 191 |
+
+En el siguiente corte observar especialmente:
+
+1. crecimiento de Evidence;
+2. crecimiento de evaluaciones resueltas;
+3. distribución por assetType;
+4. aparición de ETF dentro de Evidence;
+5. distribución sectorial si la infraestructura ya permite consultarla;
+6. scoreBuckets;
+7. Target Ladder;
+8. MFE;
+9. MAE;
+10. Strategy Profiles;
+11. errores de provider/evaluator;
+12. posible impacto de Full Market Scan manual.
+
+No intentar demostrar causalidad en una sola semana. El objetivo es observar si aparecen cambios de distribución compatibles con la expansión del Market Universe.
+
+## Consideración metodológica — correlación no es causalidad
+
+Si después del 31-AGO se observa MFE mayor, Win Rate mayor o cualquier mejora/desmejora agregada, no se podrá afirmar inmediatamente que fue causada por la expansión del Market Universe.
+
+La expansión puede coincidir con:
+
+- diferente market regime;
+- diferente volatilidad;
+- distinta composición de señales;
+- diferente cantidad de sesiones observadas;
+- comportamiento específico de ciertos sectores.
+
+Por ahora únicamente se registra el antes/después y se buscarán patrones repetidos con más Evidence.
+
