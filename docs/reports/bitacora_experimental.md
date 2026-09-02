@@ -1815,4 +1815,57 @@ La expansión puede coincidir con:
 - comportamiento específico de ciertos sectores.
 
 Por ahora únicamente se registra el antes/después y se buscarán patrones repetidos con más Evidence.
+---
+
+# 2026-09-01 — Telegram Alert Timeframe Filter
+
+## Cambio temporal de presentación/notificación
+
+El 01-SEP-2026 se deshabilitaron temporalmente las notificaciones Telegram para `1m` y `5m`.
+
+Timeframes observados por ARGOS:
+
+```text
+1m, 5m, 15m, 1d, 1w
+```
+
+Timeframes notificados por Alerts Bot:
+
+```text
+15m, 1d, 1w
+```
+
+La configuración operativa queda expresada mediante:
+
+```text
+TELEGRAM_NOTIFICATION_TIMEFRAMES=15m,1d,1w
+```
+
+## Impacto experimental esperado
+
+Ninguno esperado.
+
+`1m` y `5m` continúan:
+
+- analizándose;
+- generando oportunidades/señales según las reglas existentes;
+- persistiendo Evidence cuando cumplen `EVIDENCE_MIN_SCORE`;
+- participando en Forward Evaluation;
+- participando en Strategy Research.
+
+El cambio afecta exclusivamente la capa de presentación/notificación.
+
+Motivo:
+
+Actualmente no se realizan decisiones operativas de scalping/trading sobre `1m` y `5m`.
+
+`strategyVersion` permanece sin cambios.
+
+Clasificación metodológica:
+
+```text
+PRESENTATION / NOTIFICATION CHANGE
+```
+
+No clasificar como cambio de estrategia.
 

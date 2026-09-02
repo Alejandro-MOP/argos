@@ -6,6 +6,7 @@ import {
   type MarketScanExecutorDependencies,
   type MarketScanLogger,
 } from '../src/services/MarketScanExecutor';
+import { NotificationService } from '../src/services/NotificationService';
 
 const buildCandles = (count: number, lastTimestamp = new Date()): Candle[] => {
   return Array.from({ length: count }, (_, index) => ({
@@ -293,7 +294,7 @@ describe('MarketScanExecutor', () => {
     expect(signalRepository.save).not.toHaveBeenCalled();
     expect(notificationService.sendSignal).not.toHaveBeenCalled();
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] decisionNotificacion ticker=SPY score=55 opportunityMinScore=50 telegramMinScore=80 willNotify=false',
+      '[debug] decisionNotificacion ticker=SPY score=55 opportunityMinScore=50 telegramMinScore=80 telegramTimeframes= willNotify=false',
     );
   });
 
@@ -341,6 +342,84 @@ describe('MarketScanExecutor', () => {
     });
   });
 
+  it('keeps 1m and 5m opportunities in evidence flow while disabling Telegram notifications', async () => {
+    const logger = buildLogger();
+    const opportunity = { ...buildOpportunity('SPY', 95), timeframe: '1m' };
+    const opportunityRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+      findRecentByTicker: jest.fn(),
+    };
+    const signalRepository = {
+      save: jest.fn(),
+      findAll: jest.fn(),
+    };
+    const forwardSignalRepository = {
+      save: jest.fn().mockResolvedValue(true),
+    };
+    const evidenceSignalRepository = {
+      saveIfNotDuplicate: jest.fn().mockResolvedValue(true),
+      findPending: jest.fn(),
+      findById: jest.fn(),
+    };
+    const notificationService = new NotificationService(undefined, {
+      minimumScore: 80,
+      notificationTimeframes: ['15m', '1d', '1w'],
+    });
+    jest.spyOn(notificationService, 'sendSignal');
+    const executor = buildExecutor({
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      opportunityRepository,
+      signalRepository,
+      forwardSignalRepository,
+      evidenceSignalRepository,
+      notificationService,
+      riskService: {
+        calculateRisk: jest.fn().mockReturnValue({
+          ticker: 'SPY',
+          timeframe: '1m',
+          entry: 100,
+          stop: 95,
+          target: 110,
+          score: 95,
+          signalType: 'LONG',
+          createdAt: new Date(),
+        }),
+      },
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run(
+      { tickers: ['SPY'], timeframe: '1m', candleLimit: 80, notify: true },
+      logger,
+    );
+
+    expect(result.opportunities).toEqual([opportunity]);
+    expect(result.opportunitySignals).toHaveLength(1);
+    expect(result.notifiedSignals).toEqual([]);
+    expect(result.skipped).toContainEqual({
+      ticker: 'SPY',
+      timeframe: '1m',
+      score: 95,
+      reason: 'telegram-timeframe-disabled',
+    });
+    expect(opportunityRepository.save).toHaveBeenCalledWith(opportunity);
+    expect(evidenceSignalRepository.saveIfNotDuplicate).toHaveBeenCalled();
+    expect(signalRepository.save).not.toHaveBeenCalled();
+    expect(forwardSignalRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ticker: 'SPY',
+        timeframe: '1m',
+        telegramSent: false,
+      }),
+    );
+    expect(notificationService.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('uses request Telegram minimum score override for a single scan', async () => {
     const logger = buildLogger();
     const opportunity = buildOpportunity('SPY', 85);
@@ -384,7 +463,7 @@ describe('MarketScanExecutor', () => {
     });
     expect(notificationService.sendSignal).not.toHaveBeenCalled();
     expect(logger.log).toHaveBeenCalledWith(
-      '[debug] decisionNotificacion ticker=SPY score=85 opportunityMinScore=50 telegramMinScore=90 willNotify=false',
+      '[debug] decisionNotificacion ticker=SPY score=85 opportunityMinScore=50 telegramMinScore=90 telegramTimeframes= willNotify=false',
     );
   });
 

@@ -1259,6 +1259,12 @@ Validación manual pendiente:
 - probar Run Again y confirmar que vuelve a confirmación;
 - si el scan tarda suficiente, probar doble Confirm y verificar respuesta already-running.
 
+## 2026-09-01 — Telegram Alert Timeframe Filter
+
+Estado: **Implemented / Operational Adjustment**.
+
+Se limita temporalmente el Alerts Bot a `15m,1d,1w` mediante `TELEGRAM_NOTIFICATION_TIMEFRAMES`. `1m` y `5m` siguen analizándose, generando Evidence, participando en Forward Evaluation y Strategy Research. El cambio es de presentación/notificación, no de estrategia; `strategyVersion=v1` permanece igual.
+
 ## V1.6-A — Market Universe Expansion & Segmentation 🚧
 
 Estado: **Implemented / Pending Manual Validation**.

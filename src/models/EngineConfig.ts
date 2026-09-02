@@ -30,6 +30,7 @@ export interface EngineRuntimeConfig {
     performanceMinSampleSize: number;
     forwardTestContextEnabled: boolean;
   };
+  telegramNotificationTimeframes: string[];
   scoring: {
     maxAnalyzerScore: number;
     opportunityMinScore: number;

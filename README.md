@@ -171,7 +171,7 @@ Pasos de `marketScan`:
 5. Rankea oportunidades por score descendente.
 6. Filtra por score mínimo y duplicados recientes.
 7. Convierte oportunidades válidas en un plan de riesgo con `RiskService`.
-8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE`, la agrega a `notifiedSignals` y puede notificar Telegram.
+8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE` y su timeframe está dentro de `TELEGRAM_NOTIFICATION_TIMEFRAMES`, la agrega a `notifiedSignals` y puede notificar Telegram.
 9. Persiste oportunidad y señal en memoria cuando corresponde.
 
 
@@ -553,6 +553,7 @@ El score total máximo es `100`. A partir de V1.2 hay tres thresholds separados:
 - `EVIDENCE_MIN_SCORE`: decide si el setup se guarda para investigación forward.
 - `OPPORTUNITY_MIN_SCORE`: decide si entra al response `opportunities`.
 - `TELEGRAM_NOTIFICATION_MIN_SCORE`: decide si además pasa a `notifiedSignals` y puede enviarse por Telegram.
+- `TELEGRAM_NOTIFICATION_TIMEFRAMES`: limita qué temporalidades pueden enviarse al Alerts Bot; default temporal: `15m,1d,1w`.
 
 La operación puede mantenerse estricta, por ejemplo `OPPORTUNITY_MIN_SCORE=90` y
 `TELEGRAM_NOTIFICATION_MIN_SCORE=90`, mientras Evidence guarda silenciosamente desde `80` para poder
@@ -620,6 +621,7 @@ Reglas actuales:
 entrar a `notifiedSignals` y enviarse a Telegram:
 
 - `score >= TELEGRAM_NOTIFICATION_MIN_SCORE`
+- `timeframe ∈ TELEGRAM_NOTIFICATION_TIMEFRAMES`
 
 En el endpoint manual `POST /api/market-scan`, ambos thresholds pueden sobreescribirse por request
 con `opportunityMinScore` y `telegramNotificationMinScore`. Ese override no cambia las variables de
@@ -631,6 +633,7 @@ Por defecto:
 EVIDENCE_MIN_SCORE=80
 OPPORTUNITY_MIN_SCORE=50
 TELEGRAM_NOTIFICATION_MIN_SCORE=80
+TELEGRAM_NOTIFICATION_TIMEFRAMES=15m,1d,1w
 TRADE_STOP_LOSS_PERCENT=1
 TRADE_TARGET_MIN_PERCENT=2
 TRADE_TARGET_MAX_PERCENT=3
@@ -680,6 +683,7 @@ Con tu intención operativa actual:
 EVIDENCE_MIN_SCORE=80
 OPPORTUNITY_MIN_SCORE=90
 TELEGRAM_NOTIFICATION_MIN_SCORE=90
+TELEGRAM_NOTIFICATION_TIMEFRAMES=15m,1d,1w
 ```
 
 Un setup con score `85` se guarda en `market_signal_engine.evidence_signals` con
@@ -1605,7 +1609,7 @@ https://api.telegram.org/bot<TELEGRAM_ALERTS_BOT_TOKEN>/getUpdates
 }
 ```
 
-Compatibilidad: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `TELEGRAM_ENABLED` siguen funcionando como fallback del Alerts Bot. Las variables `TELEGRAM_ALERTS_*` tienen precedencia si existen. `TELEGRAM_NOTIFICATION_MIN_SCORE` conserva su comportamiento: define el score mínimo para entrar a `notifiedSignals` y enviar Telegram cuando `notify=true`.
+Compatibilidad: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `TELEGRAM_ENABLED` siguen funcionando como fallback del Alerts Bot. Las variables `TELEGRAM_ALERTS_*` tienen precedencia si existen. `TELEGRAM_NOTIFICATION_MIN_SCORE` define el score mínimo para entrar a `notifiedSignals` y enviar Telegram cuando `notify=true`. `TELEGRAM_NOTIFICATION_TIMEFRAMES` limita la capa de alertas; por default temporal `1m` y `5m` siguen analizándose y generando Evidence, pero no se envían al Alerts Bot.
 
 El Control Bot autoriza por `user_id` de Telegram: identifica la cuenta del usuario. `chat_id` identifica una conversación/chat y sólo se usa como destino de respuesta. Si `TELEGRAM_CONTROL_ALLOWED_USER_IDS` está vacío, el worker puede arrancar, pero todos los usuarios serán rechazados con `Unauthorized.`. No documentes IDs reales ni tokens.
 
@@ -1953,6 +1957,7 @@ OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 | `ENGINE_STRATEGY_VERSION`              | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
 | `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                                      |
 | `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.              |
+| `TELEGRAM_NOTIFICATION_TIMEFRAMES`      | Lista CSV de temporalidades notificables por Alerts Bot; default temporal `15m,1d,1w`. `1m` y `5m` siguen en Evidence/Research. |
 | `EVIDENCE_MIN_SCORE`                   | Score mínimo para capturar Evidence de investigación sin cambiar thresholds operativos.                   |
 | `TRADE_STOP_LOSS_PERCENT`              | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.                      |
 | `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                                   |

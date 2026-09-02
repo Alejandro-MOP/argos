@@ -62,6 +62,11 @@ export class EngineConfigService {
         performanceMinSampleSize: this.getNumber(parsedValues, 'PERFORMANCE_MIN_SAMPLE_SIZE', this.fallbackConfig.signalIntelligence.performanceMinSampleSize),
         forwardTestContextEnabled: this.getBoolean(parsedValues, 'FORWARD_TEST_CONTEXT_ENABLED', this.fallbackConfig.signalIntelligence.forwardTestContextEnabled),
       },
+      telegramNotificationTimeframes: this.getStringList(
+        parsedValues,
+        'TELEGRAM_NOTIFICATION_TIMEFRAMES',
+        this.fallbackConfig.telegramNotificationTimeframes,
+      ),
       scoring: {
         maxAnalyzerScore: this.getNumber(parsedValues, 'SCORING_MAX_ANALYZER_SCORE', this.fallbackConfig.scoring.maxAnalyzerScore),
         opportunityMinScore: this.getNumber(parsedValues, 'OPPORTUNITY_MIN_SCORE', this.fallbackConfig.scoring.opportunityMinScore),
@@ -116,6 +121,25 @@ export class EngineConfigService {
   private getBoolean(values: Map<string, unknown>, key: string, fallback: boolean): boolean {
     const value = values.get(key);
     return typeof value === 'boolean' ? value : fallback;
+  }
+
+  private getStringList(values: Map<string, unknown>, key: string, fallback: string[]): string[] {
+    const value = values.get(key);
+
+    if (typeof value !== 'string') {
+      return fallback;
+    }
+
+    const items = [
+      ...new Set(
+        value
+          .split(',')
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+
+    return items.length > 0 ? items : fallback;
   }
 
   private validate(config: EngineRuntimeConfig): void {

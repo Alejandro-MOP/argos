@@ -182,6 +182,7 @@ const createSignalContextService = (config: EngineRuntimeConfig): SignalContextS
 const createNotificationService = (config: EngineRuntimeConfig): NotificationService =>
   new NotificationService(telegramClient, {
     minimumScore: config.scoring.telegramNotificationMinScore,
+    notificationTimeframes: config.telegramNotificationTimeframes,
     tradePlan: config.tradePlan,
   });
 

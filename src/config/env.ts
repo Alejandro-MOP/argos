@@ -74,16 +74,25 @@ const parseRequiredPositiveNumber = (
 const SUPPORTED_MARKET_SCAN_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '1d', '1w'];
 
 export const parseMarketScanTimeframes = (values: NodeJS.ProcessEnv = process.env): string[] => {
-  const configuredTimeframes = parseTimeframeList(values.MARKET_SCAN_TIMEFRAMES);
+  const configuredTimeframes = parseTimeframeList(values.MARKET_SCAN_TIMEFRAMES, 'MARKET_SCAN_TIMEFRAMES');
 
   if (configuredTimeframes.length > 0) {
     return configuredTimeframes;
   }
 
-  return parseTimeframeList(values.MARKET_SCAN_TIMEFRAME ?? '15m');
+  return parseTimeframeList(values.MARKET_SCAN_TIMEFRAME ?? '15m', 'MARKET_SCAN_TIMEFRAME');
 };
 
-const parseTimeframeList = (value: string | undefined): string[] => {
+export const parseTelegramNotificationTimeframes = (values: NodeJS.ProcessEnv = process.env): string[] => {
+  const configuredTimeframes = parseTimeframeList(
+    values.TELEGRAM_NOTIFICATION_TIMEFRAMES ?? '15m,1d,1w',
+    'TELEGRAM_NOTIFICATION_TIMEFRAMES',
+  );
+
+  return configuredTimeframes.length > 0 ? configuredTimeframes : ['15m', '1d', '1w'];
+};
+
+const parseTimeframeList = (value: string | undefined, envName: string): string[] => {
   if (!value) {
     return [];
   }
@@ -103,7 +112,7 @@ const parseTimeframeList = (value: string | undefined): string[] => {
 
   if (invalidTimeframes.length > 0) {
     throw new Error(
-      `Unsupported MARKET_SCAN_TIMEFRAMES value(s): ${invalidTimeframes.join(', ')}. Supported: ${SUPPORTED_MARKET_SCAN_TIMEFRAMES.join(', ')}`,
+      `Unsupported ${envName} value(s): ${invalidTimeframes.join(', ')}. Supported: ${SUPPORTED_MARKET_SCAN_TIMEFRAMES.join(', ')}`,
     );
   }
 
@@ -201,6 +210,7 @@ export const buildEnvRuntimeConfig = (values: NodeJS.ProcessEnv = process.env): 
     performanceMinSampleSize: parseInteger(values.PERFORMANCE_MIN_SAMPLE_SIZE, 20),
     forwardTestContextEnabled: parseBoolean(values.FORWARD_TEST_CONTEXT_ENABLED, true),
   },
+  telegramNotificationTimeframes: parseTelegramNotificationTimeframes(values),
   scoring: {
     maxAnalyzerScore: parseInteger(values.SCORING_MAX_ANALYZER_SCORE, 25),
     opportunityMinScore: parseInteger(values.OPPORTUNITY_MIN_SCORE, 50),
@@ -257,6 +267,7 @@ export const env = {
   marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
   marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
   marketScanTimeframes: parseMarketScanTimeframes(),
+  telegramNotificationTimeframes: runtimeConfig.telegramNotificationTimeframes,
   marketScanCandleLimit: runtimeConfig.marketScanCandleLimit,
   marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
   marketScanDebug: parseBoolean(process.env.MARKET_SCAN_DEBUG, false),

@@ -50,6 +50,7 @@ export interface MarketScanOptions {
 export type MarketScanSkippedReason =
   | 'below-threshold'
   | 'below-telegram-threshold'
+  | 'telegram-timeframe-disabled'
   | 'duplicate-window'
   | 'duplicate-signal-identity'
   | 'insufficient-data'
@@ -305,13 +306,40 @@ export class MarketScanExecutor {
       this.logNotificationDecisionDebug(opportunity, willNotify, logger, options, runtimeServices);
 
       if (!willNotify) {
+        const notificationTimeframeEnabled = runtimeServices.notificationService.isNotificationTimeframeEnabled?.(
+          opportunity.timeframe,
+        ) ?? true;
+        const skippedReason = notificationTimeframeEnabled ? 'below-telegram-threshold' : 'telegram-timeframe-disabled';
+
+        if (!notificationTimeframeEnabled && options.notify) {
+          const forwardSignalSaved = await this.persistForwardSignal(
+            signal,
+            opportunity,
+            logger,
+            runtimeServices.config,
+            false,
+          );
+
+          if (!forwardSignalSaved) {
+            validOpportunities.pop();
+            this.logDuplicateSignalIdentity(signal, runtimeServices.config, logger);
+            skipped.push({
+              ticker: opportunity.ticker,
+              timeframe: opportunity.timeframe,
+              score: opportunity.score,
+              reason: 'duplicate-signal-identity',
+            });
+            continue;
+          }
+        }
+
         opportunitySignals.push(signal);
         await this.dependencies.opportunityRepository.save(opportunity);
         skipped.push({
           ticker: opportunity.ticker,
           timeframe: opportunity.timeframe,
           score: opportunity.score,
-          reason: 'below-telegram-threshold',
+          reason: skippedReason,
         });
         continue;
       }
@@ -429,6 +457,11 @@ export class MarketScanExecutor {
         performanceMinSampleSize: 20,
         forwardTestContextEnabled: true,
       },
+      telegramNotificationTimeframes: this.dependencies.notificationService.getNotificationTimeframes?.() ?? [
+        '15m',
+        '1d',
+        '1w',
+      ],
       scoring: {
         maxAnalyzerScore: 25,
         opportunityMinScore: this.dependencies.opportunityFilter.getMinimumScore(),
@@ -1022,6 +1055,7 @@ export class MarketScanExecutor {
         `score=${opportunity.score}`,
         `opportunityMinScore=${this.getOpportunityMinScore(options, runtimeServices)}`,
         `telegramMinScore=${this.getTelegramMinScore(options, runtimeServices)}`,
+        `telegramTimeframes=${this.getTelegramNotificationTimeframes(runtimeServices).join(',')}`,
         `willNotify=${willNotify}`,
       ].join(' '),
     );
@@ -1055,6 +1089,10 @@ export class MarketScanExecutor {
     runtimeServices: MarketScanRuntimeServices,
   ): number {
     return options.telegramNotificationMinScore ?? runtimeServices.notificationService.getMinimumScore();
+  }
+
+  private getTelegramNotificationTimeframes(runtimeServices: MarketScanRuntimeServices): string[] {
+    return runtimeServices.notificationService.getNotificationTimeframes?.() ?? [];
   }
 
   private resolveTimeframes(options: MarketScanOptions): string[] {

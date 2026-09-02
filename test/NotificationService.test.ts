@@ -281,6 +281,30 @@ describe('NotificationService', () => {
     expect(service.getMinimumScore()).toBe(80);
   });
 
+  it('only notifies configured Telegram timeframes while keeping score threshold behavior', () => {
+    const service = new NotificationService(undefined, { minimumScore: 80 });
+    const opportunity = buildOpportunity();
+
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '1m', score: 95 })).toBe(false);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '5m', score: 95 })).toBe(false);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '15m', score: 95 })).toBe(true);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '1d', score: 95 })).toBe(true);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '1w', score: 95 })).toBe(true);
+    expect(service.getNotificationTimeframes()).toEqual(['15m', '1d', '1w']);
+  });
+
+  it('allows notification timeframe configuration without changing opportunity scoring', () => {
+    const service = new NotificationService(undefined, {
+      minimumScore: 80,
+      notificationTimeframes: ['1m', '15m'],
+    });
+    const opportunity = buildOpportunity();
+
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '1m', score: 95 })).toBe(true);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '5m', score: 95 })).toBe(false);
+    expect(service.shouldNotifyOpportunity({ ...opportunity, timeframe: '15m', score: 79 })).toBe(false);
+  });
+
   it('can override its minimum score for a single notification decision', () => {
     const service = new NotificationService(undefined, { minimumScore: 80 });
     const opportunity = buildOpportunity();

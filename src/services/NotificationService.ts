@@ -11,11 +11,13 @@ import {
 
 export interface NotificationServiceConfig {
   minimumScore: number;
+  notificationTimeframes: string[];
   tradePlan: TradePlanConfig;
 }
 
 const DEFAULT_NOTIFICATION_CONFIG: NotificationServiceConfig = {
   minimumScore: 80,
+  notificationTimeframes: ['15m', '1d', '1w'],
   tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 3 },
 };
 
@@ -30,16 +32,37 @@ export class NotificationService {
   ) {
     this.config = {
       minimumScore: config.minimumScore ?? DEFAULT_NOTIFICATION_CONFIG.minimumScore,
+      notificationTimeframes: this.normalizeNotificationTimeframes(
+        config.notificationTimeframes ?? DEFAULT_NOTIFICATION_CONFIG.notificationTimeframes,
+      ),
       tradePlan: config.tradePlan ?? DEFAULT_NOTIFICATION_CONFIG.tradePlan,
     };
   }
 
   public shouldNotifyOpportunity(opportunity: Opportunity, minimumScore = this.config.minimumScore): boolean {
-    return opportunity.score >= minimumScore;
+    return opportunity.score >= minimumScore && this.isNotificationTimeframeEnabled(opportunity.timeframe);
+  }
+
+  public isNotificationTimeframeEnabled(timeframe: string): boolean {
+    return this.config.notificationTimeframes.includes(timeframe.trim().toLowerCase());
   }
 
   public getMinimumScore(): number {
     return this.config.minimumScore;
+  }
+
+  public getNotificationTimeframes(): string[] {
+    return [...this.config.notificationTimeframes];
+  }
+
+  private normalizeNotificationTimeframes(timeframes: string[]): string[] {
+    return [
+      ...new Set(
+        timeframes
+          .map((timeframe) => timeframe.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
   }
 
   public async sendSignal(

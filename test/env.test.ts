@@ -1,6 +1,7 @@
 import {
   parseMarketScanTimeframes,
   parseTelegramAllowedUserIds,
+  parseTelegramNotificationTimeframes,
   parseTradePlanConfig,
 } from '../src/config/env';
 
@@ -29,6 +30,26 @@ describe('parseMarketScanTimeframes', () => {
   it('rejects invalid configured timeframes', () => {
     expect(() => parseMarketScanTimeframes({ MARKET_SCAN_TIMEFRAMES: '1m,4h' })).toThrow(
       'Unsupported MARKET_SCAN_TIMEFRAMES',
+    );
+  });
+});
+
+describe('parseTelegramNotificationTimeframes', () => {
+  it('uses 15m, 1d and 1w as temporary notification defaults', () => {
+    expect(parseTelegramNotificationTimeframes({})).toEqual(['15m', '1d', '1w']);
+  });
+
+  it('parses configured Telegram notification timeframes', () => {
+    expect(parseTelegramNotificationTimeframes({ TELEGRAM_NOTIFICATION_TIMEFRAMES: '15m,1d,1w,15m' })).toEqual([
+      '15m',
+      '1d',
+      '1w',
+    ]);
+  });
+
+  it('rejects unsupported Telegram notification timeframes', () => {
+    expect(() => parseTelegramNotificationTimeframes({ TELEGRAM_NOTIFICATION_TIMEFRAMES: '4h' })).toThrow(
+      'Unsupported TELEGRAM_NOTIFICATION_TIMEFRAMES',
     );
   });
 });
