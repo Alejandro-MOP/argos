@@ -3,7 +3,7 @@
 > Documento vivo del proyecto. Codex debe actualizarlo en cada cambio relevante.
 
 **Estado actual:** `Research / Evidence Build`
-**Desarrollo siguiente:** `V1.6-A — Market Universe Expansion & Segmentation`
+**Desarrollo siguiente:** `V1.6-B — Sector-Aware Research`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
@@ -40,7 +40,7 @@ Decisión humana
 Actualmente el universo soporta aproximadamente:
 
 ```text
-61 símbolos
+103 símbolos activos
 ×
 5 temporalidades
 
@@ -54,7 +54,7 @@ Actualmente el universo soporta aproximadamente:
 Esto representa hasta:
 
 ```text
-305 combinaciones potenciales por ciclo
+515 combinaciones potenciales por ciclo
 ```
 
 antes de aplicar filtros de sesión y configuración.
@@ -79,14 +79,15 @@ El score representa:
 | V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
 | **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implemented & Functionally Validated |
 | **V1.4-B — Cost Application Layer** | Servicio de aplicación y endpoint HTTP read-only para evaluar costos | ✅ Implemented & Functionally Validated |
-| **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | 🚧 In Progress |
+| **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | ✅ COMPLETED |
 | **V1.5-A — Control Core** | Configuración dual, autorización, router, presenter y estado en memoria | ✅ Completed & Validated |
-| **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | ✅ Implemented & Validated |
-| **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Implemented & Validated |
-| **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Implemented & Validated |
+| **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | ✅ Completed & Validated |
+| **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Completed & Manually Validated |
+| **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Completed & Manually Validated |
 | **V1.5-E — Telegram Analyze Symbol** | Análisis técnico ad-hoc read-only desde Control Bot | ✅ Completed / Manually Validated |
 | **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | ✅ Completed / Manually Validated |
-| **V1.6-A — Market Universe Expansion & Segmentation** | Ampliar universo a 90-110 símbolos activos segmentados por asset/sector/industry/session | 🚧 Implemented / Pending Manual Validation |
+| **V1.6-A — Market Universe Expansion & Segmentation** | Universo ampliado a 103 símbolos activos segmentados por asset/sector/industry/session | ✅ Completed & Validated |
+| **V1.6-B — Sector-Aware Research** | Investigación read-only por sector/industry usando metadata normalizada | 📋 NEXT / PLANNED |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -343,7 +344,7 @@ strategy_version = v1
 La validación empírica se documenta incrementalmente en:
 
 ```text
-docs/bitacora_experimental.md
+docs/reports/bitacora_experimental.md
 ```
 
 El roadmap y la bitácora experimental tienen responsabilidades diferentes:
@@ -356,7 +357,7 @@ hitos
 versiones
 backlog
 
-docs/bitacora_experimental.md
+docs/reports/bitacora_experimental.md
     ↓
 cortes experimentales
 métricas observadas
@@ -1071,7 +1072,7 @@ V1.4 queda marcada como **COMPLETED** para el alcance aprobado: core puro de cos
 
 ---
 
-# 10. V1.5 — ARGOS Control Interface 🚧
+# 10. V1.5 — ARGOS Control Interface ✅
 
 V1.5 busca separar Telegram en dos responsabilidades:
 
@@ -1136,7 +1137,7 @@ HTTP Function
 TelegramCommandRouter
 ```
 
-Las integraciones reales con servicios de ARGOS quedan para etapas posteriores a V1.5-B. Hoy los botones profundos responden `NOT_IMPLEMENTED` y no ejecutan Market Scan ni consultas reales de Research desde Telegram.
+En el cierre específico de V1.5-B, las integraciones reales con servicios de ARGOS todavía quedaban para etapas posteriores. Ese alcance fue completado después por V1.5-C, V1.5-D, V1.5-E y V1.5-F.
 
 ## V1.5-E — Telegram Analyze Symbol ✅
 
@@ -1193,9 +1194,9 @@ Se confirmó:
 - threshold operativo mostrado correctamente;
 - el flujo es read-only y no tiene rutas de persistencia.
 
-## V1.5-F — Telegram Full Market Scan 🚧
+## V1.5-F — Telegram Full Market Scan ✅
 
-Estado: **Implemented / Pending Manual Validation**.
+Estado: **Completed / Manually Validated**.
 
 V1.5-F conecta el botón `🚀 Full Market Scan` del Control Bot con el pipeline operacional real de ARGOS.
 
@@ -1249,27 +1250,123 @@ Side effects esperados:
 
 A diferencia de Analyze Symbol, Full Market Scan sí puede crear oportunidades, signals, Evidence y Alerts si el pipeline operacional actual decide hacerlo. V1.5-F no agrega side effects nuevos; solo expone la ejecución confirmada del pipeline existente desde Telegram.
 
-Validación manual pendiente:
+Validación manual real: **PASS**.
 
-- abrir `/start` → Market → Full Market Scan;
-- probar Cancel y confirmar que no ejecuta scan;
-- probar Confirm y recibir mensaje de inicio;
-- esperar summary final;
-- validar que Alerts, si existen, llegan por Alerts Bot y no mezcladas como respuesta del Control Bot;
-- probar Run Again y confirmar que vuelve a confirmación;
-- si el scan tarda suficiente, probar doble Confirm y verificar respuesta already-running.
+Se confirmó navegación, confirmación explícita, ejecución del pipeline operacional real, summary final, separación entre Control Bot y Alerts Bot, y protección in-memory contra doble ejecución desde el Control Bot.
 
 ## 2026-09-01 — Telegram Alert Timeframe Filter
 
-Estado: **Implemented / Operational Adjustment**.
+Estado: **Implemented & Validated / Operational Adjustment**.
 
 Se limita temporalmente el Alerts Bot a `15m,1d,1w` mediante `TELEGRAM_NOTIFICATION_TIMEFRAMES`. `1m` y `5m` siguen analizándose, generando Evidence, participando en Forward Evaluation y Strategy Research. El cambio es de presentación/notificación, no de estrategia; `strategyVersion=v1` permanece igual.
 
-## V1.6-A — Market Universe Expansion & Segmentation 🚧
+Semántica operativa actual:
 
-Estado: **Implemented / Pending Manual Validation**.
+| Timeframe | Market Scan | Signal/Evidence | Forward Evaluation | Strategy Research | Automatic Alerts Bot |
+| --------- | ----------- | --------------- | ------------------ | ----------------- | -------------------- |
+| `1m` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | SILENCED |
+| `5m` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | SILENCED |
+| `15m` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | ACTIVE según reglas normales |
+| `1d` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | ACTIVE según reglas normales |
+| `1w` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | ACTIVE según reglas normales |
+
+Variable de configuración:
+
+```text
+TELEGRAM_NOTIFICATION_TIMEFRAMES=15m,1d,1w
+```
+
+Clasificación:
+
+```text
+NOTIFICATION / UX CHANGE
+```
+
+No es `STRATEGY CHANGE`; `strategy_version` permanece `v1`.
+
+## Current Path / Next Milestones
+
+```text
+V1.6-A Market Universe Expansion
+        ✅
+        ↓
+V1.6-B Sector-Aware Research
+        NEXT
+        ↓
+Evidence Collection v1
+        ACTIVE
+        ↓
+Weekly Research Checkpoints
+        ↓
+First Monthly Research Cut
+        ↓
+Trade Plan Research
+        ↓
+V2 Strategy Calibration
+        ↓
+Out-of-Sample Validation
+        ↓
+Paper Trading
+        ↓
+Small Capital Live Pilot
+        ↓
+Validated Operational System
+```
+
+Engineering puede continuar en paralelo mientras Evidence Collection sigue activa, siempre que no modifique silenciosamente `strategy_version=v1` ni cambie scoring, analyzers, thresholds, Target Ladder, stops o reglas de Evidence.
+
+## V1.6-A — Market Universe Expansion & Segmentation ✅
+
+Estado: **Completed & Validated**.
 
 V1.6-A amplía el universo real usado por ARGOS Engine sin cambiar la lógica de scoring ni el pipeline de señales. La expansión conserva los símbolos existentes y agrega cobertura en segmentos que estaban débiles: Broad Market ETFs, sector ETFs, semiconductores, tasas/bonos, metales, utilities, real estate/REITs y líderes adicionales por sector.
+
+Estado final validado:
+
+```text
+103 símbolos activos
+5 timeframes
+515 combinaciones symbol/timeframe
+```
+
+Asset types actuales:
+
+```text
+STOCK
+ETF
+CRYPTO
+```
+
+Metadata disponible:
+
+```text
+asset_type
+sector
+industry
+exchange
+market
+timezone
+session_type
+provider_symbol
+```
+
+Clasificación metodológica:
+
+```text
+DATA / EXPOSURE / SAMPLING CHANGE
+```
+
+V1.6-A no fue un cambio de estrategia. `strategy_version` permanece `v1`.
+
+No cambiaron por V1.6-A:
+
+- scoring;
+- analyzers;
+- thresholds;
+- Target Ladder;
+- RiskService;
+- Evidence rules;
+- Forward Evaluation rules.
 
 Principios aplicados:
 
@@ -1281,14 +1378,79 @@ Principios aplicados:
 - no cambia Evidence, Strategy Profiles, Telegram, Transaction Costs, RiskService ni Market Scan;
 - la matriz final esperada queda dentro del rango operativo de 90-110 símbolos activos.
 
-Validación manual pendiente:
+Validación manual completada:
 
-- ejecutar migración en PostgreSQL local;
-- confirmar conteo activo final;
-- revisar distribución por `asset_type`, `sector`, `industry`, `market` y `session_type`;
-- ejecutar Full Market Scan con concurrencia controlada;
-- confirmar que STOCK/ETF intradía fuera de sesión se omite como `market-closed` sin llamar Yahoo;
-- confirmar que crypto permanece 24/7.
+- migración aplicada en PostgreSQL local;
+- conteo activo final confirmado;
+- distribución por `asset_type`, `sector`, `industry`, `market` y `session_type` revisada;
+- Full Market Scan ejecutado con concurrencia controlada;
+- STOCK/ETF intradía fuera de sesión se omite como `market-closed` sin llamar Yahoo;
+- crypto permanece 24/7.
+
+## V1.6-B — Sector-Aware Research 📋
+
+Estado: **NEXT / PLANNED**.
+
+Objetivo:
+
+Aprovechar la metadata incorporada y normalizada por V1.6-A para investigar el comportamiento de Evidence por sector e industry sin modificar el Signal Engine.
+
+Strategy Profiles estudia actualmente principalmente:
+
+```text
+asset_type
++
+timeframe
++
+score_bucket
++
+strategy_version
+```
+
+V1.6-B debe extender las capacidades de investigación para análisis como:
+
+```text
+asset_type
++
+sector
++
+industry
++
+timeframe
++
+score_bucket
++
+strategy_version
+```
+
+Preguntas descriptivas esperadas:
+
+- ¿Technology se comporta diferente de Financial Services?
+- ¿Healthcare presenta MFE/MAE distintos?
+- ¿Semiconductors tiene comportamiento diferente dentro de Technology?
+- ¿Los targets alcanzables cambian por sector?
+- ¿Existen sectores con Evidence insuficiente?
+- ¿Los resultados observados dependen excesivamente de un sector o industria?
+
+Principio obligatorio:
+
+> V1.6-B debe observar, no optimizar.
+
+V1.6-B será **READ-ONLY RESEARCH**.
+
+No debe:
+
+- modificar scoring;
+- modificar weights;
+- modificar analyzers;
+- modificar thresholds;
+- modificar targets;
+- modificar stops;
+- excluir sectores del Market Scan;
+- favorecer sectores;
+- crear reglas operativas sectoriales;
+- cambiar `strategy_version`.
+
 
 ## V1.5-D — Telegram Transaction Costs Integration ✅
 
@@ -1315,9 +1477,9 @@ Validación manual:
 - Maker/Taker validado;
 - navegación y cancelación validadas.
 
-## V1.5-C — Read-only Research Integrations 🚧
+## V1.5-C — Read-only Research Integrations ✅
 
-Status: **IMPLEMENTED / PENDING MANUAL VALIDATION**.
+Status: **COMPLETED / MANUALLY VALIDATED**.
 
 Alcance implementado:
 
@@ -1332,10 +1494,9 @@ Alcance implementado:
 - sin writes en PostgreSQL;
 - sin cambios de Evidence, scoring, targets, Market Scan, costos o alertas.
 
-Pendiente antes de marcar Completed:
+Validación manual real: **PASS**.
 
-- validación manual desde Telegram real;
-- comparación funcional con `GET /api/research-snapshot`, `GET /api/strategy-profiles` y `GET /api/forward-performance`.
+El Control Bot consulta servicios reales read-only y mantiene navegación/refresh sin escrituras en PostgreSQL ni cambios en el pipeline operativo.
 
 ---
 
@@ -2085,11 +2246,11 @@ No en garantizar el resultado de una operación.
 Conceptualmente:
 
 ```text
-61 símbolos
+103 símbolos activos
     ×
 5 temporalidades
     ↓
-hasta 305 análisis potenciales
+hasta 515 análisis potenciales
     ↓
 ARGOS
 ARGOS
@@ -2163,7 +2324,7 @@ Antes de finalizar el commit:
 10. En el resumen final indica explícitamente qué se modificó en ROADMAP.md.
 
 11. No mezcles resultados experimentales puntuales dentro del roadmap.
-    Los cortes, métricas e hipótesis observadas pertenecen a docs/bitacora_experimental.md.
+    Los cortes, métricas e hipótesis observadas pertenecen a docs/reports/bitacora_experimental.md.
 
 12. No cambies strategy_version=v1 durante Evidence Collection salvo que
     exista una decisión explícita y documentada de crear una nueva estrategia.
@@ -2177,13 +2338,22 @@ Antes de finalizar el commit:
 ROADMAP.md es la fuente de verdad del estado, hitos, versiones y backlog
 del proyecto.
 
-docs/bitacora_experimental.md es la fuente de verdad de los cortes experimentales,
+docs/reports/bitacora_experimental.md es la fuente de verdad de los cortes experimentales,
 observaciones e hipótesis.
 ```
 
 ---
 
 # 19. Fases actuales de investigación
+
+
+## Definiciones del camino metodológico
+
+- **Evidence / Research:** observa qué ocurrió después de las señales.
+- **Strategy Calibration:** formula reglas candidatas usando Evidence suficiente.
+- **Out-of-Sample Validation:** prueba reglas congeladas con datos nuevos que no fueron utilizados para formularlas.
+- **Paper Trading:** simula operaciones completas bajo condiciones reales sin usar capital real.
+- **Small Capital Live Pilot:** opera con capital real pequeño únicamente después de cumplir criterios metodológicos y de riesgo.
 
 ## 1. Technical PoC
 
@@ -2227,21 +2397,25 @@ strategy_version = v1
 
 ## 3. V1.4 Broker / Transaction Cost Model
 
-**Estado:** siguiente desarrollo.
+**Estado:** completado para el alcance aprobado: core puro, servicio de aplicación y endpoint HTTP read-only.
 
-Puede construirse en paralelo a Evidence Collection porque no modifica Strategy Profiles ni Evidence.
+Se construyó en paralelo a Evidence Collection porque no modifica Strategy Profiles ni Evidence.
 
 ## 4. Trade Plan Research
 
 **Estado:** futuro.
 
-Combinará:
+Trade Plan Research combinará:
 
 - Strategy Profiles;
-- MFE/MAE;
+- Sector-Aware Research;
+- MFE;
+- MAE;
 - Target Reachability;
 - Transaction Costs;
-- Risk/Reward.
+- Risk / Reward.
+
+No define todavía Take Profit definitivo, Stop Loss definitivo, parámetros específicos por sector ni parámetros específicos por asset/timeframe. Esas decisiones deben derivarse posteriormente de Evidence suficiente.
 
 ## 5. Out-of-Sample / Forward Validation
 
@@ -2341,8 +2515,8 @@ el objeto que estamos intentando medir.
 
 ---
 
-**Última actualización conceptual:** 2026-08-28
+**Última actualización conceptual:** 2026-09-01
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
-**Desarrollo siguiente:** `V1.6-A — Market Universe Expansion & Segmentation`
+**Desarrollo siguiente:** `V1.6-B — Sector-Aware Research`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
