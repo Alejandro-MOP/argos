@@ -1869,3 +1869,232 @@ PRESENTATION / NOTIFICATION CHANGE
 
 No clasificar como cambio de estrategia.
 
+---
+
+# 2026-09-01 — Corte experimental de investigación
+
+## Estado experimental
+
+ARGOS permanece en fase:
+
+```text
+Research / Evidence Build
+```
+
+Strategy version:
+
+```text
+v1
+```
+
+El objetivo actual no es demostrar rentabilidad. El objetivo sigue siendo acumular Evidence, evaluar qué ocurre después de las señales, aumentar el tamaño de las muestras y estudiar resultados segmentados sin modificar prematuramente la estrategia.
+
+Regla metodológica vigente:
+
+> No iniciar decisiones de Trade Plan basadas en Evidence antes del primer corte mensual, salvo correcciones de bugs o problemas metodológicos.
+
+Los datos de este corte no deben interpretarse como prueba de rentabilidad.
+
+## Intervenciones recientes y frontera experimental
+
+### 31-AGO-2026 — Market Universe Expansion
+
+Frontera experimental:
+
+```text
+MARKET UNIVERSE EXPANSION
+```
+
+| Concepto | Antes | Después |
+| -------- | ----: | ------: |
+| Símbolos | 61 | 103 |
+| Combinaciones symbol/timeframe | 305 | 515 |
+
+Clasificación metodológica:
+
+```text
+EXPOSURE / SAMPLING CHANGE
+```
+
+No fue un cambio de estrategia. No cambiaron `strategyVersion`, scoring, thresholds, Target Ladder, analyzers, reglas de Evidence ni Forward Evaluation.
+
+Por lo tanto, los datos posteriores al 31-AGO-2026 pueden contener una composición distinta de activos y no deben compararse ingenuamente con el periodo anterior como si la población experimental fuera idéntica.
+
+### 01-SEP-2026 — Telegram Alert Timeframe Filter
+
+Los timeframes `1m` y `5m` dejaron de producir notificaciones automáticas en ARGOS Alerts Bot.
+
+Clasificación metodológica:
+
+```text
+NOTIFICATION / UX CHANGE
+```
+
+Esto no es un cambio de estrategia. `1m` y `5m` continúan activos en:
+
+- Market Scan;
+- Opportunity / Signal;
+- Evidence;
+- Forward Evaluation;
+- Research.
+
+Estado operativo:
+
+```text
+1m / 5m research = ACTIVE
+1m / 5m Telegram automatic alerts = SILENCED
+```
+
+## Research Snapshot — 01-SEP-2026
+
+| Métrica | Valor |
+| ------- | ----: |
+| Total Evidence | 639 |
+| Evaluated | 594 |
+| Without evaluation | 45 |
+| Operational opportunities score >= 90 | 265 |
+| Evidence evaluada | 92.96% |
+
+El pipeline de evaluación está procesando correctamente la nueva Evidence. La cola pendiente disminuyó respecto al corte anterior a pesar del crecimiento de la muestra.
+
+## Comparación contra baseline 31-AGO-2026
+
+| Métrica | 31-AGO | 01-SEP | Delta | Delta % |
+| ------- | -----: | -----: | ----: | ------: |
+| Evidence total | 473 | 639 | +166 | +35.1% |
+| Evaluated | 356 | 594 | +238 | +66.9% |
+| Without evaluation | 117 | 45 | -72 | — |
+| Operational opportunities >= 90 | 191 | 265 | +74 | +38.7% |
+| Evidence evaluada | 75.3% | 93.0% | +17.7 pp | — |
+
+Interpretación permitida:
+
+El pipeline de investigación está absorbiendo correctamente el incremento de Evidence generado alrededor de la expansión del Market Universe.
+
+No interpretar esto como mejora de la estrategia. Es una observación sobre throughput, cobertura y madurez operacional del pipeline de investigación.
+
+## Estados de Forward Evaluation
+
+| Estado | Total |
+| ------ | ----: |
+| OPEN | 89 |
+| PARTIALLY_RESOLVED | 11 |
+| CLOSED | 405 |
+| EXPIRED | 85 |
+| AMBIGUOUS | 4 |
+
+Lectura breve:
+
+- `OPEN`: la observación todavía está siendo evaluada.
+- `PARTIALLY_RESOLVED`: al menos parte del Target Ladder ya pudo resolverse, pero la evaluación completa todavía no terminó.
+- `CLOSED`: evaluación terminada.
+- `EXPIRED`: finalizó la ventana de evaluación sin resolver todos los targets según las reglas del experimento.
+- `AMBIGUOUS`: el candle permitió comprobar eventos relevantes, pero no determinar de forma segura el orden intrabar.
+
+No interpretar `OPEN` como `LOSS`.
+
+## Target Ladder
+
+| Target | Wins | Losses | Win Rate |
+| ------ | ---: | -----: | -------: |
+| +0.50% | 289 | 224 | 56.34% |
+| +0.75% | — | — | 46.86% |
+| +1.00% | — | — | 39.08% |
+| +1.25% | — | — | 33.41% |
+
+No inventar valores no disponibles en el snapshot documentado.
+
+Comparación descriptiva 31-AGO → 01-SEP:
+
+| Target | 31-AGO | 01-SEP |
+| ------ | -----: | -----: |
+| +0.50% | 63.29% | 56.34% |
+| +0.75% | 56.30% | 46.86% |
+| +1.00% | 48.43% | 39.08% |
+| +1.25% | 42.34% | 33.41% |
+
+La caída observada en winRate no debe describirse automáticamente como deterioro de la estrategia. Entre ambos cortes existe una expansión importante de la población experimental de 61 a 103 símbolos. Parte del cambio puede provenir de mayor tamaño de muestra, nueva composición de activos, nuevas exposiciones sectoriales, incorporación de ETF o comportamiento distinto de los nuevos símbolos.
+
+## Definición vigente de Win Rate
+
+```text
+winRate = wins / (wins + losses)
+```
+
+`EXPIRED` y `AMBIGUOUS` no forman parte del denominador de winRate.
+
+Un winRate mayor a 50% no demuestra rentabilidad. La rentabilidad dependerá posteriormente de tamaño promedio de ganancia, tamaño promedio de pérdida, Stop Loss, Take Profit, MAE, MFE, transaction costs, payoff y comportamiento por perfil.
+
+No seleccionar todavía un Take Profit basándose solamente en el Target Ladder.
+
+## MFE / MAE y score
+
+Hipótesis abierta:
+
+Los datos continúan sin demostrar una relación monotónica donde un score más alto implique mejor comportamiento futuro.
+
+Ejemplo descriptivo disponible en `CRYPTO / 1m`:
+
+| Score bucket | MFE avg | MAE avg | N |
+| ------------ | ------: | ------: | -: |
+| 80-84 | +1.57% | -1.04% | 28 |
+| 90-94 | +1.70% | -0.92% | 18 |
+| 95-100 | +1.05% | -0.93% | 7 |
+
+No convertir esto en conclusión. Especialmente `95-100` tiene una muestra demasiado pequeña.
+
+Hipótesis reforzada:
+
+> El score podría estar representando intensidad/confluencia del estado técnico actual y no necesariamente una escala ordinal de magnitud o calidad futura.
+
+Debe seguir estudiándose con muestras mayores.
+
+## Market Universe expandido
+
+El nuevo Research Snapshot ya contiene Evidence proveniente del universo expandido. Se observan perfiles ETF y nuevos activos incorporándose al pipeline.
+
+Esto proporciona evidencia operacional de que el flujo está funcionando:
+
+```text
+Market Universe
+→ Market Scan
+→ Signal
+→ Evidence
+→ Forward Evaluation
+→ Research
+```
+
+No inferir todavía rendimiento superior o inferior por ETF, sector o industria. Sector-Aware Research sigue siendo una fase posterior.
+
+## ARGOS — Experimental State — 01-SEP-2026
+
+| Área | Estado |
+| ---- | ------ |
+| Strategy | v1 |
+| Phase | Research / Evidence Build |
+| Evidence | 639 |
+| Evaluated | 594 / 639 ≈ 93% |
+| Pending | 45 |
+| Operational score >= 90 | 265 |
+| Forward Evaluation | HEALTHY |
+| Expanded Market Universe | ACTIVE |
+| ETF Evidence | ARRIVING |
+| 1m / 5m Research | ACTIVE |
+| 1m / 5m Automatic Telegram Alerts | SILENCED |
+| Strategy profitability | UNKNOWN |
+| Trade Plan | NOT READY |
+| Strategy tuning | FROZEN |
+| Research accumulation | CONTINUE |
+
+## Conclusión del corte
+
+El corte del 01-SEP-2026 muestra un crecimiento importante de la base de Evidence y una mejora operacional en la proporción de observaciones evaluadas.
+
+ARGOS pasó de 473 a 639 Evidence mientras las observaciones pendientes de evaluación disminuyeron de 117 a 45. Esto sugiere que el pipeline de investigación está absorbiendo adecuadamente el incremento de exposición producido por la expansión del Market Universe.
+
+Los cambios observados en el Target Ladder, incluyendo la reducción de winRate en targets tempranos, deben mantenerse como observaciones descriptivas y no como evidencia de mejora o deterioro de la estrategia debido al cambio reciente en la composición de la población experimental.
+
+Los datos continúan siendo insuficientes para seleccionar un Take Profit, Stop Loss o modificar scoring.
+
+ARGOS permanece en Research / Evidence Build.
+
