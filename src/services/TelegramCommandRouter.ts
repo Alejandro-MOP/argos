@@ -28,6 +28,8 @@ const BROWSING_SECTORS = 'browsing-sectors';
 const BROWSING_INDUSTRIES = 'browsing-industries';
 const BROWSING_SYMBOLS = 'browsing-symbols';
 const ANALYZE_PAGE_SIZE = 8;
+const ANALYZE_MIN_USEFUL_LAST_PAGE_SIZE = 3;
+const ANALYZE_MAX_PAGE_SIZE = ANALYZE_PAGE_SIZE + ANALYZE_MIN_USEFUL_LAST_PAGE_SIZE - 1;
 
 type CallbackDestination =
   | 'main-menu'
@@ -589,7 +591,8 @@ export class TelegramCommandRouter {
     }
 
     const items = parseStringListState(state.data.items);
-    const pageCount = Math.max(1, Math.ceil(items.length / ANALYZE_PAGE_SIZE));
+    const pageLayout = buildAnalyzePageLayout(items.length);
+    const pageCount = pageLayout.length;
     const currentPage = parseStoredPage(state.data.page);
     const page = Math.min(Math.max(currentPage + direction, 0), pageCount - 1);
 
@@ -689,11 +692,14 @@ export class TelegramCommandRouter {
   private renderAnalyzeListState(userId: string, data: Record<string, unknown>, step: string): ControlResponse {
     const items = parseStringListState(data.items);
     const labels = parseStringListState(data.symbolLabels);
-    const page = parseStoredPage(data.page);
-    const pageCount = Math.max(1, Math.ceil(items.length / ANALYZE_PAGE_SIZE));
-    const visibleItems = items.slice(page * ANALYZE_PAGE_SIZE, page * ANALYZE_PAGE_SIZE + ANALYZE_PAGE_SIZE);
+    const pageLayout = buildAnalyzePageLayout(items.length);
+    const pageCount = pageLayout.length;
+    const requestedPage = parseStoredPage(data.page);
+    const page = Math.min(requestedPage, pageCount - 1);
+    const pageBounds = pageLayout[page] ?? { start: 0, end: items.length };
+    const visibleItems = items.slice(pageBounds.start, pageBounds.end);
     const visibleLabels = labels.length === items.length
-      ? labels.slice(page * ANALYZE_PAGE_SIZE, page * ANALYZE_PAGE_SIZE + ANALYZE_PAGE_SIZE)
+      ? labels.slice(pageBounds.start, pageBounds.end)
       : visibleItems;
 
     this.conversationStateService.set({ userId, flow: ANALYZE_FLOW, step, data: { ...data, page } });
@@ -703,7 +709,7 @@ export class TelegramCommandRouter {
       subtitle: parseStringState(data.subtitle),
       items: visibleItems.map((_, index) => ({
         label: visibleLabels[index] ?? visibleItems[index],
-        callbackData: CALLBACKS.analyzeItem(page * ANALYZE_PAGE_SIZE + index),
+        callbackData: CALLBACKS.analyzeItem(pageBounds.start + index),
       })),
       page,
       pageCount,
@@ -985,6 +991,43 @@ export class TelegramCommandRouter {
 
 const safeLogValue = (value: string | undefined): string => value ?? 'n/a';
 
+
+
+interface AnalyzePageBounds {
+  start: number;
+  end: number;
+}
+
+const buildAnalyzePageLayout = (itemCount: number): AnalyzePageBounds[] => {
+  if (itemCount <= 0) {
+    return [{ start: 0, end: 0 }];
+  }
+
+  let pageCount = Math.ceil(itemCount / ANALYZE_PAGE_SIZE);
+  const lastPageSize = itemCount % ANALYZE_PAGE_SIZE;
+
+  if (
+    pageCount > 1 &&
+    lastPageSize > 0 &&
+    lastPageSize < ANALYZE_MIN_USEFUL_LAST_PAGE_SIZE &&
+    itemCount <= (pageCount - 1) * ANALYZE_MAX_PAGE_SIZE
+  ) {
+    pageCount -= 1;
+  }
+
+  const basePageSize = Math.floor(itemCount / pageCount);
+  const pagesWithExtraItem = itemCount % pageCount;
+  const pages: AnalyzePageBounds[] = [];
+  let start = 0;
+
+  for (let page = 0; page < pageCount; page += 1) {
+    const size = basePageSize + (page < pagesWithExtraItem ? 1 : 0);
+    pages.push({ start, end: start + size });
+    start += size;
+  }
+
+  return pages;
+};
 
 const parseStringState = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;

@@ -663,9 +663,36 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
     expect(backToSectors.keyboard?.rows.flat()).toContainEqual({ text: 'Technology', callbackData: CALLBACKS.analyzeItem(0) });
   });
 
-  it('paginates large symbol lists and respects page boundaries', async () => {
-    const symbols = Array.from({ length: 10 }, (_, index) => marketSymbol({
-      symbol: `T${index}`,
+  it.each([
+    [8, 8],
+    [9, 9],
+    [10, 10],
+  ])('keeps %i items on a single adaptive page', async (itemCount, expectedVisibleItems) => {
+    const symbols = Array.from({ length: itemCount }, (_, index) => marketSymbol({
+      symbol: `T${String(index).padStart(2, '0')}`,
+      displayName: `Test Symbol ${index}`,
+      sector: 'Technology',
+      industry: 'Software',
+    }));
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService(symbols));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    const response = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    const buttons = response.keyboard?.rows.flat() ?? [];
+
+    expect(response.text).not.toContain('Página');
+    expect(buttons).not.toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+    expect(buttons).not.toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+    expect(buttons.filter((button) => button.callbackData.startsWith('argos:v1:analyze:item_'))).toHaveLength(expectedVisibleItems);
+  });
+
+  it.each([
+    [16, 8, 8],
+    [17, 9, 8],
+    [18, 9, 9],
+  ])('balances %i items without creating a tiny final page', async (itemCount, firstPageItems, secondPageItems) => {
+    const symbols = Array.from({ length: itemCount }, (_, index) => marketSymbol({
+      symbol: `T${String(index).padStart(2, '0')}`,
       displayName: `Test Symbol ${index}`,
       sector: 'Technology',
       industry: 'Software',
@@ -674,12 +701,45 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
     await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
     const firstPage = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    const firstButtons = firstPage.keyboard?.rows.flat() ?? [];
+
     expect(firstPage.text).toContain('Página 1/2');
-    expect(firstPage.keyboard?.rows.flat()).toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+    expect(firstButtons).not.toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+    expect(firstButtons).toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+    expect(firstButtons.filter((button) => button.callbackData.startsWith('argos:v1:analyze:item_'))).toHaveLength(firstPageItems);
 
     const secondPage = await router.route(update({ callback: { data: CALLBACKS.analyzePageNext } }));
+    const secondButtons = secondPage.keyboard?.rows.flat() ?? [];
+
     expect(secondPage.text).toContain('Página 2/2');
-    expect(secondPage.keyboard?.rows.flat()).toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+    expect(secondButtons).toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+    expect(secondButtons).not.toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+    expect(secondButtons.filter((button) => button.callbackData.startsWith('argos:v1:analyze:item_'))).toHaveLength(secondPageItems);
+    expect(secondButtons).toContainEqual({ text: `T${String(firstPageItems).padStart(2, '0')} — Test Symbol ${firstPageItems}`, callbackData: CALLBACKS.analyzeItem(firstPageItems) });
+  });
+
+  it('keeps large lists paginated with previous and next controls on middle pages', async () => {
+    const symbols = Array.from({ length: 25 }, (_, index) => marketSymbol({
+      symbol: `T${String(index).padStart(2, '0')}`,
+      displayName: `Test Symbol ${index}`,
+      sector: 'Technology',
+      industry: 'Software',
+    }));
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService(symbols));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    const firstPage = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(firstPage.text).toContain('Página 1/3');
+
+    const middlePage = await router.route(update({ callback: { data: CALLBACKS.analyzePageNext } }));
+    expect(middlePage.text).toContain('Página 2/3');
+    expect(middlePage.keyboard?.rows.flat()).toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+    expect(middlePage.keyboard?.rows.flat()).toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+
+    const lastPage = await router.route(update({ callback: { data: CALLBACKS.analyzePageNext } }));
+    expect(lastPage.text).toContain('Página 3/3');
+    expect(lastPage.keyboard?.rows.flat()).toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+    expect(lastPage.keyboard?.rows.flat()).not.toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
   });
 
   it('shows safe empty and repository error responses', async () => {
