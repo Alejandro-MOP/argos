@@ -1,7 +1,9 @@
 import type { BrokerProductProfileId, CurrencyCode, ExecutionMode } from '../models/TransactionCost';
 import type { ControlResponse, TelegramControlResponseSender, TelegramControlUpdate } from '../models/TelegramControl';
+import type { AssetType, MarketSymbol, MarketUniverseSnapshot } from '../models/MarketSymbol';
 import type { AnalyzeSymbolService } from './AnalyzeSymbolService';
 import type { MarketScanExecutor, MarketScanLogger } from './MarketScanExecutor';
+import type { MarketUniverseService } from './MarketUniverseService';
 import { AnalyzeSymbolServiceError, normalizeAnalyzeSymbol, type AnalyzeSymbolTimeframe } from './AnalyzeSymbolService';
 import type { TransactionCostService } from './TransactionCostService';
 import type { TelegramAuthorizationService } from './TelegramAuthorizationService';
@@ -21,6 +23,11 @@ const WAITING_FOR_TARGET = 'awaiting-target';
 const WAITING_FOR_EXECUTION = 'awaiting-execution';
 const WAITING_FOR_SYMBOL = 'awaiting-symbol';
 const WAITING_FOR_TIMEFRAME = 'awaiting-timeframe';
+const WAITING_FOR_ANALYZE_CHOICE = 'awaiting-analyze-choice';
+const BROWSING_SECTORS = 'browsing-sectors';
+const BROWSING_INDUSTRIES = 'browsing-industries';
+const BROWSING_SYMBOLS = 'browsing-symbols';
+const ANALYZE_PAGE_SIZE = 8;
 
 type CallbackDestination =
   | 'main-menu'
@@ -35,6 +42,15 @@ type CallbackDestination =
   | 'market-scan-confirm'
   | 'market-scan-cancel'
   | 'market-analyze'
+  | 'analyze-type-stock'
+  | 'analyze-type-etf'
+  | 'analyze-type-crypto'
+  | 'analyze-manual'
+  | 'analyze-item'
+  | 'analyze-page-previous'
+  | 'analyze-page-next'
+  | 'analyze-all'
+  | 'analyze-back'
   | 'analyze-tf-1m'
   | 'analyze-tf-5m'
   | 'analyze-tf-15m'
@@ -56,6 +72,7 @@ type CallbackDestination =
 
 interface ParsedCallback {
   destination: CallbackDestination;
+  itemIndex?: number;
 }
 
 export interface TelegramCommandRouterLogger {
@@ -106,6 +123,14 @@ const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.marketScanConfirm]: 'market-scan-confirm',
   [CALLBACKS.marketScanCancel]: 'market-scan-cancel',
   [CALLBACKS.marketAnalyze]: 'market-analyze',
+  [CALLBACKS.analyzeTypeStock]: 'analyze-type-stock',
+  [CALLBACKS.analyzeTypeEtf]: 'analyze-type-etf',
+  [CALLBACKS.analyzeTypeCrypto]: 'analyze-type-crypto',
+  [CALLBACKS.analyzeManual]: 'analyze-manual',
+  [CALLBACKS.analyzePagePrevious]: 'analyze-page-previous',
+  [CALLBACKS.analyzePageNext]: 'analyze-page-next',
+  [CALLBACKS.analyzeAll]: 'analyze-all',
+  [CALLBACKS.analyzeBack]: 'analyze-back',
   [CALLBACKS.analyzeTf1m]: 'analyze-tf-1m',
   [CALLBACKS.analyzeTf5m]: 'analyze-tf-5m',
   [CALLBACKS.analyzeTf15m]: 'analyze-tf-15m',
@@ -140,6 +165,10 @@ export class TelegramCommandRouter {
     private readonly marketScanExecutor?: Pick<MarketScanExecutor, 'run'>,
     private readonly marketScanExecutionGuard = new TelegramMarketScanExecutionGuard(),
     private readonly logger: TelegramCommandRouterLogger = console,
+    private readonly marketUniverseService?: Pick<
+      MarketUniverseService,
+      'loadSnapshot' | 'listAssetTypes' | 'listSectors' | 'listIndustries' | 'listSymbols'
+    >,
   ) {}
 
   public async route(update: TelegramControlUpdate): Promise<ControlResponse> {
@@ -241,6 +270,24 @@ export class TelegramCommandRouter {
       case 'market-analyze':
       case 'analyze-again':
         return this.startAnalyzeFlow(userId);
+      case 'analyze-type-stock':
+        return this.startGuidedAnalyzeAssetType('STOCK', userId);
+      case 'analyze-type-etf':
+        return this.startGuidedAnalyzeAssetType('ETF', userId);
+      case 'analyze-type-crypto':
+        return this.startGuidedAnalyzeAssetType('CRYPTO', userId);
+      case 'analyze-manual':
+        return this.startManualAnalyzeFlow(userId);
+      case 'analyze-item':
+        return this.selectAnalyzeItem(parsed.itemIndex, userId);
+      case 'analyze-page-previous':
+        return this.changeAnalyzePage(-1, userId);
+      case 'analyze-page-next':
+        return this.changeAnalyzePage(1, userId);
+      case 'analyze-all':
+        return this.showAnalyzeSymbols(userId, { useAllIndustries: true });
+      case 'analyze-back':
+        return this.backAnalyzeFlow(userId);
       case 'analyze-tf-1m':
       case 'analyze-tf-5m':
       case 'analyze-tf-15m':
@@ -326,16 +373,77 @@ export class TelegramCommandRouter {
     this.conversationStateService.set({
       userId,
       flow: ANALYZE_FLOW,
-      step: WAITING_FOR_SYMBOL,
+      step: WAITING_FOR_ANALYZE_CHOICE,
       data: {},
     });
 
     return this.presenter.analyzeSymbolPrompt();
   }
 
+  private startManualAnalyzeFlow(userId: string | undefined): ControlResponse {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    this.conversationStateService.set({
+      userId,
+      flow: ANALYZE_FLOW,
+      step: WAITING_FOR_SYMBOL,
+      data: { entryMode: 'manual' },
+    });
+
+    return this.presenter.analyzeManualSymbolPrompt();
+  }
+
+  private async startGuidedAnalyzeAssetType(assetType: AssetType, userId: string | undefined): Promise<ControlResponse> {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    if (!this.marketUniverseService) {
+      return this.presenter.analyzeUniverseError();
+    }
+
+    try {
+      const snapshot = await this.marketUniverseService.loadSnapshot();
+      const activeAssetTypes = this.marketUniverseService.listAssetTypes(snapshot);
+
+      if (!activeAssetTypes.includes(assetType)) {
+        this.setAnalyzeListState(userId, BROWSING_SYMBOLS, { assetType, items: [], page: 0 });
+        return this.presenter.analyzeEmptyNavigation(this.getAnalyzeTitle(assetType));
+      }
+
+      if (assetType === 'CRYPTO') {
+        return this.showAnalyzeSymbols(userId, { assetType, snapshot });
+      }
+
+      const sectors = this.marketUniverseService.listSectors(snapshot, assetType);
+
+      if (assetType === 'ETF' && sectors.length <= 1) {
+        return this.showAnalyzeSymbols(userId, { assetType, sector: sectors[0], snapshot });
+      }
+
+      return this.showAnalyzeList({
+        userId,
+        step: BROWSING_SECTORS,
+        title: this.getAnalyzeTitle(assetType),
+        subtitle: 'Selecciona un sector:',
+        items: sectors,
+        data: { assetType },
+      });
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.analyzeUniverseError();
+    }
+  }
+
   private routeAnalyzeMessage(text: string | undefined, userId: string, state: ReturnType<TelegramConversationStateService['get']>): ControlResponse {
-    if (!state || state.step !== WAITING_FOR_SYMBOL) {
-      return this.presenter.analyzeTimeframePrompt(parseAnalyzeSymbolState(state?.data));
+    if (!state) {
+      return this.presenter.analyzeExpired();
+    }
+
+    if (state.step !== WAITING_FOR_SYMBOL && state.step !== WAITING_FOR_ANALYZE_CHOICE) {
+      return this.presenter.analyzeTimeframePrompt(parseAnalyzeSymbolState(state.data));
     }
 
     try {
@@ -344,13 +452,281 @@ export class TelegramCommandRouter {
         userId,
         flow: ANALYZE_FLOW,
         step: WAITING_FOR_TIMEFRAME,
-        data: { symbol },
+        data: { ...state.data, symbol, entryMode: state.data.entryMode ?? 'manual' },
       });
 
       return this.presenter.analyzeTimeframePrompt(symbol);
     } catch {
       return this.presenter.invalidAnalyzeSymbol();
     }
+  }
+
+  private async selectAnalyzeItem(itemIndex: number | undefined, userId: string | undefined): Promise<ControlResponse> {
+    if (!userId || itemIndex === undefined) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const state = this.conversationStateService.get(userId);
+    if (!state || state.flow !== ANALYZE_FLOW) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const items = parseStringListState(state.data.items);
+    const selected = items[itemIndex];
+    const assetType = parseAssetTypeState(state.data.assetType);
+
+    if (!selected || !assetType) {
+      return this.presenter.analyzeExpired();
+    }
+
+    if (state.step === BROWSING_SECTORS) {
+      if (assetType === 'ETF') {
+        return this.showAnalyzeSymbols(userId, { assetType, sector: selected });
+      }
+
+      return this.showAnalyzeIndustries(userId, assetType, selected);
+    }
+
+    if (state.step === BROWSING_INDUSTRIES) {
+      return this.showAnalyzeSymbols(userId, {
+        assetType,
+        sector: parseStringState(state.data.sector),
+        industry: selected,
+      });
+    }
+
+    if (state.step === BROWSING_SYMBOLS) {
+      this.conversationStateService.set({
+        userId,
+        flow: ANALYZE_FLOW,
+        step: WAITING_FOR_TIMEFRAME,
+        data: { ...state.data, symbol: selected, entryMode: 'guided' },
+      });
+
+      return this.presenter.analyzeTimeframePrompt(selected);
+    }
+
+    return this.presenter.analyzeExpired();
+  }
+
+  private async showAnalyzeIndustries(userId: string, assetType: AssetType, sector: string): Promise<ControlResponse> {
+    if (!this.marketUniverseService) {
+      return this.presenter.analyzeUniverseError();
+    }
+
+    try {
+      const snapshot = await this.marketUniverseService.loadSnapshot();
+      const industries = this.marketUniverseService.listIndustries(snapshot, assetType, sector);
+
+      if (industries.length <= 1) {
+        return this.showAnalyzeSymbols(userId, { assetType, sector, industry: industries[0], snapshot });
+      }
+
+      return this.showAnalyzeList({
+        userId,
+        step: BROWSING_INDUSTRIES,
+        title: `SECTOR: ${sector}`,
+        subtitle: 'Selecciona industria:',
+        items: industries,
+        data: { assetType, sector },
+        includeAll: true,
+      });
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.analyzeUniverseError();
+    }
+  }
+
+  private async showAnalyzeSymbols(
+    userId: string | undefined,
+    options: { assetType?: AssetType; sector?: string; industry?: string; snapshot?: MarketUniverseSnapshot; useAllIndustries?: boolean },
+  ): Promise<ControlResponse> {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    if (!this.marketUniverseService) {
+      return this.presenter.analyzeUniverseError();
+    }
+
+    const currentState = this.conversationStateService.get(userId);
+    const assetType = options.assetType ?? parseAssetTypeState(currentState?.data.assetType);
+    const sector = options.sector ?? parseStringState(currentState?.data.sector);
+    const industry = options.useAllIndustries ? undefined : options.industry ?? parseStringState(currentState?.data.industry);
+
+    if (!assetType) {
+      return this.presenter.analyzeExpired();
+    }
+
+    try {
+      const snapshot = options.snapshot ?? await this.marketUniverseService.loadSnapshot();
+      const symbols = this.marketUniverseService.listSymbols(snapshot, { assetType, sector, industry });
+      const title = this.getSymbolsTitle(assetType, sector, industry);
+
+      return this.showAnalyzeList({
+        userId,
+        step: BROWSING_SYMBOLS,
+        title,
+        subtitle: 'Selecciona un símbolo:',
+        items: symbols.map((symbol) => symbol.symbol),
+        data: { assetType, sector, industry },
+        symbolItems: symbols,
+      });
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.analyzeUniverseError();
+    }
+  }
+
+  private changeAnalyzePage(direction: -1 | 1, userId: string | undefined): ControlResponse {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const state = this.conversationStateService.get(userId);
+    if (!state || state.flow !== ANALYZE_FLOW) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const items = parseStringListState(state.data.items);
+    const pageCount = Math.max(1, Math.ceil(items.length / ANALYZE_PAGE_SIZE));
+    const currentPage = parseStoredPage(state.data.page);
+    const page = Math.min(Math.max(currentPage + direction, 0), pageCount - 1);
+
+    this.conversationStateService.set({
+      userId,
+      flow: ANALYZE_FLOW,
+      step: state.step,
+      data: { ...state.data, page },
+    });
+
+    return this.renderAnalyzeListState(userId, { ...state.data, page }, state.step);
+  }
+
+  private async backAnalyzeFlow(userId: string | undefined): Promise<ControlResponse> {
+    if (!userId) {
+      return this.presenter.analyzeExpired();
+    }
+
+    const state = this.conversationStateService.get(userId);
+    if (!state || state.flow !== ANALYZE_FLOW) {
+      return this.startAnalyzeFlow(userId);
+    }
+
+    const assetType = parseAssetTypeState(state.data.assetType);
+
+    if (state.step === WAITING_FOR_SYMBOL || state.step === BROWSING_SECTORS || state.step === WAITING_FOR_ANALYZE_CHOICE) {
+      return this.startAnalyzeFlow(userId);
+    }
+
+    if (state.step === WAITING_FOR_TIMEFRAME) {
+      if (state.data.entryMode === 'manual') {
+        return this.startManualAnalyzeFlow(userId);
+      }
+      return this.renderAnalyzeListState(userId, state.data, BROWSING_SYMBOLS);
+    }
+
+    if (state.step === BROWSING_SYMBOLS) {
+      if (assetType === 'CRYPTO') {
+        return this.startAnalyzeFlow(userId);
+      }
+      const sector = parseStringState(state.data.sector);
+      const industry = parseStringState(state.data.industry);
+      if (assetType === 'STOCK' && sector && industry) {
+        return this.showAnalyzeIndustries(userId, assetType, sector);
+      }
+      if (assetType) {
+        return this.startGuidedAnalyzeAssetType(assetType, userId);
+      }
+    }
+
+    if (state.step === BROWSING_INDUSTRIES && assetType) {
+      return this.startGuidedAnalyzeAssetType(assetType, userId);
+    }
+
+    return this.startAnalyzeFlow(userId);
+  }
+
+  private showAnalyzeList(params: {
+    userId: string;
+    step: string;
+    title: string;
+    subtitle?: string;
+    items: string[];
+    data: Record<string, unknown>;
+    includeAll?: boolean;
+    symbolItems?: MarketSymbol[];
+  }): ControlResponse {
+    this.setAnalyzeListState(params.userId, params.step, {
+      ...params.data,
+      items: params.items,
+      page: 0,
+      title: params.title,
+      subtitle: params.subtitle,
+      includeAll: params.includeAll ?? false,
+      symbolLabels: params.symbolItems?.map(formatMarketSymbolLabel),
+    });
+
+    if (params.items.length === 0) {
+      return this.presenter.analyzeEmptyNavigation(params.title);
+    }
+
+    return this.renderAnalyzeListState(params.userId, {
+      ...params.data,
+      items: params.items,
+      page: 0,
+      title: params.title,
+      subtitle: params.subtitle,
+      includeAll: params.includeAll ?? false,
+      symbolLabels: params.symbolItems?.map(formatMarketSymbolLabel),
+    }, params.step);
+  }
+
+  private setAnalyzeListState(userId: string, step: string, data: Record<string, unknown>): void {
+    this.conversationStateService.set({ userId, flow: ANALYZE_FLOW, step, data });
+  }
+
+  private renderAnalyzeListState(userId: string, data: Record<string, unknown>, step: string): ControlResponse {
+    const items = parseStringListState(data.items);
+    const labels = parseStringListState(data.symbolLabels);
+    const page = parseStoredPage(data.page);
+    const pageCount = Math.max(1, Math.ceil(items.length / ANALYZE_PAGE_SIZE));
+    const visibleItems = items.slice(page * ANALYZE_PAGE_SIZE, page * ANALYZE_PAGE_SIZE + ANALYZE_PAGE_SIZE);
+    const visibleLabels = labels.length === items.length
+      ? labels.slice(page * ANALYZE_PAGE_SIZE, page * ANALYZE_PAGE_SIZE + ANALYZE_PAGE_SIZE)
+      : visibleItems;
+
+    this.conversationStateService.set({ userId, flow: ANALYZE_FLOW, step, data: { ...data, page } });
+
+    return this.presenter.analyzeNavigationPage({
+      title: parseStringState(data.title) ?? '🔎 ANALIZAR SÍMBOLO',
+      subtitle: parseStringState(data.subtitle),
+      items: visibleItems.map((_, index) => ({
+        label: visibleLabels[index] ?? visibleItems[index],
+        callbackData: CALLBACKS.analyzeItem(page * ANALYZE_PAGE_SIZE + index),
+      })),
+      page,
+      pageCount,
+      includeAll: Boolean(data.includeAll),
+    });
+  }
+
+  private getAnalyzeTitle(assetType: AssetType): string {
+    const labels: Record<string, string> = {
+      STOCK: '🏢 ACCIONES',
+      ETF: '📦 ETFs',
+      CRYPTO: '🪙 CRYPTO',
+    };
+
+    return labels[assetType] ?? assetType;
+  }
+
+  private getSymbolsTitle(assetType: AssetType, sector?: string, industry?: string): string {
+    if (assetType === 'CRYPTO') {
+      return '🪙 CRYPTO';
+    }
+
+    return [this.getAnalyzeTitle(assetType), sector, industry].filter(Boolean).join(' · ');
   }
 
   private async completeAnalyzeFlow(timeframe: AnalyzeSymbolTimeframe, userId: string | undefined): Promise<ControlResponse> {
@@ -588,11 +964,16 @@ export class TelegramCommandRouter {
 
     const destination = CALLBACK_DESTINATIONS[trimmed];
 
-    if (!destination) {
-      return { error: 'unknown action' };
+    if (destination) {
+      return { destination };
     }
 
-    return { destination };
+    const itemMatch = /^argos:v1:analyze:item_(\d+)$/.exec(trimmed);
+    if (itemMatch) {
+      return { destination: 'analyze-item', itemIndex: Number(itemMatch[1]) };
+    }
+
+    return { error: 'unknown action' };
   }
 
   private clearConversation(userId: string | undefined): void {
@@ -603,6 +984,30 @@ export class TelegramCommandRouter {
 }
 
 const safeLogValue = (value: string | undefined): string => value ?? 'n/a';
+
+
+const parseStringState = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const parseStringListState = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : [];
+
+const parseAssetTypeState = (value: unknown): AssetType | undefined => {
+  if (value === 'STOCK' || value === 'ETF' || value === 'CRYPTO') {
+    return value;
+  }
+
+  return undefined;
+};
+
+const parseStoredPage = (value: unknown): number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
+
+const formatMarketSymbolLabel = (symbol: MarketSymbol): string => {
+  const details = [symbol.sector, symbol.industry].filter(Boolean).join(' · ');
+
+  return details ? `${symbol.symbol} — ${details}` : symbol.symbol;
+};
 
 const parseAnalyzeSymbolState = (data: Record<string, unknown> | undefined): string | undefined => {
   const symbol = data?.symbol;

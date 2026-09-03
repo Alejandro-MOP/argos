@@ -85,6 +85,7 @@ El score representa:
 | **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Completed & Manually Validated |
 | **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Completed & Manually Validated |
 | **V1.5-E — Telegram Analyze Symbol** | Análisis técnico ad-hoc read-only desde Control Bot | ✅ Completed / Manually Validated |
+| **V1.5-E.1 — Telegram Analyze Symbol Guided Navigation** | Navegación guiada por Market Universe real para Analyze Symbol | 🚧 Implemented / Pending Manual Validation |
 | **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | ✅ Completed / Manually Validated |
 | **V1.6-A — Market Universe Expansion & Segmentation** | Universo ampliado a 103 símbolos activos segmentados por asset/sector/industry/session | ✅ Completed & Validated |
 | **V1.6-B — Sector-Aware Research** | Investigación read-only por sector/industry usando metadata normalizada | 📋 NEXT / PLANNED |
@@ -1193,6 +1194,61 @@ Se confirmó:
 - `BTC-USD / 1m` con asset `CRYPTO`, price, score, component scores, reasons, 80 candles y última vela reciente coherente con mercado 24/7;
 - threshold operativo mostrado correctamente;
 - el flujo es read-only y no tiene rutas de persistencia.
+
+## V1.5-E.1 — Telegram Analyze Symbol Guided Navigation 🚧
+
+Estado: **Implemented / Pending Manual Validation**.
+
+V1.5-E.1 mejora la experiencia del Control Bot para analizar símbolos bajo demanda usando el Market Universe real como fuente de navegación.
+
+Flujo implementado:
+
+```text
+🔎 Market
+  ↓
+🔎 Analyze Symbol
+  ↓
+Asset Type
+  ↓
+Sector / Industry cuando aplica
+  ↓
+Symbol
+  ↓
+Timeframe
+  ↓
+AnalyzeSymbolService existente
+```
+
+Alcance:
+
+- navegación por `asset_type` real: STOCK, ETF y CRYPTO;
+- STOCK navega por sector e industria cuando la metadata lo permite;
+- ETF usa la metadata disponible sin categorías hardcodeadas;
+- CRYPTO va directo a símbolos activos;
+- paginación para listas grandes;
+- navegación contextual hacia atrás;
+- entrada manual de ticker conservada como escape hatch;
+- timeframes disponibles para análisis manual: `1m`, `5m`, `15m`, `1d`, `1w`.
+
+Principios preservados:
+
+- no se implementa un segundo motor de análisis;
+- el resultado final sigue pasando por `AnalyzeSymbolService`;
+- no se hardcodean símbolos ni categorías;
+- no se crean migrations;
+- no se escribe Evidence, Signals, Forward Signals ni Opportunities;
+- no se llama `MarketScanExecutor` ni `NotificationService`;
+- el filtro temporal de Telegram Alerts para `1m` y `5m` no aplica a Analyze Symbol;
+- `strategy_version=v1` permanece sin cambios.
+
+Pendiente de validación manual:
+
+- probar navegación STOCK → sector → industria → símbolo → timeframe;
+- probar ETF con metadata real;
+- probar CRYPTO directo a símbolos;
+- probar entrada manual;
+- probar paginación y regreso contextual;
+- confirmar desde PostgreSQL que no hubo writes atribuibles a Analyze Symbol.
 
 ## V1.5-F — Telegram Full Market Scan ✅
 

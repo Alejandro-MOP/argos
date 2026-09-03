@@ -21,6 +21,15 @@ export const CALLBACKS = {
   marketScanConfirm: 'argos:v1:market:scan_confirm',
   marketScanCancel: 'argos:v1:market:scan_cancel',
   marketAnalyze: 'argos:v1:market:analyze',
+  analyzeTypeStock: 'argos:v1:analyze:type_stock',
+  analyzeTypeEtf: 'argos:v1:analyze:type_etf',
+  analyzeTypeCrypto: 'argos:v1:analyze:type_crypto',
+  analyzeManual: 'argos:v1:analyze:manual',
+  analyzeItem: (index: number) => `argos:v1:analyze:item_${index}`,
+  analyzePagePrevious: 'argos:v1:analyze:prev',
+  analyzePageNext: 'argos:v1:analyze:next',
+  analyzeAll: 'argos:v1:analyze:all',
+  analyzeBack: 'argos:v1:analyze:back',
   analyzeTf1m: 'argos:v1:analyze:tf_1m',
   analyzeTf5m: 'argos:v1:analyze:tf_5m',
   analyzeTf15m: 'argos:v1:analyze:tf_15m',
@@ -41,7 +50,7 @@ export const CALLBACKS = {
   backSystem: 'argos:v1:navigation:system',
 } as const;
 
-export type TelegramControlCallbackData = (typeof CALLBACKS)[keyof typeof CALLBACKS];
+export type TelegramControlCallbackData = Exclude<(typeof CALLBACKS)[keyof typeof CALLBACKS], (...args: never[]) => string>;
 
 export class TelegramControlPresenter {
   public mainMenu(): ControlResponse {
@@ -229,7 +238,29 @@ export class TelegramControlPresenter {
     return {
       code: 'INPUT_REQUIRED',
       text: [
-        '🔎 ANALYZE SYMBOL',
+        '🔎 ANALIZAR SÍMBOLO',
+        '',
+        '¿Qué quieres analizar?',
+        '',
+        'El universo viene de Market Universe. También puedes escribir un ticker manualmente.',
+        '',
+        'Este análisis no guarda señales ni envía alertas.',
+      ].join('\n'),
+      keyboard: this.singleColumnKeyboard([
+        ['🏢 Acciones', CALLBACKS.analyzeTypeStock],
+        ['📦 ETFs', CALLBACKS.analyzeTypeEtf],
+        ['🪙 Crypto', CALLBACKS.analyzeTypeCrypto],
+        ['⌨️ Escribir ticker', CALLBACKS.analyzeManual],
+        ['⬅️ Volver', CALLBACKS.marketMenu],
+      ]),
+    };
+  }
+
+  public analyzeManualSymbolPrompt(): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        '⌨️ ESCRIBIR TICKER',
         '',
         'Escribe el símbolo que quieres analizar.',
         '',
@@ -240,7 +271,76 @@ export class TelegramControlPresenter {
         '',
         'Este análisis no guarda señales ni envía alertas.',
       ].join('\n'),
-      keyboard: this.analyzeCancelKeyboard(),
+      keyboard: {
+        rows: [
+          [{ text: '⬅️ Volver', callbackData: CALLBACKS.analyzeBack }],
+          [{ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel }],
+        ],
+      },
+    };
+  }
+
+  public analyzeNavigationPage(params: {
+    title: string;
+    subtitle?: string;
+    items: Array<{ label: string; callbackData: string }>;
+    page: number;
+    pageCount: number;
+    includeAll?: boolean;
+    backLabel?: string;
+  }): ControlResponse {
+    const rows = params.items.map((item) => [{ text: item.label, callbackData: item.callbackData }]);
+    const paginationRow = [
+      ...(params.page > 0 ? [{ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious }] : []),
+      { text: `Página ${params.page + 1}/${params.pageCount}`, callbackData: CALLBACKS.analyzeBack },
+      ...(params.page < params.pageCount - 1 ? [{ text: '▶️', callbackData: CALLBACKS.analyzePageNext }] : []),
+    ];
+
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        params.title,
+        '',
+        ...(params.subtitle ? [params.subtitle, ''] : []),
+        ...(params.pageCount > 1 ? [`Página ${params.page + 1}/${params.pageCount}`, ''] : []),
+        'Selecciona una opción:',
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          ...rows,
+          ...(params.includeAll ? [[{ text: '📋 Todas', callbackData: CALLBACKS.analyzeAll }]] : []),
+          ...(params.pageCount > 1 ? [paginationRow] : []),
+          [{ text: params.backLabel ?? '⬅️ Volver', callbackData: CALLBACKS.analyzeBack }],
+          [{ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel }],
+        ],
+      },
+    };
+  }
+
+  public analyzeEmptyNavigation(title: string): ControlResponse {
+    return {
+      code: 'OK',
+      text: [title, '', 'No encontré elementos activos para esta selección.', '', 'Puedes volver o escribir un ticker manualmente.'].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '⬅️ Volver', callbackData: CALLBACKS.analyzeBack }],
+          [{ text: '⌨️ Escribir ticker', callbackData: CALLBACKS.analyzeManual }],
+          [{ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel }],
+        ],
+      },
+    };
+  }
+
+  public analyzeUniverseError(): ControlResponse {
+    return {
+      code: 'ERROR',
+      text: ['⚠️ No pude cargar el Market Universe.', '', 'Intenta de nuevo o usa el ingreso manual de ticker.'].join('\n'),
+      keyboard: {
+        rows: [
+          [{ text: '⌨️ Escribir ticker', callbackData: CALLBACKS.analyzeManual }],
+          [{ text: '⬅️ Market Menu', callbackData: CALLBACKS.marketMenu }],
+        ],
+      },
     };
   }
 

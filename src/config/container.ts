@@ -241,6 +241,8 @@ const telegramCommandRouter = new TelegramCommandRouter(
   analyzeSymbolService,
   marketScanExecutor,
   telegramMarketScanExecutionGuard,
+  console,
+  marketUniverseService,
 );
 
 export {

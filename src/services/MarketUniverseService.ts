@@ -85,6 +85,43 @@ export class MarketUniverseService {
     return candidates;
   }
 
+
+  public listAssetTypes(snapshot: MarketUniverseSnapshot): AssetType[] {
+    return [...new Set(snapshot.symbols.map((symbol) => symbol.assetType))].sort();
+  }
+
+  public listSectors(snapshot: MarketUniverseSnapshot, assetType: AssetType): string[] {
+    return this.uniqueSorted(
+      snapshot.symbols
+        .filter((symbol) => symbol.assetType === assetType)
+        .map((symbol) => normalizeNavigationGroup(symbol.sector)),
+    );
+  }
+
+  public listIndustries(snapshot: MarketUniverseSnapshot, assetType: AssetType, sector: string): string[] {
+    return this.uniqueSorted(
+      snapshot.symbols
+        .filter((symbol) => symbol.assetType === assetType)
+        .filter((symbol) => normalizeNavigationGroup(symbol.sector) === sector)
+        .map((symbol) => normalizeNavigationGroup(symbol.industry)),
+    );
+  }
+
+  public listSymbols(
+    snapshot: MarketUniverseSnapshot,
+    filters: { assetType: AssetType; sector?: string; industry?: string },
+  ): MarketSymbol[] {
+    return snapshot.symbols
+      .filter((symbol) => symbol.assetType === filters.assetType)
+      .filter((symbol) => filters.sector === undefined || normalizeNavigationGroup(symbol.sector) === filters.sector)
+      .filter((symbol) => filters.industry === undefined || normalizeNavigationGroup(symbol.industry) === filters.industry)
+      .sort((left, right) => left.symbol.localeCompare(right.symbol));
+  }
+
+  private uniqueSorted(values: string[]): string[] {
+    return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+  }
+
   private resolveExplicitTimeframes(options: BuildScanCandidatesOptions): string[] | undefined {
     const timeframes = options.timeframes && options.timeframes.length > 0
       ? options.timeframes
@@ -131,3 +168,10 @@ export class MarketUniverseService {
     return ['SPY', 'QQQ', 'VOO', 'XLP', 'XLV', 'VGT', 'GLD'].includes(symbol) ? 'ETF' : 'STOCK';
   }
 }
+
+
+const normalizeNavigationGroup = (value: string | undefined): string => {
+  const normalized = value?.trim();
+
+  return normalized && normalized.length > 0 ? normalized : 'Other / Unclassified';
+};

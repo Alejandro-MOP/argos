@@ -111,4 +111,55 @@ describe('MarketUniverseService', () => {
     expect(logger.log).toHaveBeenCalledWith('symbol-not-in-market-universe symbol=XYZ');
     expect(repository.findActiveWithTimeframes).toHaveBeenCalledTimes(1);
   });
+
+  it('derives navigation filters from active universe metadata', async () => {
+    const symbols = [
+      nvdaSymbol,
+      { ...nvdaSymbol, id: 'msft-id', symbol: 'MSFT', providerSymbol: 'MSFT', industry: 'Software' },
+      {
+        ...nvdaSymbol,
+        id: 'btc-id',
+        symbol: 'BTC-USD',
+        providerSymbol: 'BTC-USD',
+        assetType: 'CRYPTO' as const,
+        sector: 'Crypto',
+        industry: undefined,
+        market: 'Crypto',
+        sessionType: 'TWENTY_FOUR_SEVEN' as const,
+      },
+    ];
+    const repository = { findActiveWithTimeframes: jest.fn().mockResolvedValue(symbols) };
+    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+
+    const snapshot = await service.loadSnapshot();
+
+    expect(service.listAssetTypes(snapshot)).toEqual(['CRYPTO', 'STOCK']);
+    expect(service.listSectors(snapshot, 'STOCK')).toEqual(['Technology']);
+    expect(service.listIndustries(snapshot, 'STOCK', 'Technology')).toEqual(['Semiconductors', 'Software']);
+    expect(service.listSymbols(snapshot, { assetType: 'STOCK', sector: 'Technology', industry: 'Software' })).toEqual([
+      expect.objectContaining({ symbol: 'MSFT' }),
+    ]);
+    expect(service.listSymbols(snapshot, { assetType: 'CRYPTO' })).toEqual([
+      expect.objectContaining({ symbol: 'BTC-USD' }),
+    ]);
+  });
+
+  it('keeps symbols with missing industry navigable as unclassified', async () => {
+    const repository = {
+      findActiveWithTimeframes: jest.fn().mockResolvedValue([
+        { ...nvdaSymbol, industry: undefined },
+      ]),
+    };
+    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+
+    const snapshot = await service.loadSnapshot();
+
+    expect(service.listIndustries(snapshot, 'STOCK', 'Technology')).toEqual(['Other / Unclassified']);
+    expect(service.listSymbols(snapshot, {
+      assetType: 'STOCK',
+      sector: 'Technology',
+      industry: 'Other / Unclassified',
+    })).toEqual([expect.objectContaining({ symbol: 'NVDA' })]);
+  });
+
 });

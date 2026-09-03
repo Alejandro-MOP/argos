@@ -3,6 +3,7 @@ import { TelegramAuthorizationService } from '../src/services/TelegramAuthorizat
 import { TelegramCommandRouter } from '../src/services/TelegramCommandRouter';
 import { TelegramConversationStateService } from '../src/services/TelegramConversationStateService';
 import { CALLBACKS, TelegramControlPresenter } from '../src/services/TelegramControlPresenter';
+import { MarketUniverseService } from '../src/services/MarketUniverseService';
 
 const buildRouter = () => {
   const conversationState = new TelegramConversationStateService();
@@ -14,6 +15,31 @@ const buildRouter = () => {
 
   return { router, conversationState };
 };
+
+
+const marketSymbol = (overrides: Record<string, unknown> = {}) => ({
+  id: String(overrides.symbol ?? 'NVDA'),
+  symbol: 'NVDA',
+  providerSymbol: 'NVDA',
+  displayName: 'NVDA',
+  assetType: 'STOCK' as const,
+  sector: 'Technology',
+  industry: 'Semiconductors',
+  exchange: 'NASDAQ',
+  market: 'US',
+  timezone: 'America/New_York',
+  sessionType: 'US_REGULAR' as const,
+  supportsIntraday: true,
+  description: undefined,
+  isActive: true,
+  timeframes: ['1m', '5m', '15m', '1d', '1w'],
+  ...overrides,
+});
+
+const buildMarketUniverseService = (symbols = [marketSymbol()]): MarketUniverseService => new MarketUniverseService(
+  { findActiveWithTimeframes: jest.fn().mockResolvedValue(symbols) },
+  { getTickers: jest.fn() } as never,
+);
 
 const update = (overrides: Partial<TelegramControlUpdate>): TelegramControlUpdate => ({
   user: { id: '123' },
@@ -78,7 +104,7 @@ describe('TelegramCommandRouter', () => {
     [CALLBACKS.researchProfiles, 'ERROR', 'ARGOS no pudo consultar Strategy Profiles'],
     [CALLBACKS.researchPerformance, 'ERROR', 'ARGOS no pudo consultar Forward Performance'],
     [CALLBACKS.marketScan, 'INPUT_REQUIRED', 'FULL MARKET SCAN'],
-    [CALLBACKS.marketAnalyze, 'INPUT_REQUIRED', 'ANALYZE SYMBOL'],
+    [CALLBACKS.marketAnalyze, 'INPUT_REQUIRED', 'ANALIZAR SÍMBOLO'],
     [CALLBACKS.costsBitsoMxn, 'INPUT_REQUIRED', 'BITSO MXN'],
     [CALLBACKS.costsBitsoUsdc, 'INPUT_REQUIRED', 'BITSO USDC'],
     [CALLBACKS.systemStatus, 'ERROR', 'ARGOS no pudo consultar System Status'],
@@ -207,7 +233,7 @@ describe('TelegramCommandRouter read-only integrations', () => {
     expect(response.code).toBe('ERROR');
     expect(response.text).toContain('ARGOS no pudo consultar Research Snapshot');
     expect(response.text).not.toContain('postgres://');
-    expect(logger.error).toHaveBeenCalledWith(expect.not.stringContaining('secret'));
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('[REDACTED_DATABASE_URL]'));
   });
 });
 
@@ -353,7 +379,11 @@ describe('TelegramCommandRouter full market scan flow', () => {
 
 
 describe('TelegramCommandRouter analyze symbol flow', () => {
-  const buildAnalyzeRouter = (analyzeSymbolService: { analyze: jest.Mock } = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) }) => {
+  const buildAnalyzeRouter = (
+    analyzeSymbolService: { analyze: jest.Mock } = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) },
+    marketUniverseService = buildMarketUniverseService(),
+    marketScanExecutor: { run: jest.Mock } = { run: jest.fn() },
+  ) => {
     const conversationState = new TelegramConversationStateService();
     const logger = { error: jest.fn() };
     const router = new TelegramCommandRouter(
@@ -363,12 +393,13 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
       undefined,
       undefined,
       analyzeSymbolService,
-      undefined,
+      marketScanExecutor,
       undefined,
       logger,
+      marketUniverseService,
     );
 
-    return { router, conversationState, analyzeSymbolService, logger };
+    return { router, conversationState, analyzeSymbolService, marketUniverseService, marketScanExecutor, logger };
   };
 
   it('starts the analyze flow from the market menu callback', async () => {
@@ -377,11 +408,11 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
     const response = await router.route(update({ callback: { data: CALLBACKS.marketAnalyze } }));
 
     expect(response.code).toBe('INPUT_REQUIRED');
-    expect(response.text).toContain('ANALYZE SYMBOL');
-    expect(response.text).toContain('Escribe el símbolo');
+    expect(response.text).toContain('ANALIZAR SÍMBOLO');
+    expect(response.text).toContain('¿Qué quieres analizar?');
     expect(conversationState.get('123')).toEqual(expect.objectContaining({
       flow: 'analyze:symbol',
-      step: 'awaiting-symbol',
+      step: 'awaiting-analyze-choice',
     }));
   });
 
@@ -397,7 +428,7 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
     expect(conversationState.get('123')).toEqual(expect.objectContaining({
       flow: 'analyze:symbol',
       step: 'awaiting-timeframe',
-      data: { symbol: 'NVDA' },
+      data: expect.objectContaining({ symbol: 'NVDA' }),
     }));
   });
 
@@ -409,7 +440,7 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
     expect(response.code).toBe('VALIDATION_ERROR');
     expect(response.text).toContain('Símbolo inválido');
-    expect(conversationState.get('123')?.step).toBe('awaiting-symbol');
+    expect(conversationState.get('123')?.step).toBe('awaiting-analyze-choice');
     expect(analyzeSymbolService.analyze).not.toHaveBeenCalled();
   });
 
@@ -498,11 +529,182 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
     expect(response.code).toBe('INPUT_REQUIRED');
     expect(conversationState.get('123')).toEqual(expect.objectContaining({
       flow: 'analyze:symbol',
-      step: 'awaiting-symbol',
+      step: 'awaiting-analyze-choice',
     }));
   });
-});
 
+  it('navigates STOCK asset type through sector, industry, symbol and timeframe', async () => {
+    const analyzeSymbolService = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) };
+    const { router, marketScanExecutor } = buildAnalyzeRouter(analyzeSymbolService, buildMarketUniverseService([
+      marketSymbol({ symbol: 'NVDA', sector: 'Technology', industry: 'Semiconductors' }),
+      marketSymbol({ symbol: 'MSFT', sector: 'Technology', industry: 'Software' }),
+    ]));
+
+    const sectors = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    expect(sectors.text).toContain('ACCIONES');
+    expect(sectors.keyboard?.rows.flat()).toContainEqual({ text: 'Technology', callbackData: CALLBACKS.analyzeItem(0) });
+
+    const industries = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(industries.text).toContain('SECTOR: Technology');
+    expect(industries.keyboard?.rows.flat()).toContainEqual({ text: '📋 Todas', callbackData: CALLBACKS.analyzeAll });
+
+    const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(symbols.text).toContain('Semiconductors');
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'NVDA — Technology · Semiconductors', callbackData: CALLBACKS.analyzeItem(0) });
+
+    const timeframe = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(timeframe.text).toContain('Symbol: NVDA');
+    expect(timeframe.keyboard?.rows.flat()).toContainEqual({ text: '1m', callbackData: CALLBACKS.analyzeTf1m });
+    expect(timeframe.keyboard?.rows.flat()).toContainEqual({ text: '5m', callbackData: CALLBACKS.analyzeTf5m });
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTf15m } }));
+    expect(analyzeSymbolService.analyze).toHaveBeenCalledWith({ symbol: 'NVDA', timeframe: '15m' });
+    expect(marketScanExecutor.run).not.toHaveBeenCalled();
+  });
+
+  it('skips STOCK industry selection when a sector has a single industry', async () => {
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
+      marketSymbol({ symbol: 'JPM', sector: 'Financial Services', industry: 'Banks' }),
+      marketSymbol({ symbol: 'BAC', sector: 'Financial Services', industry: 'Banks' }),
+    ]));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+
+    expect(symbols.text).toContain('Financial Services');
+    expect(symbols.text).toContain('Selecciona un símbolo');
+    expect(symbols.text).not.toContain('Selecciona industria');
+  });
+
+  it('keeps STOCK symbols with null industry navigable as unclassified', async () => {
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
+      marketSymbol({ symbol: 'XYZ', sector: 'Technology', industry: undefined }),
+    ]));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+
+    expect(symbols.text).toContain('Other / Unclassified');
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'XYZ — Technology', callbackData: CALLBACKS.analyzeItem(0) });
+  });
+
+  it('uses Todas to show all symbols in a sector regardless of industry', async () => {
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
+      marketSymbol({ symbol: 'NVDA', sector: 'Technology', industry: 'Semiconductors' }),
+      marketSymbol({ symbol: 'MSFT', sector: 'Technology', industry: 'Software' }),
+    ]));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    const allSymbols = await router.route(update({ callback: { data: CALLBACKS.analyzeAll } }));
+
+    expect(allSymbols.text).toContain('Technology');
+    expect(allSymbols.keyboard?.rows.flat()).toContainEqual({ text: 'MSFT — Technology · Software', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(allSymbols.keyboard?.rows.flat()).toContainEqual({ text: 'NVDA — Technology · Semiconductors', callbackData: CALLBACKS.analyzeItem(1) });
+  });
+
+  it('navigates CRYPTO directly to active symbols and keeps 1m/5m available', async () => {
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
+      marketSymbol({ symbol: 'BTC-USD', assetType: 'CRYPTO', sector: 'Crypto', industry: undefined, market: 'Crypto', sessionType: 'TWENTY_FOUR_SEVEN' }),
+      marketSymbol({ symbol: 'ETH-USD', assetType: 'CRYPTO', sector: 'Crypto', industry: undefined, market: 'Crypto', sessionType: 'TWENTY_FOUR_SEVEN' }),
+    ]));
+
+    const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeCrypto } }));
+    expect(symbols.text).toContain('CRYPTO');
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'BTC-USD — Crypto', callbackData: CALLBACKS.analyzeItem(0) });
+
+    const timeframe = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(timeframe.text).toContain('Symbol: BTC-USD');
+    expect(timeframe.keyboard?.rows.flat()).toContainEqual({ text: '1m', callbackData: CALLBACKS.analyzeTf1m });
+    expect(timeframe.keyboard?.rows.flat()).toContainEqual({ text: '5m', callbackData: CALLBACKS.analyzeTf5m });
+  });
+
+  it('navigates ETF using available metadata without hardcoded categories', async () => {
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
+      marketSymbol({ symbol: 'SPY', assetType: 'ETF', sector: 'Broad Market', industry: 'S&P 500 ETF', exchange: 'NYSEARCA' }),
+      marketSymbol({ symbol: 'SMH', assetType: 'ETF', sector: 'Semiconductors', industry: 'Semiconductor ETF' }),
+    ]));
+
+    const sectors = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeEtf } }));
+    expect(sectors.text).toContain('ETFs');
+    expect(sectors.keyboard?.rows.flat()).toContainEqual({ text: 'Broad Market', callbackData: CALLBACKS.analyzeItem(0) });
+
+    const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(symbols.text).toContain('Broad Market');
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'SPY — Broad Market · S&P 500 ETF', callbackData: CALLBACKS.analyzeItem(0) });
+  });
+
+  it('keeps manual ticker as an escape hatch', async () => {
+    const analyzeSymbolService = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) };
+    const { router } = buildAnalyzeRouter(analyzeSymbolService);
+
+    const manual = await router.route(update({ callback: { data: CALLBACKS.analyzeManual } }));
+    expect(manual.text).toContain('ESCRIBIR TICKER');
+
+    await router.route(update({ message: { text: ' xyz ' } }));
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTf1d } }));
+
+    expect(analyzeSymbolService.analyze).toHaveBeenCalledWith({ symbol: 'XYZ', timeframe: '1d' });
+  });
+
+  it('supports contextual back navigation', async () => {
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
+      marketSymbol({ symbol: 'NVDA', sector: 'Technology', industry: 'Semiconductors' }),
+      marketSymbol({ symbol: 'MSFT', sector: 'Technology', industry: 'Software' }),
+    ]));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    const backToSectors = await router.route(update({ callback: { data: CALLBACKS.analyzeBack } }));
+    expect(backToSectors.text).toContain('ACCIONES');
+    expect(backToSectors.keyboard?.rows.flat()).toContainEqual({ text: 'Technology', callbackData: CALLBACKS.analyzeItem(0) });
+  });
+
+  it('paginates large symbol lists and respects page boundaries', async () => {
+    const symbols = Array.from({ length: 10 }, (_, index) => marketSymbol({
+      symbol: `T${index}`,
+      sector: 'Technology',
+      industry: 'Software',
+    }));
+    const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService(symbols));
+
+    await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+    const firstPage = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
+    expect(firstPage.text).toContain('Página 1/2');
+    expect(firstPage.keyboard?.rows.flat()).toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+
+    const secondPage = await router.route(update({ callback: { data: CALLBACKS.analyzePageNext } }));
+    expect(secondPage.text).toContain('Página 2/2');
+    expect(secondPage.keyboard?.rows.flat()).toContainEqual({ text: '◀️', callbackData: CALLBACKS.analyzePagePrevious });
+  });
+
+  it('shows safe empty and repository error responses', async () => {
+    const emptyUniverse = {
+      loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [] }),
+      listAssetTypes: jest.fn().mockReturnValue(['CRYPTO']),
+      listSectors: jest.fn().mockReturnValue([]),
+      listIndustries: jest.fn().mockReturnValue([]),
+      listSymbols: jest.fn().mockReturnValue([]),
+    } as never;
+    const emptyRouter = buildAnalyzeRouter(undefined, emptyUniverse).router;
+    const empty = await emptyRouter.route(update({ callback: { data: CALLBACKS.analyzeTypeCrypto } }));
+    expect(empty.text).toContain('No encontré elementos activos');
+
+    const failingUniverse = {
+      loadSnapshot: jest.fn().mockRejectedValue(new Error('Market Universe repository failed')),
+      listAssetTypes: jest.fn(),
+      listSectors: jest.fn(),
+      listIndustries: jest.fn(),
+      listSymbols: jest.fn(),
+    } as never;
+    const { router, logger } = buildAnalyzeRouter(undefined, failingUniverse);
+    const failed = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
+
+    expect(failed.code).toBe('ERROR');
+    expect(failed.text).toContain('No pude cargar el Market Universe');
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Market Universe repository failed'));
+  });
+});
 
 describe('TelegramCommandRouter transaction cost flow', () => {
   const buildCostsRouter = (transactionCostService: { evaluate: jest.Mock } = { evaluate: jest.fn((request) => sampleTransactionCostEvaluation(request?.entryNotional?.currency === 'USDC' ? 'USDC' : 'MXN')) }) => {

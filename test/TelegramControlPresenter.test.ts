@@ -136,15 +136,44 @@ describe('TelegramControlPresenter analyze symbol views', () => {
   it('renders analyze symbol prompts and timeframe buttons', () => {
     const symbolPrompt = presenter.analyzeSymbolPrompt();
     expect(symbolPrompt.code).toBe('INPUT_REQUIRED');
-    expect(symbolPrompt.text).toContain('ANALYZE SYMBOL');
+    expect(symbolPrompt.text).toContain('ANALIZAR SÍMBOLO');
+    expect(symbolPrompt.text).toContain('¿Qué quieres analizar?');
     expect(symbolPrompt.text).toContain('Este análisis no guarda señales ni envía alertas.');
-    expect(symbolPrompt.keyboard?.rows.flat()).toContainEqual({ text: '❌ Cancel', callbackData: CALLBACKS.analyzeCancel });
+    expect(symbolPrompt.keyboard?.rows.flat()).toContainEqual({ text: '🏢 Acciones', callbackData: CALLBACKS.analyzeTypeStock });
+    expect(symbolPrompt.keyboard?.rows.flat()).toContainEqual({ text: '📦 ETFs', callbackData: CALLBACKS.analyzeTypeEtf });
+    expect(symbolPrompt.keyboard?.rows.flat()).toContainEqual({ text: '🪙 Crypto', callbackData: CALLBACKS.analyzeTypeCrypto });
+    expect(symbolPrompt.keyboard?.rows.flat()).toContainEqual({ text: '⌨️ Escribir ticker', callbackData: CALLBACKS.analyzeManual });
 
     const timeframePrompt = presenter.analyzeTimeframePrompt('NVDA');
     expect(timeframePrompt.text).toContain('Symbol: NVDA');
     expect(timeframePrompt.keyboard?.rows.flat()).toContainEqual({ text: '1m', callbackData: CALLBACKS.analyzeTf1m });
     expect(timeframePrompt.keyboard?.rows.flat()).toContainEqual({ text: '15m', callbackData: CALLBACKS.analyzeTf15m });
     expect(timeframePrompt.keyboard?.rows.flat()).toContainEqual({ text: '1w', callbackData: CALLBACKS.analyzeTf1w });
+  });
+
+
+
+  it('renders guided navigation pages with pagination controls', () => {
+    const response = presenter.analyzeNavigationPage({
+      title: '🏢 ACCIONES',
+      subtitle: 'Selecciona un sector:',
+      items: [{ label: 'Technology', callbackData: CALLBACKS.analyzeItem(0) }],
+      page: 0,
+      pageCount: 2,
+      includeAll: true,
+    });
+
+    expect(response.code).toBe('INPUT_REQUIRED');
+    expect(response.text).toContain('🏢 ACCIONES');
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: 'Technology', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '📋 Todas', callbackData: CALLBACKS.analyzeAll });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '▶️', callbackData: CALLBACKS.analyzePageNext });
+    expect(response.keyboard?.rows.flat()).toContainEqual({ text: '⬅️ Volver', callbackData: CALLBACKS.analyzeBack });
+  });
+
+  it('renders safe empty and universe error states', () => {
+    expect(presenter.analyzeEmptyNavigation('🪙 CRYPTO').text).toContain('No encontré elementos activos');
+    expect(presenter.analyzeUniverseError().text).toContain('No pude cargar el Market Universe');
   });
 
   it('renders enriched analyze result from service values', () => {
