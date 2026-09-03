@@ -1224,10 +1224,11 @@ Alcance:
 - navegación por `asset_type` real: STOCK, ETF y CRYPTO;
 - STOCK navega por sector e industria cuando la metadata lo permite;
 - ETF usa la metadata disponible sin categorías hardcodeadas;
+- VOO queda incluido como Broad Market ETF con `displayName` human-friendly persistente;
 - CRYPTO va directo a símbolos activos;
 - paginación para listas grandes;
 - navegación contextual hacia atrás;
-- botones finales de símbolo con formato `ticker — human-friendly display name` cuando `displayName` está disponible;
+- botones finales de símbolo con formato `ticker — human-friendly display name` usando `market_symbols.display_name` como fuente persistente cuando está disponible;
 - entrada manual de ticker conservada como escape hatch;
 - timeframes disponibles para análisis manual: `1m`, `5m`, `15m`, `1d`, `1w`.
 
