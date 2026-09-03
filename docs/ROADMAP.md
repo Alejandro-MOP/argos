@@ -1227,6 +1227,7 @@ Alcance:
 - CRYPTO va directo a símbolos activos;
 - paginación para listas grandes;
 - navegación contextual hacia atrás;
+- botones finales de símbolo con formato `ticker — human-friendly display name` cuando `displayName` está disponible;
 - entrada manual de ticker conservada como escape hatch;
 - timeframes disponibles para análisis manual: `1m`, `5m`, `15m`, `1d`, `1w`.
 

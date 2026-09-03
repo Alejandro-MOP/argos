@@ -1003,10 +1003,21 @@ const parseAssetTypeState = (value: unknown): AssetType | undefined => {
 const parseStoredPage = (value: unknown): number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0;
 
-const formatMarketSymbolLabel = (symbol: MarketSymbol): string => {
-  const details = [symbol.sector, symbol.industry].filter(Boolean).join(' · ');
+const MAX_SYMBOL_LABEL_LENGTH = 48;
 
-  return details ? `${symbol.symbol} — ${details}` : symbol.symbol;
+const formatMarketSymbolLabel = (symbol: MarketSymbol): string => {
+  const displayName = symbol.displayName?.trim();
+  const label = displayName ? `${symbol.symbol} — ${displayName}` : symbol.symbol;
+
+  return truncateVisualLabel(label, MAX_SYMBOL_LABEL_LENGTH);
+};
+
+const truncateVisualLabel = (value: string, maxLength: number): string => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 };
 
 const parseAnalyzeSymbolState = (data: Record<string, unknown> | undefined): string | undefined => {

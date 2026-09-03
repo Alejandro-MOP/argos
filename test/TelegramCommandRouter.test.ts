@@ -21,7 +21,7 @@ const marketSymbol = (overrides: Record<string, unknown> = {}) => ({
   id: String(overrides.symbol ?? 'NVDA'),
   symbol: 'NVDA',
   providerSymbol: 'NVDA',
-  displayName: 'NVDA',
+  displayName: 'NVIDIA',
   assetType: 'STOCK' as const,
   sector: 'Technology',
   industry: 'Semiconductors',
@@ -536,8 +536,8 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
   it('navigates STOCK asset type through sector, industry, symbol and timeframe', async () => {
     const analyzeSymbolService = { analyze: jest.fn().mockResolvedValue(sampleAnalyzeSymbolResult()) };
     const { router, marketScanExecutor } = buildAnalyzeRouter(analyzeSymbolService, buildMarketUniverseService([
-      marketSymbol({ symbol: 'NVDA', sector: 'Technology', industry: 'Semiconductors' }),
-      marketSymbol({ symbol: 'MSFT', sector: 'Technology', industry: 'Software' }),
+      marketSymbol({ symbol: 'NVDA', displayName: 'NVIDIA', sector: 'Technology', industry: 'Semiconductors' }),
+      marketSymbol({ symbol: 'MSFT', displayName: 'Microsoft', sector: 'Technology', industry: 'Software' }),
     ]));
 
     const sectors = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
@@ -550,7 +550,7 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
     const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
     expect(symbols.text).toContain('Semiconductors');
-    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'NVDA — Technology · Semiconductors', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'NVDA — NVIDIA', callbackData: CALLBACKS.analyzeItem(0) });
 
     const timeframe = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
     expect(timeframe.text).toContain('Symbol: NVDA');
@@ -564,8 +564,8 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
   it('skips STOCK industry selection when a sector has a single industry', async () => {
     const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
-      marketSymbol({ symbol: 'JPM', sector: 'Financial Services', industry: 'Banks' }),
-      marketSymbol({ symbol: 'BAC', sector: 'Financial Services', industry: 'Banks' }),
+      marketSymbol({ symbol: 'JPM', displayName: 'JPMorgan Chase', sector: 'Financial Services', industry: 'Banks' }),
+      marketSymbol({ symbol: 'BAC', displayName: 'Bank of America', sector: 'Financial Services', industry: 'Banks' }),
     ]));
 
     await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
@@ -578,20 +578,22 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
   it('keeps STOCK symbols with null industry navigable as unclassified', async () => {
     const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
-      marketSymbol({ symbol: 'XYZ', sector: 'Technology', industry: undefined }),
+      marketSymbol({ symbol: 'XYZ', displayName: undefined, sector: 'Technology', industry: undefined }),
     ]));
 
     await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
     const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
 
     expect(symbols.text).toContain('Other / Unclassified');
-    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'XYZ — Technology', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'XYZ', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).not.toContainEqual({ text: 'XYZ — null', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).not.toContainEqual({ text: 'XYZ — undefined', callbackData: CALLBACKS.analyzeItem(0) });
   });
 
   it('uses Todas to show all symbols in a sector regardless of industry', async () => {
     const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
-      marketSymbol({ symbol: 'NVDA', sector: 'Technology', industry: 'Semiconductors' }),
-      marketSymbol({ symbol: 'MSFT', sector: 'Technology', industry: 'Software' }),
+      marketSymbol({ symbol: 'NVDA', displayName: 'NVIDIA', sector: 'Technology', industry: 'Semiconductors' }),
+      marketSymbol({ symbol: 'MSFT', displayName: 'Microsoft', sector: 'Technology', industry: 'Software' }),
     ]));
 
     await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
@@ -599,19 +601,20 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
     const allSymbols = await router.route(update({ callback: { data: CALLBACKS.analyzeAll } }));
 
     expect(allSymbols.text).toContain('Technology');
-    expect(allSymbols.keyboard?.rows.flat()).toContainEqual({ text: 'MSFT — Technology · Software', callbackData: CALLBACKS.analyzeItem(0) });
-    expect(allSymbols.keyboard?.rows.flat()).toContainEqual({ text: 'NVDA — Technology · Semiconductors', callbackData: CALLBACKS.analyzeItem(1) });
+    expect(allSymbols.keyboard?.rows.flat()).toContainEqual({ text: 'MSFT — Microsoft', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(allSymbols.keyboard?.rows.flat()).toContainEqual({ text: 'NVDA — NVIDIA', callbackData: CALLBACKS.analyzeItem(1) });
   });
 
   it('navigates CRYPTO directly to active symbols and keeps 1m/5m available', async () => {
     const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
-      marketSymbol({ symbol: 'BTC-USD', assetType: 'CRYPTO', sector: 'Crypto', industry: undefined, market: 'Crypto', sessionType: 'TWENTY_FOUR_SEVEN' }),
-      marketSymbol({ symbol: 'ETH-USD', assetType: 'CRYPTO', sector: 'Crypto', industry: undefined, market: 'Crypto', sessionType: 'TWENTY_FOUR_SEVEN' }),
+      marketSymbol({ symbol: 'BTC-USD', displayName: 'Bitcoin', assetType: 'CRYPTO', sector: 'Crypto', industry: undefined, market: 'Crypto', sessionType: 'TWENTY_FOUR_SEVEN' }),
+      marketSymbol({ symbol: 'ETH-USD', displayName: 'Ethereum', assetType: 'CRYPTO', sector: 'Crypto', industry: undefined, market: 'Crypto', sessionType: 'TWENTY_FOUR_SEVEN' }),
     ]));
 
     const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeCrypto } }));
     expect(symbols.text).toContain('CRYPTO');
-    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'BTC-USD — Crypto', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'BTC-USD — Bitcoin', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).not.toContainEqual({ text: 'BTC-USD — Crypto · Cryptocurrency', callbackData: CALLBACKS.analyzeItem(0) });
 
     const timeframe = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
     expect(timeframe.text).toContain('Symbol: BTC-USD');
@@ -621,8 +624,8 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
   it('navigates ETF using available metadata without hardcoded categories', async () => {
     const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
-      marketSymbol({ symbol: 'SPY', assetType: 'ETF', sector: 'Broad Market', industry: 'S&P 500 ETF', exchange: 'NYSEARCA' }),
-      marketSymbol({ symbol: 'SMH', assetType: 'ETF', sector: 'Semiconductors', industry: 'Semiconductor ETF' }),
+      marketSymbol({ symbol: 'SPY', displayName: 'SPDR S&P 500 ETF', assetType: 'ETF', sector: 'Broad Market', industry: 'S&P 500 ETF', exchange: 'NYSEARCA' }),
+      marketSymbol({ symbol: 'SMH', displayName: 'VanEck Semiconductor ETF', assetType: 'ETF', sector: 'Semiconductors', industry: 'Semiconductor ETF' }),
     ]));
 
     const sectors = await router.route(update({ callback: { data: CALLBACKS.analyzeTypeEtf } }));
@@ -631,7 +634,7 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
     const symbols = await router.route(update({ callback: { data: CALLBACKS.analyzeItem(0) } }));
     expect(symbols.text).toContain('Broad Market');
-    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'SPY — Broad Market · S&P 500 ETF', callbackData: CALLBACKS.analyzeItem(0) });
+    expect(symbols.keyboard?.rows.flat()).toContainEqual({ text: 'SPY — SPDR S&P 500 ETF', callbackData: CALLBACKS.analyzeItem(0) });
   });
 
   it('keeps manual ticker as an escape hatch', async () => {
@@ -649,8 +652,8 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
 
   it('supports contextual back navigation', async () => {
     const { router } = buildAnalyzeRouter(undefined, buildMarketUniverseService([
-      marketSymbol({ symbol: 'NVDA', sector: 'Technology', industry: 'Semiconductors' }),
-      marketSymbol({ symbol: 'MSFT', sector: 'Technology', industry: 'Software' }),
+      marketSymbol({ symbol: 'NVDA', displayName: 'NVIDIA', sector: 'Technology', industry: 'Semiconductors' }),
+      marketSymbol({ symbol: 'MSFT', displayName: 'Microsoft', sector: 'Technology', industry: 'Software' }),
     ]));
 
     await router.route(update({ callback: { data: CALLBACKS.analyzeTypeStock } }));
@@ -663,6 +666,7 @@ describe('TelegramCommandRouter analyze symbol flow', () => {
   it('paginates large symbol lists and respects page boundaries', async () => {
     const symbols = Array.from({ length: 10 }, (_, index) => marketSymbol({
       symbol: `T${index}`,
+      displayName: `Test Symbol ${index}`,
       sector: 'Technology',
       industry: 'Software',
     }));
