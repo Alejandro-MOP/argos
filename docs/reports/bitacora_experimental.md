@@ -2098,3 +2098,330 @@ Los datos continúan siendo insuficientes para seleccionar un Take Profit, Stop 
 
 ARGOS permanece en Research / Evidence Build.
 
+---
+
+# 2026-09-03 — Corte experimental de investigación
+
+## Estado experimental
+
+ARGOS permanece en fase:
+
+```text
+Research / Evidence Build
+```
+
+Strategy version:
+
+```text
+v1
+```
+
+Este corte documenta el estado más reciente observado en Forward Evaluation y Research Snapshot. No modifica la estrategia, scoring, thresholds, stops, Target Ladder, Evidence, Forward Evaluation ni `strategy_version`.
+
+Los datos de este corte no deben interpretarse como prueba de rentabilidad.
+
+## Research Snapshot — 03-SEP-2026
+
+| Métrica | Valor |
+| ------- | ----: |
+| Total Evidence | 1,162 |
+| Evaluated Evidence | 935 |
+| Evidence without evaluation | 227 |
+| Operational opportunities score >= 90 | 470 |
+| Evaluation coverage | 935 / 1,162 ≈ 80.5% |
+
+Backlog de Evidence sin evaluar:
+
+| Corte | Evidence sin evaluar |
+| ----- | -------------------: |
+| 01-SEP-2026 | 45 |
+| 03-SEP-2026 | 227 |
+
+El backlog aumentó respecto al corte anterior. Esto no debe interpretarse automáticamente como un problema del evaluador. El Forward Evaluation ejecutado antes del snapshot procesó los lotes actuales sin errores ni fallos de proveedor.
+
+## Forward Evaluation ejecutado antes del snapshot
+
+### Forward branch
+
+| Métrica | Valor |
+| ------- | ----: |
+| Pending | 97 |
+| Evaluated | 97 |
+| Errors | 0 |
+| Provider errors | 0 |
+| No future candles | 0 |
+
+### Evidence branch
+
+| Métrica | Valor |
+| ------- | ----: |
+| Pending | 100 |
+| Evaluated | 100 |
+| CLOSED | 2 |
+| PARTIALLY_RESOLVED | 9 |
+| OPEN | 89 |
+| Errors | 0 |
+| Provider errors | 0 |
+| No future candles | 0 |
+
+Conclusión técnica:
+
+El pipeline/evaluador se observa sano en este corte, pero la generación y acumulación de Evidence está superando temporalmente el drenaje del backlog mediante las ejecuciones realizadas.
+
+## Estados de Forward Evaluation
+
+| Estado | Total |
+| ------ | ----: |
+| OPEN | 89 |
+| PARTIALLY_RESOLVED | 9 |
+| CLOSED | 629 |
+| EXPIRED | 204 |
+| AMBIGUOUS | 4 |
+
+No interpretar `OPEN` como `LOSS`.
+
+## Target Ladder
+
+| Target | Wins | Losses | Win Rate |
+| ------ | ---: | -----: | -------: |
+| +0.50% | 534 | 314 | 62.97% |
+| +0.75% | 442 | 377 | 53.97% |
+| +1.00% | 375 | 417 | 47.35% |
+| +1.25% | 314 | 446 | 41.32% |
+| +1.50% | 266 | 460 | 36.64% |
+| +2.00% | 187 | 497 | 27.34% |
+| +3.00% | 116 | 514 | 18.41% |
+| +5.00% | 34 | 516 | 6.18% |
+
+La definición vigente se mantiene:
+
+```text
+winRate = wins / (wins + losses)
+```
+
+`EXPIRED` y `AMBIGUOUS` no forman parte del denominador de winRate.
+
+No seleccionar todavía un Take Profit basándose solamente en el Target Ladder.
+
+## Forward Performance — MFE / MAE
+
+MFE significa `Maximum Favorable Excursion`: máximo movimiento favorable observado después de la señal.
+
+MAE significa `Maximum Adverse Excursion`: máximo movimiento adverso observado después de la señal.
+
+| Métrica | 01-SEP | 03-SEP |
+| ------- | -----: | -----: |
+| MFE average | +1.01% | +1.21% |
+| MFE median | +0.52% | +0.70% |
+| MAE average | -1.17% | -1.04% |
+| MAE median | -1.03% | -1.01% |
+
+Observación descriptiva:
+
+- el movimiento favorable promedio/mediano aumentó;
+- el movimiento adverso promedio disminuyó ligeramente.
+
+Esto no constituye evidencia suficiente de edge.
+
+## Expectancy y Profit Factor
+
+Historical Forward Expectancy: resultado promedio modelado por señal bajo las reglas actuales de evaluación histórica/forward.
+
+Profit Factor: ganancias modeladas acumuladas / pérdidas modeladas acumuladas.
+
+`PF > 1` sería deseable. `PF < 1` significa que las pérdidas modeladas siguen superando las ganancias modeladas.
+
+### Comparación 01-SEP vs 03-SEP
+
+| Target | 01-SEP Expectancy | 01-SEP PF | 03-SEP Expectancy | 03-SEP PF |
+| ------ | ----------------: | --------: | ----------------: | --------: |
+| +0.50% | -0.15% | 0.65 | -0.06% | 0.85 |
+| +0.75% | -0.18% | 0.66 | -0.06% | 0.88 |
+| +1.00% | -0.22% | 0.64 | -0.05% | 0.90 |
+| +1.25% | — | — | -0.07% | 0.88 |
+| +1.50% | -0.26% | 0.63 | -0.08% | 0.87 |
+| +2.00% | -0.39% | 0.51 | -0.18% | 0.75 |
+| +3.00% | -0.56% | 0.37 | -0.26% | 0.68 |
+| +5.00% | -0.84% | 0.14 | -0.63% | 0.33 |
+
+Las métricas agregadas continúan siendo negativas:
+
+- ninguna expectancy global es positiva;
+- ningún Profit Factor global supera 1.
+
+Sin embargo, el agregado del 03-SEP se encuentra considerablemente más cerca del equilibrio que el observado el 01-SEP.
+
+Caso destacado:
+
+| Target | 01-SEP | 03-SEP |
+| ------ | ------ | ------ |
+| +1.00% Expectancy | -0.22% | -0.05% |
+| +1.00% Profit Factor | 0.64 | 0.90 |
+
+No interpretar esto como evidencia de rentabilidad.
+
+Esta variación, ocurrida sin modificar Strategy v1, refuerza metodológicamente la decisión de no realizar tuning prematuro con muestras todavía en formación.
+
+## Score buckets
+
+| Score bucket | TP +2% | TP +3% |
+| ------------ | -----: | -----: |
+| 80-84 | 28.17% | 17.44% |
+| 85-89 | 25.57% | 17.79% |
+| 90-94 | 25.42% | 18.45% |
+| 95-100 | 31.36% | 21.15% |
+
+El bucket `95-100` presenta además:
+
+```text
+MFE promedio ≈ +1.21%
+```
+
+Comparado conceptualmente con el corte anterior, donde los buckets de score alto parecían comportarse peor, la evidencia actual ya no sostiene claramente que scores altos tengan peor comportamiento forward.
+
+### H7 — Relación score / outcome
+
+La evidencia actual ya no sostiene claramente que scores altos tengan peor comportamiento forward.
+
+En el corte del 03-SEP, el bucket `95-100` presenta el mayor winRate para el target `+2%` entre los buckets observados.
+
+Sin embargo, la relación score/outcome ha cambiado de manera importante conforme aumenta la muestra.
+
+Status:
+
+```text
+OPEN / INCONCLUSIVE
+```
+
+No afirmar:
+
+```text
+score alto = mejor señal
+```
+
+Interpretación actual:
+
+La relación entre score y resultado forward permanece inestable y requiere una muestra más madura y segmentación adicional.
+
+## Timeframes
+
+| Timeframe | N | TP +2% | TP +3% |
+| --------- | -: | -----: | -----: |
+| 1m | 456 | 27.06% | 17.69% |
+| 5m | 300 | 30.13% | 20.19% |
+| 15m | 161 | 24.63% | 18.11% |
+| 1d | 17 | 17.65% | 11.76% |
+| 1w | 1 | 0.00% | 0.00% |
+
+Observación descriptiva:
+
+`5m` presenta actualmente el mayor winRate para `+2%` entre los timeframes con muestra relevante.
+
+No convertirlo en regla operativa.
+
+`1m` y `5m` continúan generando Evidence y siendo evaluados aunque sus notificaciones automáticas estén silenciadas en Telegram Alerts. Esto confirma que el filtro de notificaciones no interrumpió la investigación.
+
+## Asset types
+
+| Asset type | N | TP +2% | TP +3% |
+| ---------- | -: | -----: | -----: |
+| STOCK | 597 | 28.37% | 17.49% |
+| CRYPTO | 210 | 26.40% | 19.79% |
+| ETF | 128 | 22.81% | 20.00% |
+
+ETF ya no presenta `0% / 0%` como en el corte anterior.
+
+Esto es otro ejemplo de por qué no deben obtenerse conclusiones operativas con muestras iniciales pequeñas o inmaduras.
+
+## Contexto externo de mercado — 03-SEP-2026
+
+Esta sección registra contexto de mercado alrededor del corte. No explica causalmente los resultados de ARGOS.
+
+### Crypto
+
+Bitcoin y el mercado crypto amplio operaron en un contexto de recuperación de activos de riesgo. Investopedia reportó que Bitcoin subió hasta cerca de `$81,400` el 03-SEP, después de moverse desde una zona cercana a `$77,000`, coincidiendo con comentarios de Christopher Waller que redujeron parte de la presión por tasas. También se observaron avances en acciones relacionadas con crypto como Coinbase, Robinhood y MicroStrategy.
+
+En flujos de ETFs crypto, Cointelegraph reportó que los ETFs spot de Ether registraron salidas netas después de una racha de entradas, mientras que los fondos de Bitcoin rebotaron con entradas. Esto sugiere un contexto mixto dentro de crypto: mejora de precio en BTC y activos relacionados, pero rotación o pausa en algunos vehículos de Ether/XRP.
+
+Fuentes:
+
+- Investopedia — Bitcoin Climbs to Highest Intraday Level Since May as Risk Assets Get Boost From Waller's Comments: https://www.investopedia.com/bitcoin-sets-fresh-intraday-high-since-august-breakout-hood-mstr-coin-12102940
+- Cointelegraph — Ether, XRP ETF Inflows End as Bitcoin Funds Rebound: https://cointelegraph.com/markets/eth-xrp-etf-inflow-streaks-end-bitcoin-funds-rebound
+
+### Acciones
+
+El mercado estadounidense mostró una sesión positiva. AP reportó que el S&P 500 subió `1.1%`, el Dow Jones `1.2%` y el Nasdaq `1.4%`, con tecnología liderando el avance mientras los rendimientos de bonos cedían. El mismo contexto incluyó atención a datos laborales próximos y a la decisión de tasas de la Fed.
+
+Yahoo Finance también describió la sesión como un rally asociado a menores apuestas de alza de tasas y retroceso de rendimientos del Treasury a 10 años. La nota destacó fortaleza en Nasdaq y megacaps/tecnología, mientras el mercado seguía pendiente de tensiones geopolíticas, petróleo y datos macro.
+
+Fuentes:
+
+- AP — Tech stocks lead a rally on Wall Street as bond yields ease some more: https://apnews.com/article/7e1bffd68c53b54806be950f01181994
+- Yahoo Finance — Stock market today: Dow, S&P 500, Nasdaq surge as traders pare rate-hike bets, bond yields ease: https://au.finance.yahoo.com/news/stock-market-today-thursday-september-3-dow-sp-500-nasdaq-futures-081525933.html/
+
+### ETFs
+
+ETF no se trata como un mercado independiente. La lectura contextual se deriva de las exposiciones que ARGOS monitorea:
+
+- Broad Market ETFs como SPY/QQQ/VOO estaban expuestos al avance general de S&P 500/Nasdaq.
+- Technology ETFs como XLK y semiconductores como SMH/SOXX estuvieron en un entorno favorable por liderazgo tecnológico.
+- Rates/Treasury ETFs como TLT/IEF/SHY operaron en un contexto de rendimientos a la baja durante la sesión.
+- Sector ETFs reflejaron una sesión más favorable para risk assets, aunque no todos los sectores avanzaron con la misma fuerza.
+- Metals/energy siguieron condicionados por tensiones geopolíticas, petróleo y tasas.
+
+Fuentes:
+
+- AP — Tech stocks lead a rally on Wall Street as bond yields ease some more: https://apnews.com/article/7e1bffd68c53b54806be950f01181994
+- Yahoo Finance — Update: US Equity Indexes Rise After Treasury Yields Slump: https://finance.yahoo.com/markets/stocks/articles/us-equity-indexes-rise-treasury-164019757.html
+
+## Market regime observado
+
+| Área | Régimen descriptivo |
+| ---- | ------------------- |
+| Equities | Risk-on / tech-led rebound |
+| Crypto | Risk-on con señales mixtas en flujos ETF |
+| Rates | Yields easing |
+| Volatility | Moderada / sin evidencia suficiente para clasificar como high volatility |
+| Sector behavior | Liderazgo tecnológico y broad market positivo; comportamiento sectorial no uniforme |
+
+Confidence:
+
+```text
+MEDIUM
+```
+
+La clasificación se apoya en coincidencia de índices al alza, caída de yields y mejora de activos de riesgo. La confianza no es alta porque el contexto externo incluía tensiones geopolíticas, petróleo elevado, datos macro pendientes y flujos crypto mixtos.
+
+## Interpretación del corte
+
+1. ARGOS continúa acumulando Evidence correctamente.
+
+2. El Forward Evaluator procesó los lotes actuales sin errores ni fallos de proveedor.
+
+3. Existe un backlog de `227` Evidence sin evaluación; conviene reducirlo antes del próximo corte formal para mejorar comparabilidad.
+
+4. Las métricas agregadas continúan sin demostrar edge rentable:
+   - expectancy global `< 0`;
+   - Profit Factor global `< 1`.
+
+5. Sin embargo, las métricas se acercaron considerablemente al equilibrio respecto al 01-SEP.
+
+6. La relación entre score y outcome cambió notablemente con el crecimiento de la muestra.
+
+7. ETF también cambió significativamente respecto al corte anterior.
+
+8. Esto refuerza la política experimental actual:
+
+```text
+NO realizar tuning de Strategy v1 antes del primer corte mensual,
+salvo bugs o problemas metodológicos.
+```
+
+9. El contexto externo de mercado debe tratarse como información descriptiva para futuras comparaciones, no como explicación causal automática de los resultados de ARGOS.
+
+Próximo corte formal:
+
+```text
+aproximadamente 07-SEP-2026
+```
+
