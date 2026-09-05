@@ -18,6 +18,7 @@ import { PostgresResearchSnapshotProvider } from '../research/PostgresResearchSn
 import { createRepositories } from './repositories';
 import { buildEnvRuntimeConfig, env } from './env';
 import { AnalyzeSymbolService } from '../services/AnalyzeSymbolService';
+import { ScorePerformanceResearchService } from '../research/ScorePerformanceResearchService';
 import { EngineConfigService } from '../services/EngineConfigService';
 import { EvidenceSignalEvaluator } from '../services/EvidenceSignalEvaluator';
 import { ForwardSignalEvaluator } from '../services/ForwardSignalEvaluator';
@@ -83,6 +84,9 @@ const strategyProfileProvider = database
   : undefined;
 const researchSnapshotProvider = database
   ? new PostgresResearchSnapshotProvider(database)
+  : undefined;
+const scorePerformanceResearchService = database
+  ? new ScorePerformanceResearchService(database)
   : undefined;
 const researchSnapshotService =
   researchSnapshotProvider && strategyProfileProvider && forwardPerformanceReportProvider
@@ -249,6 +253,7 @@ export {
   forwardPerformanceReportProvider,
   strategyProfileProvider,
   researchSnapshotService,
+  scorePerformanceResearchService,
   transactionCostService,
   telegramControlAuthorizationService,
   telegramConversationStateService,
