@@ -1360,6 +1360,10 @@ Implementado:
 - claim atómico por nivel para evitar alertas duplicadas;
 - excepción de Alerts Bot para permitir notificar `STOCK + 5m + Score100 + strategy_version=v1` aunque `5m` esté silenciado por el filtro general.
 
+Motivación documental:
+
+`STOCK · 5m · Score100` fue elegido porque, al 2026-09-05, es el subconjunto descriptivamente más interesante dentro de la investigación por score. Esto no implica edge demostrado; sólo justifica observación prospectiva controlada.
+
 Límites explícitos:
 
 - no modifica scoring;
@@ -1388,6 +1392,70 @@ alerta por nivel alcanzado
    ↓
 usuario decide continuar o cerrar
 ```
+
+
+## 2026-09-05 — Research Documentation Cut
+
+Estado: **Documentation Cut / Research Update**.
+
+Este corte documenta la lectura actual de ARGOS después de integrar:
+
+- investigación descriptiva por score mediante `/api/score-performance`;
+- auditorías humanas manuales sobre señales `STOCK 15m` y `ETF 15m`;
+- implementación experimental de Shadow Paper Trading v0.1;
+- mantenimiento de `strategy_version=v1` congelada.
+
+Decisión metodológica vigente:
+
+```text
+Strategy v1 permanece frozen.
+No iniciar Trade Plan Research antes del primer corte mensual,
+salvo bugs o problemas metodológicos.
+```
+
+Shadow Paper Trading v0.1 no reemplaza esa regla. Es un carril paralelo para comenzar a capturar observaciones prospectivas de gestión de posición, sin retroalimentar Strategy v1 todavía.
+
+Lectura actual permitida:
+
+> En la muestra actual, `STOCK · 5m · Score100` luce descriptivamente diferente frente a `STOCK · 5m · Score90-94`: mayor MFE promedio/mediano y mayor reach rate en varios targets, sin incremento material del MAE mediano.
+
+Lectura no permitida:
+
+```text
+Score100 tiene edge.
+Score100 es rentable.
+Score100 predice ganancias.
+Strategy v1 está validada.
+```
+
+H7 permanece abierta:
+
+> El Score podría estar midiendo intensidad/confluencia del estado técnico actual más que funcionar como predictor ordinal simple de magnitud/calidad futura.
+
+Nueva hipótesis provisional H9:
+
+> `STOCK · 5m · Score100` podría identificar un subconjunto descriptivamente distinto dentro de Strategy v1, útil para observación prospectiva mediante Shadow Paper Trading.
+
+Estado: **EARLY / OPEN**. No validada.
+
+Auditorías humanas:
+
+- `STOCK · 15m`: 6 casos Score100 auditados; human mean `87.0`; mean delta `-13.0`.
+- `ETF · 15m`: 6 casos auditados; ARGOS mean `97.5`; human mean `78.7`; mean delta `-18.8`.
+
+Principal discrepancia recurrente:
+
+```text
+Structure quality/context
+```
+
+Hipótesis de auditoría:
+
+- H-AUDIT-01: ARGOS podría puntuar correctamente la presencia de condiciones técnicas, pero sobrevalorar su calidad contextual al alcanzar puntuaciones máximas, especialmente en Structure.
+- H-AUDIT-02: Volume Score intradía podría requerir normalización por hora de sesión; apertura/cierre tienen volumen naturalmente superior.
+- Momentum podría requerir gradación contextual más fina en una futura Strategy v2.
+
+Ninguna de estas hipótesis cambia Strategy v1.
 
 ## 2026-09-01 — Telegram Alert Timeframe Filter
 
@@ -2650,7 +2718,7 @@ el objeto que estamos intentando medir.
 
 ---
 
-**Última actualización conceptual:** 2026-09-01
+**Última actualización conceptual:** 2026-09-05
 **Estado:** `v0.9 — Pre-V1 / Evidence Validation`
 **Desarrollo siguiente:** `V1.6-B — Sector-Aware Research`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`

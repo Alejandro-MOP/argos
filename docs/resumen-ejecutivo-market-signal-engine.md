@@ -273,3 +273,148 @@ Separar score, backtest y forward test evita vender humo. El score mide calidad 
 backtest mide comportamiento histórico de reglas comparables; el forward test medirá desempeño real del
 bot cuando exista historial vivo. Esa separación hace que el sistema sea más honesto, auditable y fácil
 de explicar a usuarios no técnicos.
+
+
+---
+
+# Actualización ejecutiva — 05-SEP-2026
+
+## Estado actual de ARGOS
+
+ARGOS continúa en fase de:
+
+```text
+Evidence Collection + Strategy Research
+```
+
+Strategy v1 permanece congelada. No se modificaron scoring, analyzers, pesos, thresholds, Target Ladder, Forward Evaluation ni reglas de Evidence.
+
+Conclusión vigente:
+
+> Strategy v1 todavía no ha demostrado un profitable edge agregado.
+
+Esto no significa que Strategy v1 “no funcione”; significa que todavía no existe evidencia suficiente para declarar ventaja rentable y operable.
+
+## Qué sabemos hoy
+
+- Evidence y Forward Evaluation funcionan y siguen acumulando datos.
+- El Market Universe fue ampliado y validado previamente.
+- La investigación por score muestra que `más score` no equivale automáticamente a mejor comportamiento futuro.
+- El análisis debe mantenerse segmentado por `assetType + timeframe + score + strategyVersion`.
+- Las auditorías humanas sugieren que ARGOS puede detectar condiciones técnicas reales, pero podría sobrevalorar calidad contextual en scores máximos, especialmente en Structure.
+
+## Punto descriptivamente interesante
+
+El segmento `STOCK · 5m · Score100` destaca actualmente frente a `STOCK · 5m · Score90-94`:
+
+| Métrica | Score100 | Score90-94 |
+| ------- | -------: | ---------: |
+| N | 38 | 57 |
+| MFE avg | +1.40% | +1.06% |
+| MFE median | +0.89% | +0.47% |
+| MAE avg | -1.21% | -1.20% |
+| MAE median | -1.05% | -1.04% |
+
+También muestra mayor reach rate en targets como +0.5%, +1.0%, +2.0% y +3.0% dentro de la muestra actual.
+
+Interpretación correcta:
+
+> Es un subconjunto interesante para investigar.
+
+Interpretación incorrecta:
+
+> Score100 ya es rentable o está validado.
+
+## Auditoría humana
+
+STOCK 15m, 6 casos Score100 auditados:
+
+```text
+Human mean = 87.0
+Mean delta = -13.0
+Human range = 81-91
+```
+
+ETF 15m, 6 casos auditados:
+
+```text
+ARGOS mean = 97.5
+Human mean = 78.7
+Mean delta = -18.8
+```
+
+La discrepancia principal aparece en `Structure / breakout quality`: ARGOS identifica la presencia de breakout, pero la auditoría humana cuestiona si todos esos breakouts merecen puntuación máxima por contexto, ubicación y madurez.
+
+## Shadow Paper Trading v0.1
+
+Se implementó `ARGOS Shadow Paper Trading v0.1` como experimento paralelo para observar prospectivamente cómo se comportan posibles trades simulados.
+
+Scope inicial:
+
+```text
+STOCK · 5m · Score100 · strategy_version=v1
+paper_strategy_version=paper-v0.1
+referenceSnapshotDate=2026-09-05
+MFE reference=+0.89%
+MAE reference=-1.05%
+```
+
+Qué permite:
+
+- registrar un paper trade desde Telegram Control Bot;
+- monitorear MFE/MAE real del paper trade;
+- alertar zonas de revisión;
+- decidir manualmente continuar o cerrar;
+- acumular datos prospectivos de gestión.
+
+Qué NO significa:
+
+- no opera dinero real;
+- no ejecuta órdenes;
+- no se conecta a broker;
+- no valida Strategy v1;
+- no cambia scoring;
+- no reemplaza Forward Evaluation;
+- no inicia Trade Plan Research formal.
+
+Estado:
+
+```text
+IMPLEMENTED — PENDING MANUAL VALIDATION
+```
+
+La primera validación real depende de que aparezcan señales nuevas durante sesión regular de mercado US. No se amplía a Crypto sólo para probar en fin de semana.
+
+## Siguiente fase principal
+
+La siguiente fase metodológica principal sigue siendo:
+
+```text
+V1.6-B — Sector-Aware Research
+```
+
+Objetivo: estudiar Evidence por sector e industria sin modificar Strategy v1.
+
+## Riesgos y límites actuales
+
+- Sample sizes todavía pequeños en varios segmentos.
+- Existe riesgo de selection bias al enfocarse en Score100.
+- Multiple comparisons pueden producir hallazgos llamativos por azar.
+- La auditoría humana es valiosa pero subjetiva.
+- Volumen intradía podría requerir contexto por hora de sesión.
+- No existe Trade Plan validado.
+- No existe validación out-of-sample.
+- No existe Paper Trading formal validado.
+- No existe uso de capital real.
+
+## Lectura ejecutiva final
+
+ARGOS está madurando de radar técnico hacia plataforma experimental de investigación. El sistema ya detecta, guarda, evalúa y resume señales. Ahora empieza a contrastar sus señales con auditoría humana, análisis por score y observación prospectiva mediante shadow paper trading.
+
+La disciplina metodológica sigue siendo la misma:
+
+```text
+Medir primero.
+No mover Strategy v1 por intuición.
+No confundir señales interesantes con edge validado.
+```

@@ -2765,3 +2765,322 @@ El siguiente objetivo sigue siendo acumular Evidence y realizar cortes descripti
 
 10. Strategy v1 permanece congelada.
 
+
+
+---
+
+# 2026-09-05 — Corte documental: Score Research, auditoría humana y Shadow Paper Trading v0.1
+
+## Contexto
+
+Este corte documenta observaciones y decisiones metodológicas al cierre del 05-SEP-2026. No cambia Strategy v1.
+
+```text
+strategy_version = v1
+status = frozen
+capital real = NO
+broker integration = NO
+ejecución automática = NO
+```
+
+Regla metodológica vigente:
+
+> No iniciar decisiones de Trade Plan basadas en Evidence antes del primer corte mensual, salvo correcciones de bugs o problemas metodológicos.
+
+Shadow Paper Trading v0.1 se registra como experimento paralelo de observación prospectiva. No reemplaza Forward Evaluation, no modifica Evidence y no retroalimenta Strategy v1 todavía.
+
+## Score Performance Research
+
+La relación entre Score y comportamiento futuro sigue sin mostrar una relación monotónica estable.
+
+H7 permanece abierta:
+
+> El Score podría estar midiendo intensidad/confluencia del estado técnico actual más que funcionar como predictor ordinal simple de magnitud/calidad futura.
+
+Estado:
+
+```text
+OPEN / INCONCLUSIVE
+```
+
+Segmento observado que motivó Shadow Paper Trading:
+
+```text
+STOCK · 5m · Score100
+
+sampleSize = 38
+evaluated = 36
+coverage = 94.74%
+
+MFE average = +1.40%
+MFE median  = +0.89%
+
+MAE average = -1.21%
+MAE median  = -1.05%
+```
+
+Comparación descriptiva con `STOCK · 5m · Score90-94`:
+
+| Métrica | Score100 | Score90-94 |
+| ------- | -------: | ---------: |
+| N | 38 | 57 |
+| MFE avg | +1.40% | +1.06% |
+| MFE median | +0.89% | +0.47% |
+| MAE avg | -1.21% | -1.20% |
+| MAE median | -1.05% | -1.04% |
+
+Reach Rate:
+
+| Target | Score100 | Score90-94 |
+| ------ | -------: | ---------: |
+| +0.5% | 66.67% | 50.00% |
+| +1.0% | 47.22% | 32.65% |
+| +2.0% | 32.35% | 16.67% |
+| +3.0% | 21.21% | 10.42% |
+
+Interpretación permitida:
+
+> En la muestra actual, `STOCK · 5m · Score100` presenta mayor MFE promedio/mediano y mayor reach rate en varios targets relevantes que `STOCK · 5m · Score90-94`, sin incremento material del MAE mediano.
+
+Interpretación no permitida:
+
+```text
+Score100 tiene edge.
+Score100 es rentable.
+Score100 predice ganancias.
+```
+
+## H9 — STOCK 5m Score100 como subconjunto descriptivamente distinto
+
+Hipótesis:
+
+> En la muestra actual, `STOCK · 5m · Score100` podría identificar un subconjunto descriptivamente distinto dentro de Strategy v1, útil para observación prospectiva mediante Shadow Paper Trading.
+
+Estado:
+
+```text
+EARLY / OPEN
+```
+
+Debe sobrevivir a:
+
+- crecimiento de muestra;
+- primer corte mensual;
+- calibración;
+- evaluación futura out-of-sample.
+
+## Score100 no es uniforme por timeframe
+
+Resumen actual:
+
+| Timeframe | Lectura descriptiva |
+| --------- | ------------------- |
+| 1m | STOCK Score100 no domina claramente; 95-99 parece descriptivamente fuerte en varios targets, con N todavía insuficiente. |
+| 5m | STOCK Score100 es actualmente el subconjunto más interesante. |
+| 15m | STOCK Score100 no supera consistentemente 90-94 y además muestra discrepancias en auditoría humana. |
+| 1h | Sin Evidence útil todavía; fue agregado recientemente. Cero datos no significa mala estrategia. |
+| 1d | Muestra extremadamente pequeña. |
+| 1w | Sin Evidence suficiente. |
+
+Distribución llamativa en STOCK:
+
+| Timeframe | 90-94 | 95-99 | 100 |
+| --------- | ----: | ----: | --: |
+| 1m | 90 | 23 | 60 |
+| 5m | 57 | 11 | 38 |
+| 15m | 29 | 2 | 31 |
+| 1h | 0 | 0 | 0 |
+| 1d | 6 | 0 | 0 |
+| 1w | 0 | 0 | 0 |
+
+Pregunta abierta:
+
+> ¿Por qué Score100 aparece con relativa frecuencia mientras 95-99 es escaso?
+
+No asumir bug. No asumir saturación demostrada. Investigación futura sugerida: `Exact Score Distribution Research` por `assetType + timeframe + strategyVersion + exactScore` y, cuando exista persistencia suficiente, composición de pilares que producen cada score.
+
+## Auditoría humana STOCK 15m
+
+Fuente revisada: `auditoria_argos_STOCK.md` disponible fuera del repo en el workspace local.
+
+Casos Score100 auditados:
+
+| Ticker | ARGOS | Human | Delta |
+| ------ | ----: | ----: | ----: |
+| MU | 100 | 91 | -9 |
+| PYPL | 100 | 90 | -10 |
+| CAT | 100 | 90 | -10 |
+| META | 100 | 83 | -17 |
+| T | 100 | 87 | -13 |
+| NFLX | 100 | 81 | -19 |
+
+Resumen:
+
+```text
+sampleSize = 6
+humanScoreMean = 87.0
+meanDelta = -13.0
+humanRange = 81-91
+```
+
+Interpretación provisional:
+
+`STOCK · 15m` presenta setups técnicamente buenos, pero ARGOS podría estar sobrecalibrado en scores altos dentro de esta muestra auditada.
+
+Principal candidato: `Structure`.
+
+Preguntas secundarias:
+
+- Volume normalizado por hora de sesión;
+- Momentum alrededor de RSI 65-70;
+- contexto/madurez de Trend.
+
+## Auditoría humana ETF 15m
+
+Fuente revisada: `auditoria_argos_ETF.md` disponible fuera del repo en el workspace local.
+
+Muestra:
+
+| Ticker | ARGOS | Human | Delta |
+| ------ | ----: | ----: | ----: |
+| XLE | 100 | 92 | -8 |
+| QQQ | 100 | 80 | -20 |
+| GDX | 100 | 74 | -26 |
+| XLRE | 100 | 79 | -21 |
+| TLT | 95 | 74 | -21 |
+| XLI | 90 | 73 | -17 |
+
+Resumen:
+
+```text
+Asset Type = ETF
+Timeframe = 15m
+sampleSize = 6
+ARGOS mean = 97.5
+Human mean = 78.7
+Mean delta = -18.8
+```
+
+Principal discrepancia: `Structure / breakout quality`.
+
+## Hipótesis de auditoría
+
+H-AUDIT-01:
+
+> ARGOS podría puntuar correctamente la presencia de condiciones técnicas, pero sobrevalorar su calidad contextual al alcanzar puntuaciones máximas, especialmente en Structure.
+
+H-AUDIT-02:
+
+> Investigar si Volume Score intradía está normalizado por hora de sesión. Apertura/cierre presentan volumen naturalmente superior y podrían recibir puntuaciones elevadas si la comparación utiliza un promedio no ajustado por horario.
+
+H-AUDIT-03:
+
+> Momentum podría necesitar en una futura Strategy v2 una gradación contextual más fina: RSI 55-60, 60-65 y 65-70 no necesariamente representan la misma calidad aunque todos indiquen momentum constructivo.
+
+Estado común:
+
+```text
+EXPLORATORY
+NO STRATEGY CHANGE
+NO SCORE CHANGE
+NO PRODUCTION CHANGE
+```
+
+## Metodología de auditoría humana
+
+1. La puntuación humana utiliza únicamente información disponible en `signalAt`.
+2. No utilizar movimiento posterior para modificar la puntuación.
+3. Un trade que posteriormente subió no convierte retrospectivamente la señal en perfecta.
+4. Un trade que posteriormente cayó no convierte retrospectivamente la señal en mala.
+5. Volumen elevado no demuestra por sí solo actividad institucional.
+6. RSI < 70 no significa automáticamente momentum perfecto.
+7. Breakout detectado no significa automáticamente `Structure=25`.
+8. La auditoría evalúa calidad de señal.
+9. Entradas alternativas, Stop Loss, Take Profit y gestión pertenecen a futuro Trade Plan Research.
+
+## Decisión: Shadow Paper Trading v0.1
+
+Se implementó `ARGOS Shadow Paper Trading v0.1` como experimento paralelo porque `STOCK · 5m · Score100` es actualmente el subconjunto descriptivamente más interesante.
+
+Estado:
+
+```text
+IMPLEMENTED — PENDING MANUAL VALIDATION
+```
+
+Scope congelado:
+
+```text
+assetType = STOCK
+timeframe = 5m
+score = 100
+strategyVersion = v1
+paperStrategyVersion = paper-v0.1
+referenceSnapshotDate = 2026-09-05
+MFE reference = +0.89%
+MAE reference = -1.05%
+```
+
+Niveles de revisión:
+
+```text
++0.89% historical MFE median reference
+-1.05% historical MAE median reference
++1.5%, +2.0%, +3.0%, +5.0% favorable follow-up levels
+```
+
+Estas zonas no son Take Profit automático. Son zonas de revisión / referencia.
+
+Principio central:
+
+```text
+ARGOS detecta
+ARGOS monitorea
+ARGOS alerta
+HUMANO decide
+```
+
+La implementación real incluye:
+
+- migration `013_create_paper_trading_tables.sql`;
+- tablas `market_signal_engine.paper_trades` y `market_signal_engine.paper_trade_levels`;
+- `PaperTradeService`;
+- `PaperTradeMonitorService`;
+- repositorios Memory/PostgreSQL;
+- timer `paperTradeMonitor` cada 1 minuto;
+- integración con Telegram Control Bot;
+- excepción de notificación para `STOCK + 5m + Score100 + strategy_version=v1`.
+
+Limitación UX actual:
+
+El Alerts Bot no procesa directamente los callbacks que procesa el Control Bot. Por lo tanto, todavía no existe botón funcional directo desde Alerts Bot para registrar el paper trade. El registro se realiza desde Telegram Control Bot.
+
+Backlog UX futuro:
+
+- callback transport para Alerts Bot;
+- deep link hacia Control Bot.
+
+## Decisiones explícitas
+
+No se modificó:
+
+- scoring;
+- analyzers;
+- pesos;
+- thresholds;
+- reglas de Evidence;
+- Forward Evaluation;
+- Target Ladder;
+- Strategy Profiles;
+- Research Snapshot;
+- broker integration;
+- ejecución automática;
+- uso de capital real.
+
+Conclusión vigente:
+
+> Strategy v1 todavía no ha demostrado un profitable edge agregado.
+
+## Próximo paso
+
+Mantener V1.6-B — Sector-Aware Research como siguiente fase principal. Shadow Paper Trading v0.1 avanza en paralelo como observación prospectiva y no debe usarse para modificar Strategy v1 antes de revisión metodológica.

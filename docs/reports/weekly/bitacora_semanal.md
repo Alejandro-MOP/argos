@@ -564,3 +564,127 @@ La decisión continúa siendo:
 
 Continuar Evidence Collection y realizar cortes descriptivos semanales. El próximo corte formal queda tentativamente alrededor del **07-SEP-2026**.
 
+
+
+---
+
+# ARGOS — Weekly Research Addendum
+
+## Semana: 01–05 Septiembre 2026
+
+### Motivo del addendum
+
+Este addendum incorpora el corte documental del **05-SEP-2026** después de revisar Score Performance, auditorías humanas manuales y la implementación de Shadow Paper Trading v0.1.
+
+No reemplaza el corte del 04-SEP; lo complementa con hallazgos cualitativos/metodológicos.
+
+### Estado general
+
+```text
+Fase principal: Evidence Collection + Strategy Research
+strategy_version: v1 frozen
+Desarrollo principal siguiente: V1.6-B — Sector-Aware Research
+Experimento paralelo: Shadow Paper Trading v0.1
+Capital real: NO
+Broker integration: NO
+```
+
+### Qué cambió esta semana
+
+1. Se consolidó la lectura de que el score no se comporta como predictor ordinal simple.
+2. Se identificó `STOCK · 5m · Score100` como subconjunto descriptivamente interesante.
+3. Se incorporaron auditorías humanas `STOCK 15m` y `ETF 15m`.
+4. Se formalizaron hipótesis de discrepancia alrededor de Structure, volumen por hora de sesión y gradación de momentum.
+5. Se implementó Shadow Paper Trading v0.1 como carril paralelo de observación prospectiva.
+
+### Score Research
+
+`STOCK · 5m · Score100` vs `STOCK · 5m · Score90-94`:
+
+| Métrica | Score100 | Score90-94 |
+| ------- | -------: | ---------: |
+| N | 38 | 57 |
+| MFE avg | +1.40% | +1.06% |
+| MFE median | +0.89% | +0.47% |
+| MAE avg | -1.21% | -1.20% |
+| MAE median | -1.05% | -1.04% |
+
+Reach Rate:
+
+| Target | Score100 | Score90-94 |
+| ------ | -------: | ---------: |
+| +0.5% | 66.67% | 50.00% |
+| +1.0% | 47.22% | 32.65% |
+| +2.0% | 32.35% | 16.67% |
+| +3.0% | 21.21% | 10.42% |
+
+Lectura: Score100 en STOCK 5m justifica observación adicional. No demuestra edge ni rentabilidad.
+
+### Auditoría humana
+
+STOCK 15m:
+
+```text
+sampleSize = 6
+humanScoreMean = 87.0
+meanDelta = -13.0
+humanRange = 81-91
+```
+
+ETF 15m:
+
+```text
+sampleSize = 6
+ARGOS mean = 97.5
+Human mean = 78.7
+Mean delta = -18.8
+```
+
+Principal discrepancia: `Structure quality/context`.
+
+### Hipótesis que ganan atención
+
+| Hipótesis | Estado |
+| --------- | ------ |
+| H7 — Score mide confluencia/intensidad presente más que calidad futura ordinal | OPEN / INCONCLUSIVE |
+| H9 — STOCK 5m Score100 puede ser un subconjunto descriptivamente distinto | EARLY / OPEN |
+| H-AUDIT-01 — Structure puede sobrevalorar presencia vs calidad contextual | EXPLORATORY |
+| H-AUDIT-02 — Volume intradía puede requerir normalización por hora de sesión | EXPLORATORY |
+| H-AUDIT-03 — Momentum puede requerir gradación contextual más fina | EXPLORATORY |
+
+### Shadow Paper Trading v0.1
+
+Estado:
+
+```text
+IMPLEMENTED — PENDING MANUAL VALIDATION
+```
+
+Scope:
+
+```text
+STOCK · 5m · Score100 · strategy_version=v1 · paper_strategy_version=paper-v0.1
+```
+
+Propósito: capturar observaciones prospectivas de gestión de posición.
+
+No significa:
+
+- Strategy v1 validada;
+- Edge demostrado;
+- trading con dinero real;
+- broker integration;
+- cambio de scoring;
+- inicio de Trade Plan Research formal.
+
+### Pendientes para próxima semana
+
+1. Validación manual end-to-end de Shadow Paper Trading durante sesión regular US.
+2. Continuar Evidence Collection sin cambiar Strategy v1.
+3. Avanzar V1.6-B — Sector-Aware Research como fase principal.
+4. Versionar las auditorías completas dentro del repo, idealmente en `docs/research/manual-audits/`.
+5. Seguir observando distribución exacta de score por `assetType + timeframe + exactScore`.
+
+### Decisión metodológica final de la semana
+
+> Strategy v1 sigue congelada. Shadow Paper Trading v0.1 es un experimento paralelo de observación prospectiva y no debe retroalimentar Strategy v1 antes del primer corte mensual y revisión metodológica.
