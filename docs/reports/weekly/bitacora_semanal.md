@@ -174,12 +174,12 @@ Live Capital ░░░░░░░░░░ Futuro
 
 ### Estado del experimento
 
-🟡 Fase: Research / Evidence Build  
-🧪 Strategy: v1  
-💰 Capital real: NO  
-⚙️ Motor: operativo  
-📊 Evidence total / elegible: 473  
-✅ Evidence evaluada: 356  
+🟡 Fase: Research / Evidence Build
+🧪 Strategy: v1
+💰 Capital real: NO
+⚙️ Motor: operativo
+📊 Evidence total / elegible: 473
+✅ Evidence evaluada: 356
 ⏳ Evidence sin evaluación: 117
 
 Este reporte resume el corte experimental oficial del **31-AGO-2026**. Los números provienen de una ejecución externa de `POST /api/forward-evaluate` seguida de `GET /api/research-snapshot`; no fueron recalculados por Codex desde PostgreSQL.
@@ -422,4 +422,145 @@ Observar especialmente:
 11. impacto del Full Market Scan manual si fue usado.
 
 No intentar demostrar causalidad con una sola semana.
+
+---
+
+# ARGOS — Weekly Research Report
+
+## Semana: 01–04 Septiembre 2026
+
+### Estado del experimento
+
+🟡 Fase: Research / Evidence Build
+🧪 Strategy: v1
+💰 Capital real: NO
+⚙️ Motor: operativo
+📊 Evidence total: 1,372
+✅ Evidence evaluada: 1,271
+⏳ Evidence sin evaluación: 101
+📈 Coverage: ≈ 92.6%
+
+Este reporte resume el primer corte semanal de septiembre, correspondiente al **04-SEP-2026**. Los números provienen del Research Snapshot generado el `2026-09-04T23:58:43.480Z` y del Forward Evaluate del corte.
+
+---
+
+## Resumen ejecutivo
+
+ARGOS continúa recolectando Evidence bajo `strategyVersion=v1` sin cambiar scoring, analyzers, thresholds, Target Ladder ni metodología de evaluación.
+
+La muestra creció de forma importante desde el 01-SEP:
+
+```text
+639 → 1,372 Evidence
+594 → 1,271 evaluated
+```
+
+La cobertura permanece alta. El pipeline de Forward Evaluation se observó sano: no hubo errores, provider errors ni casos sin future candles en los lotes ejecutados para el corte.
+
+La evidencia todavía no autoriza cambios operativos. El score continúa sin mostrar una relación monotónica simple con el resultado forward, y el Target Ladder global sigue cayendo fuertemente conforme aumenta el objetivo porcentual.
+
+---
+
+## Qué aprendimos esta semana
+
+### 1. La muestra crece, pero el cambio de universo importa
+
+El 31-AGO se expandió el Market Universe:
+
+```text
+61 → 103 símbolos
+305 → 515 combinaciones
+```
+
+Esto aumenta la exposición/sampling. Por lo tanto, las comparaciones contra cortes previos deben leerse con cuidado.
+
+### 2. Target universal sigue siendo una hipótesis débil
+
+Global Target Ladder:
+
+```text
++0.50% → 59.46%
++1.00% → 43.19%
++2.00% → 24.07%
++3.00% → 16.04%
++5.00% → 5.19%
+```
+
+La caída de hit rate continúa sugiriendo que probablemente no exista un único target ideal para todos los activos y temporalidades. No modificar targets todavía.
+
+### 3. Score alto no equivale automáticamente a mejor forward behavior
+
+Ejemplos observados:
+
+- `CRYPTO / 1m / 90-94` tuvo MFE promedio/mediano mayor que `95-100`.
+- `STOCK / 15m / 90-94` mostró MFE promedio mayor que `95-100`.
+
+Esto mantiene abiertas H1 y H7.
+
+### 4. Surge H8 — Market Regime Dependency
+
+Nueva hipótesis:
+
+> La efectividad forward de las señales de ARGOS podría depender significativamente del régimen de mercado en el que fueron generadas.
+
+No se implementa detección automática ni se modifica Strategy v1.
+
+---
+
+## Contexto externo de mercado
+
+La semana terminó en un contexto macro-sensitive.
+
+Crypto mostró alta sensibilidad a tasas: BTC recuperó la zona de `80k-82k`, pero volvió a perder temporalmente `80k` después del reporte laboral fuerte del 04-SEP.
+
+Equities cerró el viernes con bajas moderadas:
+
+```text
+S&P 500 ≈ -0.4%
+Dow ≈ -0.5%
+Nasdaq ≈ -0.3%
+```
+
+En la semana:
+
+```text
+S&P 500 ≈ +0.1%
+Nasdaq ≈ +0.4%
+Dow ≈ -0.3%
+```
+
+Semiconductors mostraron fortaleza relativa durante la sesión del viernes.
+
+Market regime descriptivo:
+
+```text
+Crypto: HIGH VOLATILITY / MACRO-SENSITIVE
+Equities: mixed weekly / Friday risk-off after jobs data
+Rates: yields rising after employment report
+```
+
+No se atribuye causalidad directa sobre ARGOS.
+
+---
+
+## Decisiones tomadas
+
+Esta semana:
+
+❌ No se modificó scoring
+❌ No se modificaron targets
+❌ No se modificó stop
+❌ No se cambió `strategyVersion`
+❌ No se autorizó trading con capital real
+❌ No se inició Trade Plan Research
+
+La decisión continúa siendo:
+
+> Acumular Evidence con Strategy v1 sin optimizar prematuramente.
+
+---
+
+## Próximo objetivo
+
+Continuar Evidence Collection y realizar cortes descriptivos semanales. El próximo corte formal queda tentativamente alrededor del **07-SEP-2026**.
 

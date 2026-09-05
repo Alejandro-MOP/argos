@@ -2425,3 +2425,343 @@ Próximo corte formal:
 aproximadamente 07-SEP-2026
 ```
 
+---
+
+# 2026-09-04 — Corte experimental de investigación y cierre semanal
+
+## Estado experimental
+
+ARGOS permanece en fase:
+
+```text
+Research / Evidence Build
+```
+
+Strategy version:
+
+```text
+v1
+```
+
+Snapshot utilizado:
+
+| Campo | Valor |
+| ----- | ----- |
+| snapshotDate | 2026-09-04 |
+| generatedAt | 2026-09-04T23:58:43.480Z |
+| timeZone | America/Mexico_City |
+| strategyVersion | v1 |
+
+Este corte es documental / research log. No modifica estrategia, scoring, thresholds, stops, Target Ladder, Evidence, Forward Evaluation, Market Scan ni `strategyVersion`.
+
+## Research Snapshot — 04-SEP-2026
+
+| Métrica | Valor |
+| ------- | ----: |
+| Evidence total | 1,372 |
+| Evaluated Evidence | 1,271 |
+| Evidence sin evaluación | 101 |
+| Evidence con MFE/MAE | 1,271 |
+| Evaluation coverage | ≈ 92.6% |
+| Operational Opportunities score >= 90 | 557 |
+
+Comparación contra el corte de referencia 01-SEP:
+
+| Métrica | 01-SEP | 04-SEP |
+| ------- | -----: | -----: |
+| Evidence total | 639 | 1,372 |
+| Evaluated Evidence | 594 | 1,271 |
+| Evidence sin evaluación | 45 | 101 |
+| Evaluation coverage | ≈ 93.0% | ≈ 92.6% |
+
+Observación descriptiva:
+
+La muestra continúa creciendo rápidamente y la cobertura de evaluación permanece alta. El crecimiento debe leerse considerando la expansión del Market Universe del 31-AGO-2026:
+
+```text
+61 → 103 símbolos
+305 → 515 combinaciones symbol/timeframe
+```
+
+Por lo tanto, no interpretar automáticamente cambios agregados como mejora o deterioro de Strategy v1.
+
+## Score buckets
+
+| Score bucket | Evidence |
+| ------------ | -------: |
+| 80-84 | 436 |
+| 85-89 | 379 |
+| 90-94 | 330 |
+| 95-100 | 227 |
+
+## Evaluation statuses
+
+| Estado | Total |
+| ------ | ----: |
+| OPEN | 94 |
+| PARTIALLY_RESOLVED | 6 |
+| CLOSED | 909 |
+| EXPIRED | 258 |
+| AMBIGUOUS | 4 |
+
+No interpretar `OPEN` como `LOSS`. La gran cantidad de señales recientes en estado `OPEN` es esperable cuando todavía están dentro de su ventana de evaluación.
+
+## Global Target Ladder
+
+| Target | Wins | Losses | Expired | Ambiguous | Unresolved | Resolved Sample Size | Win Rate |
+| ------ | ---: | -----: | ------: | --------: | ---------: | -------------------: | -------: |
+| +0.50% | 682 | 465 | 48 | 24 | 153 | 1,219 | 59.46% |
+| +0.75% | 555 | 561 | 76 | 14 | 166 | 1,206 | 49.73% |
+| +1.00% | 466 | 613 | 105 | 13 | 175 | 1,197 | 43.19% |
+| +1.25% | — | — | — | — | — | — | 37.27% |
+| +1.50% | — | — | — | — | — | — | 32.21% |
+| +2.00% | 232 | 732 | 209 | 4 | 195 | 1,177 | 24.07% |
+| +3.00% | — | — | — | — | — | — | 16.04% |
+| +5.00% | — | — | — | — | — | — | 5.19% |
+
+`winRate` no equivale a profitability. Estos resultados son métricas experimentales del Forward Evaluation bajo las reglas actuales.
+
+La caída del hit rate conforme aumenta el target sigue siendo marcada:
+
+```text
+0.5% = 59.46%
+1.0% = 43.19%
+2.0% = 24.07%
+3.0% = 16.04%
+5.0% = 5.19%
+```
+
+Esto continúa debilitando la idea de un target universal para todos los activos/timeframes. No modificar targets todavía.
+
+## Observaciones del corte
+
+### 1. La muestra continúa creciendo rápidamente
+
+El corte anterior de referencia del 01-SEP tenía:
+
+```text
+639 Evidence
+594 evaluated
+```
+
+El corte actual tiene:
+
+```text
+1,372 Evidence
+1,271 evaluated
+```
+
+La cobertura de evaluación permanece alta, aproximadamente `92.6%`.
+
+### 2. Score sigue sin mostrar una relación monotónica simple
+
+Ejemplos del snapshot:
+
+CRYPTO / 1m:
+
+| Score bucket | Avg MFE | Median MFE |
+| ------------ | ------: | ---------: |
+| 90-94 | +1.56% | +1.35% |
+| 95-100 | +1.27% | +1.15% |
+
+STOCK / 15m:
+
+| Score bucket | Avg MFE |
+| ------------ | ------: |
+| 90-94 | +1.50% |
+| 95-100 | +0.92% |
+
+Esto continúa siendo consistente con H1/H7:
+
+H1: un score mayor no implica necesariamente mayor MFE/reach.
+
+H7: el score podría estar midiendo intensidad/confluencia del estado técnico presente y no necesariamente ser una escala ordinal de calidad futura.
+
+No convertir esto en regla operacional todavía.
+
+### 3. Diferencias por asset type y timeframe
+
+Los perfiles continúan mostrando diferencias importantes entre:
+
+```text
+CRYPTO
+STOCK
+ETF
+```
+
+y entre:
+
+```text
+1m
+5m
+15m
+1d
+1w
+```
+
+Esto continúa apoyando la metodología de analizar:
+
+```text
+assetType + timeframe + scoreBucket + strategyVersion
+```
+
+Posteriormente se podrá incorporar formalmente sector/industry mediante V1.6-B.
+
+## Forward Evaluate del corte
+
+### Forward
+
+| Métrica | Valor |
+| ------- | ----: |
+| pendingSignals | 77 |
+| evaluated | 77 |
+| partial | 3 |
+| open | 74 |
+| expired | 0 |
+| ambiguous | 0 |
+| providerErrors | 0 |
+| errors | 0 |
+
+### Evidence
+
+| Métrica | Valor |
+| ------- | ----: |
+| pendingSignals | 100 |
+| evaluated | 100 |
+| partial | 6 |
+| open | 94 |
+| expired | 0 |
+| ambiguous | 0 |
+| providerErrors | 0 |
+| errors | 0 |
+
+Interpretación:
+
+El pipeline de Forward Evaluation continúa funcionando correctamente. La gran cantidad de `OPEN` recientes es esperable porque las señales todavía se encuentran dentro de su ventana de evaluación.
+
+## Market Context — Week ending 04-SEP-2026
+
+Esta sección es contexto externo. No explica causalmente los resultados producidos por ARGOS.
+
+### Crypto
+
+Bitcoin comenzó parte de la semana operando aproximadamente en la zona de `77k-78k USD`. Posteriormente recuperó `80k` y llegó aproximadamente a la zona de `81k-82k`.
+
+El movimiento estuvo acompañado por cambios en expectativas de tasas, entradas relevantes en Bitcoin ETFs y liquidaciones de posiciones short. Después, el reporte laboral estadounidense del 04-SEP mostró aproximadamente `162,000` empleos creados frente a expectativas cercanas a `53k-65k`, elevando expectativas de política monetaria más restrictiva. Los Treasury yields subieron y Bitcoin volvió a perder temporalmente la zona de `80k`.
+
+Caracterización descriptiva de la semana crypto:
+
+```text
+HIGH VOLATILITY / MACRO-SENSITIVE
+```
+
+Esto no se convierte en clasificación automática del engine.
+
+Fuentes externas consultadas:
+
+- Yahoo Finance — The Jobs Report Came In at Three Times the Estimate. Can Bitcoin Get $80,000 Back?: https://finance.yahoo.com/markets/crypto/articles/jobs-report-came-three-times-131530555.html
+- Barron's — Bitcoin Slips Below $80,000 After Jobs Data: https://www.barrons.com/articles/bitcoin-price-crypto-5ac5ccf8
+
+### Equities
+
+El 04-SEP, los principales índices estadounidenses cerraron con retrocesos moderados:
+
+```text
+S&P 500 ≈ -0.4%
+Dow ≈ -0.5%
+Nasdaq ≈ -0.3%
+```
+
+El cierre semanal fue más moderado:
+
+```text
+S&P 500 ≈ +0.1%
+Nasdaq ≈ +0.4%
+Dow ≈ -0.3%
+```
+
+El movimiento del viernes estuvo relacionado principalmente con la sorpresa positiva del employment report y el consecuente aumento de expectativas de tasas. También se observó fortaleza relativa en semiconductors durante la sesión del viernes, aun cuando los índices amplios cerraron ligeramente negativos.
+
+Fuentes externas consultadas:
+
+- AP — How major US stock indexes fared Friday 9/4/2026: https://apnews.com/article/ebc11cfa2cf8baf4491bf3d4199c1d74
+- AP — Stocks fall after a surprisingly strong jobs report raises prospects of an interest rate hike: https://apnews.com/article/1af16359af43eb8abc66445465f633c8
+- Investor's Business Daily — Stock Market Today: Dow Sinks Amid Rate Fears; Sandisk, KLA Lead Nasdaq-100 As Utilities Gain: https://www.investors.com/market-trend/stock-market-today/dow-jones-sp500-nasdaq-august-jobs-report-lululemon-lulu/
+
+## H8 — Market Regime Dependency
+
+Hipótesis:
+
+> La efectividad forward de las señales de ARGOS podría depender significativamente del régimen de mercado en el que fueron generadas.
+
+Definición sencilla de Market Regime:
+
+El contexto dominante del mercado durante un periodo. Ejemplos:
+
+- trending bullish;
+- trending bearish;
+- sideways;
+- high volatility;
+- low volatility;
+- macro/news-driven.
+
+Status:
+
+```text
+OPEN / INCONCLUSIVE
+```
+
+H8 es únicamente una hipótesis. No implica:
+
+- implementar Market Regime detection;
+- modificar scoring;
+- cambiar weights;
+- cambiar thresholds;
+- cambiar targets;
+- cambiar Stop Loss;
+- excluir Evidence;
+- crear filtros operacionales;
+- cambiar `strategyVersion`.
+
+Strategy v1 remains frozen.
+
+## Metodología vigente
+
+Este corte no autoriza cambios de estrategia.
+
+Seguimos en:
+
+```text
+Research / Evidence Build
+```
+
+No iniciar Trade Plan Research todavía.
+
+Regla metodológica vigente:
+
+> No iniciar decisiones de Trade Plan basadas en Evidence antes del primer corte mensual, salvo correcciones de bugs o problemas metodológicos.
+
+El siguiente objetivo sigue siendo acumular Evidence y realizar cortes descriptivos semanales.
+
+## Conclusión del corte
+
+1. ARGOS continúa acumulando Evidence correctamente.
+
+2. El Forward Evaluator procesó los lotes actuales sin errores ni fallos de proveedor.
+
+3. La cobertura de evaluación permanece alta, aproximadamente `92.6%`.
+
+4. La muestra creció de forma importante respecto al 01-SEP.
+
+5. El Global Target Ladder mantiene una caída fuerte de winRate conforme aumenta el target.
+
+6. El score continúa sin mostrar una relación monotónica simple con el comportamiento futuro.
+
+7. Se observan diferencias relevantes entre asset types y timeframes.
+
+8. El contexto semanal fue macro-sensitive, especialmente por empleo, yields y expectativas de tasas.
+
+9. El cambio de Market Universe del 31-AGO debe seguir considerándose al comparar cortes.
+
+10. Strategy v1 permanece congelada.
+
