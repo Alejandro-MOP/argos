@@ -27,6 +27,8 @@ import { MarketScanExecutor } from '../services/MarketScanExecutor';
 import { MarketSessionService } from '../services/MarketSessionService';
 import { MarketUniverseService } from '../services/MarketUniverseService';
 import { NotificationService } from '../services/NotificationService';
+import { PaperTradeMonitorService } from '../services/PaperTradeMonitorService';
+import { PaperTradeService } from '../services/PaperTradeService';
 import { OpportunityFilter } from '../services/OpportunityFilter';
 import { OpportunityService } from '../services/OpportunityService';
 import { RankingService } from '../services/RankingService';
@@ -68,6 +70,7 @@ const {
   marketSymbolRepository,
   evidenceSignalRepository,
   evidenceSignalEvaluationRepository,
+  paperTradeRepository,
   database,
 } = createRepositories(env.databaseUrl);
 
@@ -149,6 +152,9 @@ const createOpportunityFilter = (config: EngineRuntimeConfig): OpportunityFilter
     minimumScore: config.scoring.opportunityMinScore,
     duplicateWindowMinutes: config.scoring.duplicateWindowMinutes,
   });
+
+const paperTradeService = new PaperTradeService(paperTradeRepository, marketDataService);
+const paperTradeMonitorService = new PaperTradeMonitorService(paperTradeRepository, marketDataService, telegramClient);
 
 const analyzeSymbolService = new AnalyzeSymbolService({
   marketDataService,
@@ -247,6 +253,7 @@ const telegramCommandRouter = new TelegramCommandRouter(
   telegramMarketScanExecutionGuard,
   console,
   marketUniverseService,
+  paperTradeService,
 );
 
 export {
@@ -261,5 +268,7 @@ export {
   telegramControlReadOnlyQueryService,
   telegramCommandRouter,
   analyzeSymbolService,
+  paperTradeService,
+  paperTradeMonitorService,
   telegramMarketScanExecutionGuard,
 };

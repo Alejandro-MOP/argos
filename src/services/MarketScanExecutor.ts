@@ -26,6 +26,7 @@ import type { RankingService } from './RankingService';
 import type { RiskService } from './RiskService';
 import type { SignalContextService } from './SignalContextService';
 import type { WatchlistService } from './WatchlistService';
+import { isPaperStrategyV01Eligible } from './PaperStrategyConfig';
 import { runWithConcurrency } from '../utils/concurrencyPool';
 import { calculateTradePlan, type TradePlanConfig } from '../utils/tradeSizing.utils';
 
@@ -299,8 +300,10 @@ export class MarketScanExecutor {
         continue;
       }
 
-      const willNotify = runtimeServices.notificationService.shouldNotifyOpportunity(
+      const willNotify = this.shouldNotifyOpportunity(
         opportunity,
+        candidatesBySignalKey.get(this.buildSignalKey(opportunity.ticker, opportunity.timeframe)),
+        runtimeServices,
         options.telegramNotificationMinScore,
       );
       this.logNotificationDecisionDebug(opportunity, willNotify, logger, options, runtimeServices);
@@ -405,6 +408,26 @@ export class MarketScanExecutor {
       errors,
       metrics,
     };
+  }
+
+
+  private shouldNotifyOpportunity(
+    opportunity: Opportunity,
+    candidate: MarketScanCandidate | undefined,
+    runtimeServices: MarketScanRuntimeServices,
+    telegramNotificationMinScore?: number,
+  ): boolean {
+    if (runtimeServices.notificationService.shouldNotifyOpportunity(opportunity, telegramNotificationMinScore)) {
+      return true;
+    }
+
+    return isPaperStrategyV01Eligible({
+      assetType: candidate?.metadata.assetType,
+      timeframe: opportunity.timeframe,
+      score: opportunity.score,
+      strategyVersion: runtimeServices.config.strategyVersion,
+      signalType: 'LONG',
+    });
   }
 
   private createInitialMetrics(totalCombinations: number): MarketScanMetrics {

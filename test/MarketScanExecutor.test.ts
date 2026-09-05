@@ -299,6 +299,63 @@ describe('MarketScanExecutor', () => {
   });
 
 
+  it('notifies STOCK 5m Score100 paper-v0.1 candidates even when regular Telegram timeframe filtering rejects them', async () => {
+    const logger = buildLogger();
+    const opportunity: Opportunity = {
+      ...buildOpportunity('NVDA', 100),
+      timeframe: '5m',
+    };
+    const notificationService = {
+      sendSignal: jest.fn(),
+      shouldNotifyOpportunity: jest.fn().mockReturnValue(false),
+      getMinimumScore: jest.fn().mockReturnValue(90),
+      isNotificationTimeframeEnabled: jest.fn().mockReturnValue(false),
+    };
+    const executor = buildExecutor({
+      strategyVersion: 'v1',
+      marketDataService: {
+        getCandles: jest.fn().mockResolvedValue(buildCandles(80)),
+      },
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [] }),
+        buildScanCandidates: jest.fn().mockReturnValue([
+          {
+            symbol: 'NVDA',
+            providerSymbol: 'NVDA',
+            timeframe: '5m',
+            source: 'postgres',
+            metadata: {
+              symbol: 'NVDA',
+              providerSymbol: 'NVDA',
+              assetType: 'STOCK',
+              sector: 'Technology',
+              industry: 'Semiconductors',
+              market: 'US',
+              timezone: 'America/New_York',
+              sessionType: 'US_REGULAR',
+              supportsIntraday: true,
+              isActive: true,
+              timeframes: ['5m'],
+            },
+          },
+        ]),
+      },
+      opportunityService: {
+        analyze: jest.fn().mockReturnValue(opportunity),
+      },
+      notificationService,
+    } as unknown as Partial<MarketScanExecutorDependencies>);
+
+    const result = await executor.run({ tickers: ['NVDA'], timeframe: '5m', candleLimit: 80, notify: true }, logger);
+
+    expect(notificationService.shouldNotifyOpportunity).toHaveBeenCalledWith(opportunity, undefined);
+    expect(result.opportunities).toEqual([opportunity]);
+    expect(result.notifiedSignals).toHaveLength(1);
+    expect(result.skipped).not.toContainEqual(expect.objectContaining({ ticker: 'NVDA', reason: 'telegram-timeframe-disabled' }));
+    expect(notificationService.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+
 
   it('uses request opportunity minimum score override for a single scan', async () => {
     const logger = buildLogger();

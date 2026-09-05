@@ -4,6 +4,7 @@ import type { AssetType, MarketSymbol, MarketUniverseSnapshot } from '../models/
 import type { AnalyzeSymbolService } from './AnalyzeSymbolService';
 import type { MarketScanExecutor, MarketScanLogger } from './MarketScanExecutor';
 import type { MarketUniverseService } from './MarketUniverseService';
+import type { PaperTradeService } from './PaperTradeService';
 import { AnalyzeSymbolServiceError, normalizeAnalyzeSymbol, type AnalyzeSymbolTimeframe } from './AnalyzeSymbolService';
 import type { TransactionCostService } from './TransactionCostService';
 import type { TelegramAuthorizationService } from './TelegramAuthorizationService';
@@ -18,12 +19,16 @@ const SUPPORTED_NAMESPACE = 'argos';
 const SUPPORTED_VERSION = 'v1';
 const COSTS_FLOW = 'costs:evaluate';
 const ANALYZE_FLOW = 'analyze:symbol';
+const PAPER_FLOW = 'paper:trade';
 const WAITING_FOR_CAPITAL = 'awaiting-capital';
 const WAITING_FOR_TARGET = 'awaiting-target';
 const WAITING_FOR_EXECUTION = 'awaiting-execution';
 const WAITING_FOR_SYMBOL = 'awaiting-symbol';
 const WAITING_FOR_TIMEFRAME = 'awaiting-timeframe';
 const WAITING_FOR_ANALYZE_CHOICE = 'awaiting-analyze-choice';
+const WAITING_FOR_PAPER_SYMBOL = 'awaiting-paper-symbol';
+const WAITING_FOR_PAPER_ENTRY_CHOICE = 'awaiting-paper-entry-choice';
+const WAITING_FOR_PAPER_MANUAL_ENTRY = 'awaiting-paper-manual-entry';
 const BROWSING_SECTORS = 'browsing-sectors';
 const BROWSING_INDUSTRIES = 'browsing-industries';
 const BROWSING_SYMBOLS = 'browsing-symbols';
@@ -36,6 +41,7 @@ type CallbackDestination =
   | 'research-menu'
   | 'market-menu'
   | 'costs-menu'
+  | 'paper-menu'
   | 'system-menu'
   | 'research-snapshot'
   | 'research-profiles'
@@ -66,6 +72,13 @@ type CallbackDestination =
   | 'costs-taker'
   | 'costs-cancel'
   | 'costs-new'
+  | 'paper-open'
+  | 'paper-register'
+  | 'paper-use-current'
+  | 'paper-manual'
+  | 'paper-cancel'
+  | 'paper-close'
+  | 'paper-continue'
   | 'system-status'
   | 'system-help'
   | 'back'
@@ -75,6 +88,8 @@ type CallbackDestination =
 interface ParsedCallback {
   destination: CallbackDestination;
   itemIndex?: number;
+  paperTradeId?: string;
+  paperLevelId?: string;
 }
 
 export interface TelegramCommandRouterLogger {
@@ -117,6 +132,7 @@ const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.researchMenu]: 'research-menu',
   [CALLBACKS.marketMenu]: 'market-menu',
   [CALLBACKS.costsMenu]: 'costs-menu',
+  [CALLBACKS.paperMenu]: 'paper-menu',
   [CALLBACKS.systemMenu]: 'system-menu',
   [CALLBACKS.researchSnapshot]: 'research-snapshot',
   [CALLBACKS.researchProfiles]: 'research-profiles',
@@ -146,6 +162,11 @@ const CALLBACK_DESTINATIONS: Record<string, CallbackDestination> = {
   [CALLBACKS.costsTaker]: 'costs-taker',
   [CALLBACKS.costsCancel]: 'costs-cancel',
   [CALLBACKS.costsNew]: 'costs-new',
+  [CALLBACKS.paperOpen]: 'paper-open',
+  [CALLBACKS.paperRegister]: 'paper-register',
+  [CALLBACKS.paperUseCurrent]: 'paper-use-current',
+  [CALLBACKS.paperManual]: 'paper-manual',
+  [CALLBACKS.paperCancel]: 'paper-cancel',
   [CALLBACKS.systemStatus]: 'system-status',
   [CALLBACKS.systemHelp]: 'system-help',
   [CALLBACKS.back]: 'back',
@@ -171,6 +192,10 @@ export class TelegramCommandRouter {
       MarketUniverseService,
       'loadSnapshot' | 'listAssetTypes' | 'listSectors' | 'listIndustries' | 'listSymbols'
     >,
+    private readonly paperTradeService?: Pick<
+      PaperTradeService,
+      'isEligible' | 'getCurrentPrice' | 'createOpenTrade' | 'listOpenTrades' | 'closeTradeWithCurrentPrice' | 'continueFromLevel'
+    >,
   ) {}
 
   public async route(update: TelegramControlUpdate): Promise<ControlResponse> {
@@ -187,7 +212,7 @@ export class TelegramCommandRouter {
     return this.routeMessage(update.message?.text, userId);
   }
 
-  private routeMessage(text: string | undefined, userId: string | undefined): ControlResponse {
+  private async routeMessage(text: string | undefined, userId: string | undefined): Promise<ControlResponse> {
     const normalizedText = text?.trim().toLowerCase();
 
     if (normalizedText === '/start' || normalizedText === '/menu') {
@@ -205,13 +230,25 @@ export class TelegramCommandRouter {
       if (this.marketScanExecutionGuard.isRunning()) {
         return this.presenter.marketScanCannotCancelRunning();
       }
-      return state?.flow === ANALYZE_FLOW ? this.presenter.analyzeCancelled() : this.presenter.costsCancelled();
+      if (state?.flow === ANALYZE_FLOW) {
+        return this.presenter.analyzeCancelled();
+      }
+      if (state?.flow === PAPER_FLOW) {
+        return this.presenter.paperCancelled();
+      }
+      return this.presenter.costsCancelled();
     }
 
     if (userId) {
       const expiredState = this.conversationStateService.consumeExpiredState(userId);
       if (expiredState) {
-        return expiredState.flow === ANALYZE_FLOW ? this.presenter.analyzeExpired() : this.presenter.costsExpired();
+        if (expiredState.flow === ANALYZE_FLOW) {
+          return this.presenter.analyzeExpired();
+        }
+        if (expiredState.flow === PAPER_FLOW) {
+          return this.presenter.paperError();
+        }
+        return this.presenter.costsExpired();
       }
 
       const state = this.conversationStateService.get(userId);
@@ -222,6 +259,10 @@ export class TelegramCommandRouter {
 
       if (state?.flow === ANALYZE_FLOW) {
         return this.routeAnalyzeMessage(text, userId, state);
+      }
+
+      if (state?.flow === PAPER_FLOW) {
+        return this.routePaperMessage(text, userId, state);
       }
     }
 
@@ -250,6 +291,24 @@ export class TelegramCommandRouter {
       case 'costs-new':
         this.clearConversation(userId);
         return this.presenter.costsMenu();
+      case 'paper-menu':
+        this.clearConversation(userId);
+        return this.presenter.paperMenu();
+      case 'paper-open':
+        return this.showOpenPaperTrades();
+      case 'paper-register':
+        return this.startPaperTradeFlow(userId);
+      case 'paper-use-current':
+        return this.createPaperTradeFromCurrentPrice(userId);
+      case 'paper-manual':
+        return this.askPaperManualEntry(userId);
+      case 'paper-cancel':
+        this.clearConversation(userId);
+        return this.presenter.paperCancelled();
+      case 'paper-close':
+        return this.closePaperTrade(parsed.paperTradeId);
+      case 'paper-continue':
+        return this.continuePaperTrade(parsed.paperLevelId);
       case 'back-system':
       case 'system-menu':
         return this.presenter.systemMenu();
@@ -436,6 +495,190 @@ export class TelegramCommandRouter {
     } catch (error) {
       this.logger.error(sanitizeControlRouterError(error));
       return this.presenter.analyzeUniverseError();
+    }
+  }
+
+
+  private async routePaperMessage(text: string | undefined, userId: string, state: ReturnType<TelegramConversationStateService['get']>): Promise<ControlResponse> {
+    if (!state) {
+      return this.presenter.paperError();
+    }
+
+    if (state.step === WAITING_FOR_PAPER_SYMBOL) {
+      let symbol: string;
+      try {
+        symbol = normalizeAnalyzeSymbol(text ?? '');
+      } catch {
+        return this.presenter.invalidAnalyzeSymbol();
+      }
+
+      if (!this.paperTradeService?.isEligible({
+        ticker: symbol,
+        assetType: 'STOCK',
+        timeframe: '5m',
+        score: 100,
+        strategyVersion: 'v1',
+        signalType: 'LONG',
+      })) {
+        return this.presenter.paperNotEligible();
+      }
+
+      let currentPrice: number | undefined;
+      try {
+        currentPrice = await this.paperTradeService.getCurrentPrice(symbol);
+      } catch (error) {
+        this.logger.error(sanitizeControlRouterError(error));
+      }
+
+      this.conversationStateService.set({
+        userId,
+        flow: PAPER_FLOW,
+        step: WAITING_FOR_PAPER_ENTRY_CHOICE,
+        data: { symbol, currentPrice },
+      });
+
+      return this.presenter.paperEntryPrompt(symbol, currentPrice);
+    }
+
+    if (state.step === WAITING_FOR_PAPER_MANUAL_ENTRY) {
+      const symbol = parseStringState(state.data.symbol);
+      const entryPrice = parseFriendlyPositiveNumber(text);
+
+      if (!symbol) {
+        this.clearConversation(userId);
+        return this.presenter.paperError();
+      }
+
+      if (entryPrice === undefined) {
+        return this.presenter.invalidPaperEntry();
+      }
+
+      return this.createPaperTrade(userId, symbol, entryPrice);
+    }
+
+    return this.presenter.paperEntryPrompt(parseStringState(state.data.symbol) ?? 'STOCK');
+  }
+
+  private startPaperTradeFlow(userId: string | undefined): ControlResponse {
+    if (!userId) {
+      return this.presenter.paperError();
+    }
+
+    if (!this.paperTradeService) {
+      return this.presenter.paperError();
+    }
+
+    this.conversationStateService.set({
+      userId,
+      flow: PAPER_FLOW,
+      step: WAITING_FOR_PAPER_SYMBOL,
+      data: {},
+    });
+
+    return this.presenter.paperRegisterPrompt();
+  }
+
+  private async showOpenPaperTrades(): Promise<ControlResponse> {
+    if (!this.paperTradeService) {
+      return this.presenter.paperError();
+    }
+
+    try {
+      return this.presenter.paperOpenTrades(await this.paperTradeService.listOpenTrades());
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.paperError();
+    }
+  }
+
+  private askPaperManualEntry(userId: string | undefined): ControlResponse {
+    if (!userId) {
+      return this.presenter.paperError();
+    }
+
+    const state = this.conversationStateService.get(userId);
+    const symbol = parseStringState(state?.data.symbol);
+
+    if (!state || state.flow !== PAPER_FLOW || state.step !== WAITING_FOR_PAPER_ENTRY_CHOICE || !symbol) {
+      return this.presenter.paperError();
+    }
+
+    this.conversationStateService.set({
+      userId,
+      flow: PAPER_FLOW,
+      step: WAITING_FOR_PAPER_MANUAL_ENTRY,
+      data: { ...state.data },
+    });
+
+    return this.presenter.paperManualEntryPrompt(symbol);
+  }
+
+  private async createPaperTradeFromCurrentPrice(userId: string | undefined): Promise<ControlResponse> {
+    if (!userId) {
+      return this.presenter.paperError();
+    }
+
+    const state = this.conversationStateService.get(userId);
+    const symbol = parseStringState(state?.data.symbol);
+    const currentPrice = parseStoredNumber(state?.data.currentPrice);
+
+    if (!state || state.flow !== PAPER_FLOW || state.step !== WAITING_FOR_PAPER_ENTRY_CHOICE || !symbol || currentPrice === undefined) {
+      return this.presenter.paperError();
+    }
+
+    return this.createPaperTrade(userId, symbol, currentPrice);
+  }
+
+  private async createPaperTrade(userId: string, symbol: string, entryPrice: number): Promise<ControlResponse> {
+    if (!this.paperTradeService) {
+      this.clearConversation(userId);
+      return this.presenter.paperError();
+    }
+
+    try {
+      const trade = await this.paperTradeService.createOpenTrade({
+        ticker: symbol,
+        assetType: 'STOCK',
+        timeframe: '5m',
+        score: 100,
+        strategyVersion: 'v1',
+        entryPrice,
+        entryAt: new Date(),
+      });
+
+      this.clearConversation(userId);
+      return this.presenter.paperCreated(trade);
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      this.clearConversation(userId);
+      return this.presenter.paperError();
+    }
+  }
+
+  private async closePaperTrade(paperTradeId: string | undefined): Promise<ControlResponse> {
+    if (!paperTradeId || !this.paperTradeService) {
+      return this.presenter.paperError();
+    }
+
+    try {
+      return this.presenter.paperClosed(await this.paperTradeService.closeTradeWithCurrentPrice(paperTradeId));
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.paperError();
+    }
+  }
+
+  private async continuePaperTrade(paperLevelId: string | undefined): Promise<ControlResponse> {
+    if (!paperLevelId || !this.paperTradeService) {
+      return this.presenter.paperError();
+    }
+
+    try {
+      await this.paperTradeService.continueFromLevel(paperLevelId);
+      return this.presenter.paperContinued();
+    } catch (error) {
+      this.logger.error(sanitizeControlRouterError(error));
+      return this.presenter.paperError();
     }
   }
 
@@ -964,7 +1207,7 @@ export class TelegramCommandRouter {
       return { error: 'unknown version' };
     }
 
-    if (!['menu', 'research', 'market', 'costs', 'system', 'navigation', 'analyze'].includes(domain)) {
+    if (!['menu', 'research', 'market', 'costs', 'system', 'navigation', 'analyze', 'paper'].includes(domain)) {
       return { error: 'unknown domain' };
     }
 
@@ -977,6 +1220,16 @@ export class TelegramCommandRouter {
     const itemMatch = /^argos:v1:analyze:item_(\d+)$/.exec(trimmed);
     if (itemMatch) {
       return { destination: 'analyze-item', itemIndex: Number(itemMatch[1]) };
+    }
+
+    const closeMatch = /^argos:v1:paper:close_(.+)$/.exec(trimmed);
+    if (closeMatch) {
+      return { destination: 'paper-close', paperTradeId: closeMatch[1] };
+    }
+
+    const continueMatch = /^argos:v1:paper:cont_(.+)$/.exec(trimmed);
+    if (continueMatch) {
+      return { destination: 'paper-continue', paperLevelId: continueMatch[1] };
     }
 
     return { error: 'unknown action' };

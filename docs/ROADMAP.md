@@ -89,6 +89,7 @@ El score representa:
 | **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | ✅ Completed / Manually Validated |
 | **V1.6-A — Market Universe Expansion & Segmentation** | Universo ampliado a 103 símbolos activos segmentados por asset/sector/industry/session | ✅ Completed & Validated |
 | **V1.6-B — Sector-Aware Research** | Investigación read-only por sector/industry usando metadata normalizada | 📋 NEXT / PLANNED |
+| **Shadow Paper Trading v0.1** | Registro experimental de trades paper STOCK 5m Score100 desde Telegram Control | 🧪 Implemented / Pending Manual Validation |
 | Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
 | V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
 | V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
@@ -1311,6 +1312,82 @@ A diferencia de Analyze Symbol, Full Market Scan sí puede crear oportunidades, 
 Validación manual real: **PASS**.
 
 Se confirmó navegación, confirmación explícita, ejecución del pipeline operacional real, summary final, separación entre Control Bot y Alerts Bot, y protección in-memory contra doble ejecución desde el Control Bot.
+
+
+
+## Shadow Paper Trading v0.1 🧪
+
+Estado: **Implemented / Pending Manual Validation**.
+
+Objetivo: observar señales operables en modo paper sin broker, sin órdenes reales y sin tocar dinero real.
+
+Scope fijo del experimento:
+
+```text
+asset_type = STOCK
+timeframe = 5m
+score = 100
+strategy_version = v1
+paper_strategy_version = paper-v0.1
+signal_type = LONG
+referenceSnapshotDate = 2026-09-05
+```
+
+Referencias congeladas para contexto, no como TP/SL automático:
+
+```text
+MFE reference = +0.89%
+MAE reference = -1.05%
+```
+
+Niveles de seguimiento:
+
+```text
+Favorable reference: +0.89%
+Adverse reference:   -1.05%
+Follow-up:           +1.50%, +2.00%, +3.00%, +5.00%
+```
+
+Implementado:
+
+- tablas `paper_trades` y `paper_trade_levels`;
+- registro manual desde Telegram Control Bot;
+- consulta de paper trades abiertos;
+- cierre manual desde Telegram Control Bot;
+- monitor automático cada minuto;
+- actualización de `current_mfe_pct`, `current_mae_pct`, `highest_price_seen` y `lowest_price_seen`;
+- alertas Telegram cuando se cruza un nivel no disparado;
+- claim atómico por nivel para evitar alertas duplicadas;
+- excepción de Alerts Bot para permitir notificar `STOCK + 5m + Score100 + strategy_version=v1` aunque `5m` esté silenciado por el filtro general.
+
+Límites explícitos:
+
+- no modifica scoring;
+- no modifica Strategy v1;
+- no modifica Evidence ni Forward Evaluation;
+- no modifica Strategy Profiles ni Research Snapshot;
+- no ejecuta órdenes reales;
+- no integra broker;
+- no interpreta `+0.89%` como target operativo ni `-1.05%` como stop obligatorio;
+- el botón directo desde una alerta del Alerts Bot queda como evolución futura porque el long polling actual procesa el Control Bot, no callbacks del Alerts Bot.
+
+Arquitectura conceptual:
+
+```text
+Signal STOCK 5m Score100
+   ↓
+Telegram Alert exception
+   ↓
+Control Bot registra Paper Trade
+   ↓
+paper_trades + paper_trade_levels
+   ↓
+PaperTradeMonitor cada minuto
+   ↓
+alerta por nivel alcanzado
+   ↓
+usuario decide continuar o cerrar
+```
 
 ## 2026-09-01 — Telegram Alert Timeframe Filter
 

@@ -6,6 +6,7 @@ import type { EvidenceSignalRepository } from '../ports/EvidenceSignalRepository
 import type { ForwardSignalRepository } from '../ports/ForwardSignalRepository';
 import type { MarketSymbolRepository } from '../ports/MarketSymbolRepository';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
+import type { PaperTradeRepository } from '../ports/PaperTradeRepository';
 import type { SignalRepository as SignalRepositoryPort } from '../ports/SignalRepository';
 import type { SignalEvaluationRepository } from '../ports/SignalEvaluationRepository';
 import { MemoryEngineConfigRepository } from '../repositories/MemoryEngineConfigRepository';
@@ -15,11 +16,13 @@ import { MemoryForwardSignalRepository } from '../repositories/MemoryForwardSign
 import { MemoryMarketSymbolRepository } from '../repositories/MemoryMarketSymbolRepository';
 import { MemorySignalEvaluationRepository } from '../repositories/MemorySignalEvaluationRepository';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
+import { PaperTradeMemoryRepository } from '../repositories/PaperTradeMemoryRepository';
 import { PostgresEngineConfigRepository } from '../repositories/PostgresEngineConfigRepository';
 import { PostgresEvidenceSignalEvaluationRepository } from '../repositories/PostgresEvidenceSignalEvaluationRepository';
 import { PostgresEvidenceSignalRepository } from '../repositories/PostgresEvidenceSignalRepository';
 import { PostgresMarketSymbolRepository } from '../repositories/PostgresMarketSymbolRepository';
 import { PostgresOpportunityRepository } from '../repositories/PostgresOpportunityRepository';
+import { PostgresPaperTradeRepository } from '../repositories/PostgresPaperTradeRepository';
 import { PostgresSignalEvaluationRepository } from '../repositories/PostgresSignalEvaluationRepository';
 import { PostgresSignalRepository } from '../repositories/PostgresSignalRepository';
 import { SignalRepository } from '../repositories/SignalRepository';
@@ -33,6 +36,7 @@ export interface RepositorySet {
   marketSymbolRepository: MarketSymbolRepository;
   evidenceSignalRepository: EvidenceSignalRepository;
   evidenceSignalEvaluationRepository: EvidenceSignalEvaluationRepository;
+  paperTradeRepository: PaperTradeRepository;
   database?: Queryable;
 }
 
@@ -49,6 +53,7 @@ export const createRepositories = (databaseUrl: string): RepositorySet => {
       marketSymbolRepository: new MemoryMarketSymbolRepository(),
       evidenceSignalRepository: new MemoryEvidenceSignalRepository(),
       evidenceSignalEvaluationRepository: new MemoryEvidenceSignalEvaluationRepository(),
+      paperTradeRepository: new PaperTradeMemoryRepository(),
     };
   }
 
@@ -63,6 +68,7 @@ export const createRepositories = (databaseUrl: string): RepositorySet => {
     marketSymbolRepository: new PostgresMarketSymbolRepository(postgresPool),
     evidenceSignalRepository: new PostgresEvidenceSignalRepository(postgresPool),
     evidenceSignalEvaluationRepository: new PostgresEvidenceSignalEvaluationRepository(postgresPool),
+    paperTradeRepository: new PostgresPaperTradeRepository(postgresPool),
     database: postgresPool,
   };
 };

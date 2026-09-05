@@ -6,6 +6,7 @@ import type { StrategyProfile, StrategyProfileSummary } from '../models/Strategy
 import type { ControlResponse, InlineKeyboard } from '../models/TelegramControl';
 import type { AnalyzeSymbolErrorCode, AnalyzeSymbolResult } from './AnalyzeSymbolService';
 import type { TransactionCostEvaluationResponse } from './TransactionCostService';
+import type { PaperTradeSnapshot } from '../models/PaperTrade';
 import type { TelegramControlSystemStatus } from './TelegramControlReadOnlyQueryService';
 
 export const CALLBACKS = {
@@ -14,12 +15,20 @@ export const CALLBACKS = {
   marketMenu: 'argos:v1:menu:market',
   costsMenu: 'argos:v1:menu:costs',
   systemMenu: 'argos:v1:menu:system',
+  paperMenu: 'argos:v1:menu:paper',
   researchSnapshot: 'argos:v1:research:snapshot',
   researchProfiles: 'argos:v1:research:profiles',
   researchPerformance: 'argos:v1:research:performance',
   marketScan: 'argos:v1:market:scan',
   marketScanConfirm: 'argos:v1:market:scan_confirm',
   marketScanCancel: 'argos:v1:market:scan_cancel',
+  paperOpen: 'argos:v1:paper:open',
+  paperRegister: 'argos:v1:paper:register',
+  paperUseCurrent: 'argos:v1:paper:use_current',
+  paperManual: 'argos:v1:paper:manual',
+  paperCancel: 'argos:v1:paper:cancel',
+  paperClose: (id: string) => `argos:v1:paper:close_${id}`,
+  paperContinue: (id: string) => `argos:v1:paper:cont_${id}`,
   marketAnalyze: 'argos:v1:market:analyze',
   analyzeTypeStock: 'argos:v1:analyze:type_stock',
   analyzeTypeEtf: 'argos:v1:analyze:type_etf',
@@ -65,6 +74,9 @@ export class TelegramControlPresenter {
           ],
           [
             { text: '💰 Costs', callbackData: CALLBACKS.costsMenu },
+            { text: '📝 Paper', callbackData: CALLBACKS.paperMenu },
+          ],
+          [
             { text: '⚙️ System', callbackData: CALLBACKS.systemMenu },
           ],
         ],
@@ -106,6 +118,177 @@ export class TelegramControlPresenter {
         ['💵 Bitso USDC', CALLBACKS.costsBitsoUsdc],
         ['⬅️ Back', CALLBACKS.back],
       ]),
+    };
+  }
+
+
+  public paperMenu(): ControlResponse {
+    return {
+      code: 'OK',
+      text: [
+        '📝 SHADOW PAPER TRADING',
+        '',
+        'Experimento paper-v0.1.',
+        'Research-only. No broker, no dinero real, no órdenes.',
+        '',
+        'Scope actual:',
+        'STOCK · 5m · Score 100 · Strategy v1 · LONG-only',
+      ].join('\n'),
+      keyboard: this.singleColumnKeyboard([
+        ['📈 Trades abiertos', CALLBACKS.paperOpen],
+        ['📝 Registrar Paper Trade', CALLBACKS.paperRegister],
+        ['⬅️ Back', CALLBACKS.back],
+      ]),
+    };
+  }
+
+  public paperRegisterPrompt(): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        '📝 REGISTRAR PAPER TRADE',
+        '',
+        'Escribe el ticker STOCK elegible.',
+        '',
+        'V0.1 sólo permite:',
+        'STOCK · 5m · Score 100 · Strategy v1',
+        '',
+        'Ejemplo:',
+        'NVDA',
+      ].join('\n'),
+      keyboard: this.singleColumnKeyboard([
+        ['❌ Cancelar', CALLBACKS.paperCancel],
+      ]),
+    };
+  }
+
+  public paperEntryPrompt(symbol: string, currentPrice?: number): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [
+        `${symbol} · STOCK · 5m · Score 100`,
+        '',
+        currentPrice ? `Precio actual: ${formatPrice(currentPrice)}` : 'Precio actual: no disponible',
+        '',
+        '¿Precio de entrada?',
+      ].join('\n'),
+      keyboard: this.singleColumnKeyboard([
+        ['Usar precio actual', CALLBACKS.paperUseCurrent],
+        ['Escribir precio', CALLBACKS.paperManual],
+        ['Cancelar', CALLBACKS.paperCancel],
+      ]),
+    };
+  }
+
+  public paperManualEntryPrompt(symbol: string): ControlResponse {
+    return {
+      code: 'INPUT_REQUIRED',
+      text: [`${symbol} · STOCK · 5m · Score 100`, '', 'Escribe el precio de entrada.', '', 'Ejemplo:', '182.55'].join('\n'),
+      keyboard: this.singleColumnKeyboard([['Cancelar', CALLBACKS.paperCancel]]),
+    };
+  }
+
+  public invalidPaperEntry(): ControlResponse {
+    return {
+      code: 'VALIDATION_ERROR',
+      text: ['⚠️ Precio inválido.', '', 'Ingresa un número mayor a 0.'].join('\n'),
+      keyboard: this.singleColumnKeyboard([['Cancelar', CALLBACKS.paperCancel]]),
+    };
+  }
+
+  public paperNotEligible(): ControlResponse {
+    return {
+      code: 'VALIDATION_ERROR',
+      text: ['⚠️ Paper trade no elegible.', '', 'paper-v0.1 sólo permite STOCK · 5m · Score 100 · Strategy v1.'].join('\n'),
+      keyboard: this.singleColumnKeyboard([['⬅️ Paper Menu', CALLBACKS.paperMenu]]),
+    };
+  }
+
+  public paperCreated(trade: PaperTradeSnapshot): ControlResponse {
+    return {
+      code: 'OK',
+      text: [
+        '✅ PAPER TRADE REGISTRADO',
+        '',
+        `${trade.ticker} · ${trade.assetType} · ${trade.timeframe} · Score ${trade.score}`,
+        '',
+        `Entry: ${formatPrice(trade.entryPrice)}`,
+        `paperStrategyVersion: ${trade.paperStrategyVersion}`,
+        '',
+        `Zona favorable ref: ${formatSignedPercent(trade.mfeReferencePct)}`,
+        `Zona adversa ref: ${formatSignedPercent(trade.maeReferencePct)}`,
+        '',
+        'ARGOS lo monitoreará cada minuto mientras siga OPEN.',
+      ].join('\n'),
+      keyboard: this.singleColumnKeyboard([['📈 Trades abiertos', CALLBACKS.paperOpen]]),
+    };
+  }
+
+  public paperOpenTrades(trades: PaperTradeSnapshot[]): ControlResponse {
+    if (trades.length === 0) {
+      return {
+        code: 'OK',
+        text: ['📝 SHADOW PAPER TRADING', '', 'No hay paper trades abiertos.'].join('\n'),
+        keyboard: this.singleColumnKeyboard([
+          ['📝 Registrar Paper Trade', CALLBACKS.paperRegister],
+          ['⬅️ Back', CALLBACKS.back],
+        ]),
+      };
+    }
+
+    const visible = trades.slice(0, 5);
+    return {
+      code: 'OK',
+      text: [
+        '📈 PAPER TRADES ABIERTOS',
+        '',
+        ...visible.flatMap((trade) => [
+          `${trade.ticker} · ${trade.timeframe} · Score ${trade.score}`,
+          `Entry: ${formatPrice(trade.entryPrice)}`,
+          `MFE actual: ${formatSignedPercent(trade.currentMfePct)}`,
+          `MAE actual: ${formatSignedPercent(trade.currentMaePct)}`,
+          `Estado: ${trade.status}`,
+          '',
+        ]),
+      ].join('\n'),
+      keyboard: {
+        rows: [
+          ...visible.map((trade) => [{ text: `✅ Cerrar ${trade.ticker}`, callbackData: CALLBACKS.paperClose(trade.id ?? '') }]),
+          [{ text: '⬅️ Paper Menu', callbackData: CALLBACKS.paperMenu }],
+        ],
+      },
+    };
+  }
+
+  public paperContinued(): ControlResponse {
+    return {
+      code: 'OK',
+      text: '⏳ Paper trade continúa OPEN. No se volverá a alertar por ese mismo nivel.',
+      keyboard: this.singleColumnKeyboard([['📈 Trades abiertos', CALLBACKS.paperOpen]]),
+    };
+  }
+
+  public paperClosed(trade: PaperTradeSnapshot): ControlResponse {
+    return {
+      code: 'OK',
+      text: ['✅ PAPER TRADE CERRADO', '', `${trade.ticker} · ${trade.timeframe}`, `Exit: ${formatPrice(trade.exitPrice ?? trade.entryPrice)}`, `Reason: ${trade.exitReason ?? 'MANUAL_TELEGRAM'}`].join('\n'),
+      keyboard: this.singleColumnKeyboard([['📈 Trades abiertos', CALLBACKS.paperOpen]]),
+    };
+  }
+
+  public paperError(): ControlResponse {
+    return {
+      code: 'ERROR',
+      text: ['⚠️ ARGOS no pudo procesar Paper Trading.', '', 'Intenta nuevamente.'].join('\n'),
+      keyboard: this.singleColumnKeyboard([['⬅️ Paper Menu', CALLBACKS.paperMenu]]),
+    };
+  }
+
+  public paperCancelled(): ControlResponse {
+    return {
+      code: 'CANCELLED',
+      text: 'Paper trade cancelado.',
+      keyboard: this.singleColumnKeyboard([['⬅️ Paper Menu', CALLBACKS.paperMenu]]),
     };
   }
 

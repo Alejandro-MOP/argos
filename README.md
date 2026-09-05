@@ -171,7 +171,7 @@ Pasos de `marketScan`:
 5. Rankea oportunidades por score descendente.
 6. Filtra por score mínimo y duplicados recientes.
 7. Convierte oportunidades válidas en un plan de riesgo con `RiskService`.
-8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE` y su timeframe está dentro de `TELEGRAM_NOTIFICATION_TIMEFRAMES`, la agrega a `notifiedSignals` y puede notificar Telegram.
+8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE` y su timeframe está dentro de `TELEGRAM_NOTIFICATION_TIMEFRAMES`, la agrega a `notifiedSignals` y puede notificar Telegram. Excepción experimental: `STOCK + 5m + Score100 + strategy_version=v1` puede notificarse para Shadow Paper Trading v0.1 aunque `5m` esté fuera del filtro general.
 9. Persiste oportunidad y señal en memoria cuando corresponde.
 
 
@@ -310,7 +310,59 @@ telegramTest             -> HTTP Trigger de prueba de Telegram
 vive en un solo lugar. `backtest` usa `BacktestEngine`, pero reutiliza los mismos analyzers,
 `OpportunityService` y `RiskService` para evitar reglas paralelas.
 
-### Telegram Control Bot
+#
+## Shadow Paper Trading v0.1
+
+Shadow Paper Trading es una capa experimental para registrar operaciones simuladas sin broker y sin dinero real.
+
+Scope actual:
+
+```text
+STOCK · 5m · Score 100 · strategy_version=v1 · paper_strategy_version=paper-v0.1
+```
+
+Referencias congeladas del experimento:
+
+```text
+referenceSnapshotDate=2026-09-05
+mfeReferencePct=+0.89
+maeReferencePct=-1.05
+follow-up levels=+1.50,+2.00,+3.00,+5.00
+```
+
+Las referencias MFE/MAE sirven como contexto de investigación; no son TP/SL automáticos ni recomendación de trading.
+
+Tablas nuevas:
+
+```text
+paper_trades
+paper_trade_levels
+```
+
+Monitor:
+
+```text
+paperTradeMonitor: timerTrigger cada 1 minuto
+```
+
+El monitor consulta trades `OPEN`, obtiene precio reciente del proveedor, actualiza MFE/MAE observado y dispara una alerta Telegram sólo una vez por nivel cruzado. El claim del nivel es atómico para reducir duplicados.
+
+Desde Telegram Control Bot:
+
+- `📝 Paper` muestra el menú paper;
+- `Registrar Paper Trade` permite capturar ticker y precio de entrada;
+- `Trades abiertos` lista posiciones paper abiertas;
+- `Cerrar` cierra manualmente usando precio actual.
+
+Límites:
+
+- no crea órdenes;
+- no llama broker;
+- no cambia scoring ni Strategy v1;
+- no modifica Evidence/Forward/Research;
+- el botón directo desde una alerta del Alerts Bot queda pendiente porque el transporte actual de callbacks vive en el Control Bot.
+
+## Telegram Control Bot
 
 Desde V1.5-D, el Control Bot también puede calcular Transaction Costs desde Telegram en modo read-only. El flujo pide perfil Bitso, capital de entrada, target bruto esperado y ejecución Maker/Taker; después llama al `TransactionCostService` real. Telegram no recalcula fees, utilidad neta, round-trip cost ni break-even.
 

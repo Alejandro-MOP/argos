@@ -16,6 +16,9 @@ describe('TelegramControlPresenter', () => {
           ],
           [
             { text: '💰 Costs', callbackData: CALLBACKS.costsMenu },
+            { text: '📝 Paper', callbackData: CALLBACKS.paperMenu },
+          ],
+          [
             { text: '⚙️ System', callbackData: CALLBACKS.systemMenu },
           ],
         ],
@@ -51,6 +54,19 @@ describe('TelegramControlPresenter', () => {
     expect(response.keyboard?.rows.flat()).toEqual([
       { text: '🇲🇽 Bitso MXN', callbackData: CALLBACKS.costsBitsoMxn },
       { text: '💵 Bitso USDC', callbackData: CALLBACKS.costsBitsoUsdc },
+      { text: '⬅️ Back', callbackData: CALLBACKS.back },
+    ]);
+  });
+
+
+  it('renders paper menu', () => {
+    const response = presenter.paperMenu();
+
+    expect(response.text).toContain('SHADOW PAPER TRADING');
+    expect(response.text).toContain('STOCK · 5m · Score 100');
+    expect(response.keyboard?.rows.flat()).toEqual([
+      { text: '📈 Trades abiertos', callbackData: CALLBACKS.paperOpen },
+      { text: '📝 Registrar Paper Trade', callbackData: CALLBACKS.paperRegister },
       { text: '⬅️ Back', callbackData: CALLBACKS.back },
     ]);
   });
