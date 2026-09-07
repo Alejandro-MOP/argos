@@ -6,12 +6,12 @@ Este documento describe el universo operativo de mercado que ARGOS usa para esca
 
 ARGOS no intenta analizar todo el mercado. Trabaja con un universo curado y segmentado para que el motor pueda comparar oportunidades entre activos relevantes sin disparar llamadas innecesarias al proveedor de datos.
 
-El catálogo vive en PostgreSQL cuando `DATABASE_URL` está configurado:
+El catálogo vive en PostgreSQL como fuente única de verdad funcional:
 
 - `market_signal_engine.market_symbols`: símbolo lógico, símbolo del proveedor, asset type y metadata descriptiva.
 - `market_signal_engine.symbol_timeframes`: temporalidades activas por símbolo.
 
-Si PostgreSQL no está disponible, ARGOS conserva fallback a variables de entorno y `WatchlistService`.
+Si PostgreSQL no está disponible o el universo activo está vacío, ARGOS falla explícitamente. Ya no existe fallback runtime a variables de entorno ni a `WatchlistService`.
 
 ## Símbolo lógico vs símbolo del proveedor
 

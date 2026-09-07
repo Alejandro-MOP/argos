@@ -234,8 +234,9 @@ También:
 - `1d` y `1w` pueden analizarse fuera de sesión.
 - Crypto continúa 24/7.
 - `strategy_version` para separar Evidence entre versiones del algoritmo.
-- Fallback a ENV/configuración anterior cuando corresponde.
-- Overrides HTTP conservados para pruebas manuales cuando corresponde.
+- PostgreSQL como fuente única de verdad para configuración funcional y universo de mercado.
+- Sin fallback runtime a ENV para thresholds, scoring, trade plan, strategy version, candle limit ni universo.
+- Overrides HTTP conservados como parámetros explícitos de request, no como segunda fuente de configuración.
 
 ---
 
@@ -1151,12 +1152,12 @@ Alcance implementado:
 
 - menú `🔎 Market` → `🔎 Analyze Symbol`;
 - captura de símbolo por texto y normalización `trim + uppercase`;
-- selección de timeframe desde Telegram: `1m`, `5m`, `15m`, `1d`, `1w`;
+- selección de timeframe desde Telegram: `1m`, `5m`, `15m`, `1h`, `1d`, `1w`;
 - `AnalyzeSymbolService` como servicio de aplicación read-only;
 - reutilización de `MarketDataService`, `MarketUniverseService` y `OpportunityService`;
 - resolución de `provider_symbol` desde el universo cuando existe;
-- fallback manual para símbolos desconocidos sin insertarlos en PostgreSQL;
-- uso de `MARKET_SCAN_CANDLE_LIMIT` y mínimo técnico de 60 velas;
+- los símbolos desconocidos se rechazan de forma explícita si no existen en `market_symbols`;
+- uso de `MARKET_SCAN_CANDLE_LIMIT` desde `engine_config` y mínimo técnico de 60 velas;
 - respuesta enriquecida con precio, score, componentes, razones y timestamp de la última vela usada.
 
 Límites explícitos:
@@ -1231,7 +1232,7 @@ Alcance:
 - navegación contextual hacia atrás;
 - botones finales de símbolo con formato `ticker — human-friendly display name` usando `market_symbols.display_name` como fuente persistente cuando está disponible;
 - entrada manual de ticker conservada como escape hatch;
-- timeframes disponibles para análisis manual: `1m`, `5m`, `15m`, `1d`, `1w`.
+- timeframes disponibles para análisis manual: `1m`, `5m`, `15m`, `1h`, `1d`, `1w`.
 
 Principios preservados:
 
@@ -2723,3 +2724,12 @@ el objeto que estamos intentando medir.
 **Desarrollo siguiente:** `V1.6-B — Sector-Aware Research`
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
+
+
+## 2026-09-06 — PostgreSQL authoritative configuration
+
+Estado: **Implemented / Pending Manual Validation**.
+
+ARGOS deja de mantener dos fuentes funcionales de configuración. Thresholds, scoring, trade plan, strategy version, candle limit, throughput de market data y timeframes notificables viven en `engine_config`; el universo operacional vive en `market_symbols` y `symbol_timeframes`.
+
+`local.settings.json` queda reservado para secretos, bootstrap e infraestructura. Si PostgreSQL no tiene configuración activa suficiente o el universo está vacío, ARGOS falla explícitamente en lugar de usar `env-fallback`.

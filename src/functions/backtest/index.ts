@@ -4,8 +4,7 @@ import {
   type HttpResponseInit,
   type InvocationContext,
 } from '@azure/functions';
-import { backtestEngine } from '../../config/container';
-import { env } from '../../config/env';
+import { createBacktestEngine, engineConfigService } from '../../config/container';
 import { parseBody, parseTickers } from '../../utils/parse.utils';
 
 interface BacktestHttpBody {
@@ -42,7 +41,14 @@ export async function backtest(
     return badRequest('tickers is required');
   }
 
-  const timeframe = body.timeframe ?? env.marketScanTimeframe;
+  const configSnapshot = await engineConfigService.loadSnapshot(context);
+  const config = configSnapshot.values;
+  const timeframe = body.timeframe;
+
+  if (!timeframe) {
+    return badRequest('timeframe is required');
+  }
+
   const from = parseDate(body.from);
   const to = parseDate(body.to);
 
@@ -50,10 +56,10 @@ export async function backtest(
     return badRequest('from and to are required as valid dates');
   }
 
-  const minimumScore = parseNumber(body.minimumScore, env.scoring.telegramNotificationMinScore);
-  const stopLossPercent = parseNumber(body.stopLossPercent, env.tradePlan.stopLossPercent);
-  const takeProfitMinPercent = parseNumber(body.takeProfitMinPercent, env.tradePlan.targetMinPercent);
-  const takeProfitMaxPercent = parseNumber(body.takeProfitMaxPercent, env.tradePlan.targetMaxPercent);
+  const minimumScore = parseNumber(body.minimumScore, config.scoring.telegramNotificationMinScore);
+  const stopLossPercent = parseNumber(body.stopLossPercent, config.tradePlan.stopLossPercent);
+  const takeProfitMinPercent = parseNumber(body.takeProfitMinPercent, config.tradePlan.targetMinPercent);
+  const takeProfitMaxPercent = parseNumber(body.takeProfitMaxPercent, config.tradePlan.targetMaxPercent);
   const includeTrades = parseBoolean(body.includeTrades, false);
 
   context.log(
@@ -61,7 +67,7 @@ export async function backtest(
   );
 
   try {
-    const result = await backtestEngine.run({
+    const result = await createBacktestEngine(config).run({
       tickers,
       timeframe,
       from,

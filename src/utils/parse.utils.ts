@@ -1,6 +1,4 @@
 import type { HttpRequest } from '@azure/functions';
-import { env } from '../config/env';
-
 interface MarketScanHttpBody {
   tickers?: string[] | string;
   timeframe?: string;
@@ -71,17 +69,17 @@ export const parseTimeframes = (
 const isSupportedMarketScanTimeframe = (timeframe: string): timeframe is MarketScanTimeframe =>
   SUPPORTED_MARKET_SCAN_TIMEFRAMES.includes(timeframe as MarketScanTimeframe);
 
-export const parseLimit = (value: number | string | null | undefined): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
+export const parseLimit = (value: number | string | null | undefined): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
     return value;
   }
 
   if (typeof value === 'string') {
     const parsed = Number.parseInt(value, 10);
-    return Number.isNaN(parsed) ? env.marketScanCandleLimit : parsed;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   }
 
-  return env.marketScanCandleLimit;
+  return undefined;
 };
 
 export const parseCapital = (value: number | string | null | undefined): number | undefined => {

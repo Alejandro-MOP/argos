@@ -25,7 +25,6 @@ import type { OpportunityService } from './OpportunityService';
 import type { RankingService } from './RankingService';
 import type { RiskService } from './RiskService';
 import type { SignalContextService } from './SignalContextService';
-import type { WatchlistService } from './WatchlistService';
 import { isPaperStrategyV01Eligible } from './PaperStrategyConfig';
 import { runWithConcurrency } from '../utils/concurrencyPool';
 import { calculateTradePlan, type TradePlanConfig } from '../utils/tradeSizing.utils';
@@ -105,35 +104,35 @@ export interface MarketScanResult {
     attempt?: number;
   }>;
   metrics: MarketScanMetrics;
+  runtimeConfig: EngineRuntimeConfig;
 }
 
 export interface MarketScanExecutorDependencies {
   marketDataService: MarketDataService;
-  watchlistService: WatchlistService;
-  opportunityService: OpportunityService;
+  opportunityService?: OpportunityService;
   rankingService: RankingService;
-  opportunityFilter: OpportunityFilter;
+  opportunityFilter?: OpportunityFilter;
   riskService: RiskService;
   opportunityRepository: OpportunityRepository;
   signalRepository: SignalRepository;
   forwardSignalRepository?: ForwardSignalRepository;
   evidenceSignalRepository?: EvidenceSignalRepository;
-  notificationService: NotificationService;
+  notificationService?: NotificationService;
   signalContextService?: SignalContextService;
-  engineConfigService?: EngineConfigService;
-  marketUniverseService?: MarketUniverseService;
+  engineConfigService: EngineConfigService;
+  marketUniverseService: MarketUniverseService;
   marketSessionService?: MarketSessionService;
   opportunityServiceFactory?: (config: EngineRuntimeConfig) => OpportunityService;
   opportunityFilterFactory?: (config: EngineRuntimeConfig) => OpportunityFilter;
   notificationServiceFactory?: (config: EngineRuntimeConfig) => NotificationService;
   signalContextServiceFactory?: (config: EngineRuntimeConfig) => SignalContextService;
   debug?: boolean;
-  marketDataMaxAgeMinutes: number;
-  marketDataMaxConcurrency: number;
-  marketDataBatchDelayMs: number;
-  marketDataMaxRetries: number;
-  marketDataRetryBaseDelayMs: number;
-  marketDataSequential: boolean;
+  marketDataMaxAgeMinutes?: number;
+  marketDataMaxConcurrency?: number;
+  marketDataBatchDelayMs?: number;
+  marketDataMaxRetries?: number;
+  marketDataRetryBaseDelayMs?: number;
+  marketDataSequential?: boolean;
   tradePlan?: TradePlanConfig;
   strategyVersion?: string;
   defaultTimeframes?: string[];
@@ -407,6 +406,7 @@ export class MarketScanExecutor {
       skipped,
       errors,
       metrics,
+      runtimeConfig: runtimeServices.config,
     };
   }
 
@@ -444,113 +444,49 @@ export class MarketScanExecutor {
   }
 
   private async resolveRuntimeServices(logger: MarketScanLogger): Promise<MarketScanRuntimeServices> {
-    const configSnapshot = this.dependencies.engineConfigService
-      ? await this.dependencies.engineConfigService.loadSnapshot(logger)
-      : { source: 'env-fallback' as const, values: this.buildFallbackRuntimeConfig() };
+    const configSnapshot = await this.dependencies.engineConfigService.loadSnapshot(logger);
     const config = configSnapshot.values;
+    const opportunityService = this.dependencies.opportunityServiceFactory?.(config) ?? this.dependencies.opportunityService;
+    const opportunityFilter = this.dependencies.opportunityFilterFactory?.(config) ?? this.dependencies.opportunityFilter;
+    const notificationService = this.dependencies.notificationServiceFactory?.(config) ?? this.dependencies.notificationService;
+    const signalContextService = this.dependencies.signalContextServiceFactory?.(config) ?? this.dependencies.signalContextService;
+
+    if (!opportunityService) {
+      throw new Error('market-scan-misconfigured: OpportunityService is required');
+    }
+
+    if (!opportunityFilter) {
+      throw new Error('market-scan-misconfigured: OpportunityFilter is required');
+    }
+
+    if (!notificationService) {
+      throw new Error('market-scan-misconfigured: NotificationService is required');
+    }
 
     return {
       config,
-      opportunityService: this.dependencies.opportunityServiceFactory?.(config) ?? this.dependencies.opportunityService,
-      opportunityFilter: this.dependencies.opportunityFilterFactory?.(config) ?? this.dependencies.opportunityFilter,
-      notificationService: this.dependencies.notificationServiceFactory?.(config) ?? this.dependencies.notificationService,
-      signalContextService: this.dependencies.signalContextServiceFactory?.(config) ?? this.dependencies.signalContextService,
-    };
-  }
-
-  private buildFallbackRuntimeConfig(): EngineRuntimeConfig {
-    return {
-      strategyVersion: this.dependencies.strategyVersion ?? 'v1',
-      marketScanCandleLimit: 80,
-      marketDataMaxAgeMinutes: this.dependencies.marketDataMaxAgeMinutes,
-      marketDataRequestDelayMs: 0,
-      marketDataMaxConcurrency: this.dependencies.marketDataMaxConcurrency,
-      marketDataBatchDelayMs: this.dependencies.marketDataBatchDelayMs,
-      marketDataMaxRetries: this.dependencies.marketDataMaxRetries,
-      marketDataRetryBaseDelayMs: this.dependencies.marketDataRetryBaseDelayMs,
-      marketDataSequential: this.dependencies.marketDataSequential,
-      tradePlan: this.dependencies.tradePlan ?? {
-        stopLossPercent: 1,
-        targetMinPercent: 2,
-        targetMaxPercent: 3,
-      },
-      signalIntelligence: {
-        backtestContextEnabled: true,
-        backtestContextMonths: 24,
-        performanceMinSampleSize: 20,
-        forwardTestContextEnabled: true,
-      },
-      telegramNotificationTimeframes: this.dependencies.notificationService.getNotificationTimeframes?.() ?? [
-        '15m',
-        '1d',
-        '1w',
-      ],
-      scoring: {
-        maxAnalyzerScore: 25,
-        opportunityMinScore: this.dependencies.opportunityFilter.getMinimumScore(),
-        telegramNotificationMinScore: this.dependencies.notificationService.getMinimumScore(),
-        duplicateWindowMinutes: 60,
-        emaFastPeriod: 20,
-        emaSlowPeriod: 50,
-        volumeLookbackPeriod: 20,
-        volumeStrongRatio: 1.5,
-        volumeModerateRatio: 1.3,
-        volumeWeakRatio: 1.1,
-        rsiPeriod: 14,
-        rsiIdealMin: 55,
-        rsiIdealMax: 70,
-        rsiNeutralMin: 45,
-        rsiNeutralMax: 55,
-        rsiExtendedMax: 80,
-        structureLookbackPeriod: 20,
-        evidenceMinScore: 80,
-      },
+      opportunityService,
+      opportunityFilter,
+      notificationService,
+      signalContextService,
     };
   }
 
   private async resolveScanCandidates(
     options: MarketScanOptions,
-    config: EngineRuntimeConfig,
+    _config: EngineRuntimeConfig,
     logger: MarketScanLogger,
   ): Promise<MarketScanCandidate[]> {
-    if (this.dependencies.marketUniverseService) {
-      const universeSnapshot = await this.dependencies.marketUniverseService.loadSnapshot(logger);
-      return this.dependencies.marketUniverseService.buildScanCandidates(
-        universeSnapshot,
-        {
-          tickers: options.tickers,
-          timeframe: options.timeframe,
-          timeframes: options.timeframes,
-          fallbackTimeframes: this.resolveFallbackTimeframes(options),
-        },
-        logger,
-      );
-    }
+    const universeSnapshot = await this.dependencies.marketUniverseService.loadSnapshot(logger);
 
-    const tickers = this.resolveTickers(options.tickers);
-    const timeframes = this.resolveTimeframes(options);
-
-    void config;
-
-    return tickers.flatMap((ticker) =>
-      timeframes.map((timeframe) => ({
-        symbol: ticker,
-        providerSymbol: ticker,
-        timeframe,
-        metadata: {
-          symbol: ticker,
-          providerSymbol: ticker,
-          displayName: ticker,
-          assetType: ticker.endsWith('-USD') ? 'CRYPTO' : 'STOCK',
-          market: ticker.endsWith('-USD') ? 'Crypto' : 'US',
-          timezone: ticker.endsWith('-USD') ? 'UTC' : 'America/New_York',
-          sessionType: ticker.endsWith('-USD') ? 'TWENTY_FOUR_SEVEN' : 'US_REGULAR',
-          supportsIntraday: true,
-          isActive: true,
-          timeframes,
-        },
-        source: 'env-fallback' as const,
-      })),
+    return this.dependencies.marketUniverseService.buildScanCandidates(
+      universeSnapshot,
+      {
+        tickers: options.tickers,
+        timeframe: options.timeframe,
+        timeframes: options.timeframes,
+      },
+      logger,
     );
   }
 
@@ -781,14 +717,6 @@ export class MarketScanExecutor {
       });
       return undefined;
     }
-  }
-
-  private resolveTickers(tickers?: string[]): string[] {
-    if (tickers && tickers.length > 0) {
-      return tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean);
-    }
-
-    return this.dependencies.watchlistService.getTickers();
   }
 
   private async scanCandidate(
@@ -1116,25 +1044,6 @@ export class MarketScanExecutor {
 
   private getTelegramNotificationTimeframes(runtimeServices: MarketScanRuntimeServices): string[] {
     return runtimeServices.notificationService.getNotificationTimeframes?.() ?? [];
-  }
-
-  private resolveTimeframes(options: MarketScanOptions): string[] {
-    const configuredTimeframes =
-      options.timeframes && options.timeframes.length > 0
-        ? options.timeframes
-        : [options.timeframe ?? this.dependencies.defaultTimeframes?.[0] ?? '15m'];
-
-    return [...new Set(configuredTimeframes.map((timeframe) => timeframe.trim().toLowerCase()))];
-  }
-
-  private resolveFallbackTimeframes(options: MarketScanOptions): string[] {
-    if (options.timeframes?.length || options.timeframe) {
-      return this.resolveTimeframes(options);
-    }
-
-    return this.dependencies.defaultTimeframes?.length
-      ? this.dependencies.defaultTimeframes
-      : this.resolveTimeframes(options);
   }
 
   private buildSignalKey(ticker: string, timeframe: string): string {

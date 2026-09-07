@@ -590,6 +590,7 @@ export class TelegramControlPresenter {
     const messages: Record<AnalyzeSymbolErrorCode | 'analysis-failed', string> = {
       'invalid-symbol': '⚠️ El símbolo no es válido. Verifica el ticker e intenta nuevamente.',
       'unsupported-timeframe': '⚠️ La temporalidad seleccionada no está soportada para este análisis.',
+      'symbol-not-in-market-universe': `⚠️ ${symbol ?? 'El símbolo'} no está activo en el universo de mercado de ARGOS.`,
       'insufficient-candles': `⚠️ No hay suficientes velas${safeSymbol} para un análisis confiable.`,
       'rate-limit-exceeded': '⚠️ El proveedor de mercado está limitando temporalmente las consultas. Intenta más tarde.',
       'market-data-unavailable': `⚠️ No pude obtener datos${safeSymbol}. Verifica el ticker e intenta nuevamente.`,

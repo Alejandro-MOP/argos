@@ -124,7 +124,6 @@ src/
     RankingService.ts
     RiskService.ts
     StrategyService.ts
-    WatchlistService.ts
   utils/
     marketMath.ts
     parse.utils.ts
@@ -164,7 +163,7 @@ Watchlist
 
 Pasos de `marketScan`:
 
-1. Carga la watchlist configurada.
+1. Carga el universo activo desde `market_symbols` + `symbol_timeframes` en PostgreSQL.
 2. Obtiene velas con `MarketDataService`.
 3. Ejecuta analyzers independientes.
 4. Genera una `Opportunity`.
@@ -172,7 +171,7 @@ Pasos de `marketScan`:
 6. Filtra por score mínimo y duplicados recientes.
 7. Convierte oportunidades válidas en un plan de riesgo con `RiskService`.
 8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE` y su timeframe está dentro de `TELEGRAM_NOTIFICATION_TIMEFRAMES`, la agrega a `notifiedSignals` y puede notificar Telegram. Excepción experimental: `STOCK + 5m + Score100 + strategy_version=v1` puede notificarse para Shadow Paper Trading v0.1 aunque `5m` esté fuera del filtro general.
-9. Persiste oportunidad y señal en memoria cuando corresponde.
+9. Persiste oportunidad, señal y Evidence en PostgreSQL cuando corresponde.
 
 
 ## V1.4-A — Transaction Cost Core
@@ -444,22 +443,22 @@ curl -X POST "http://localhost:7071/api/market-scan" \
 
 Parámetros:
 
-- `tickers`: lista opcional. Si no se manda, usa la watchlist configurada.
-- `timeframe`: opcional. Ejecuta un scan manual de una sola temporalidad. Por defecto usa `MARKET_SCAN_TIMEFRAMES` o fallback a `MARKET_SCAN_TIMEFRAME`.
+- `tickers`: lista opcional. Si no se manda, usa el universo activo de `market_symbols` + `symbol_timeframes` en PostgreSQL.
+- `timeframe`: opcional. Ejecuta un scan manual de una sola temporalidad. Si no viene, ARGOS usa los timeframes activos de `symbol_timeframes` en PostgreSQL.
 - `timeframes`: opcional. Lista o string CSV para ejecutar varias temporalidades en el mismo request. Si viene junto con `timeframe`, `timeframes` tiene prioridad.
-- `limit`: opcional. Por defecto usa `MARKET_SCAN_CANDLE_LIMIT`.
+- `limit`: opcional. Si no viene, ARGOS usa `MARKET_SCAN_CANDLE_LIMIT` desde `engine_config`.
 - `notify`: opcional. Por defecto `true`.
 - `capital`: opcional. Monto disponible para calcular pérdida estimada y ganancia estimada por oportunidad.
-- `opportunityMinScore`: opcional. Override solo para ese request; si no viene, usa `OPPORTUNITY_MIN_SCORE`.
-- `telegramNotificationMinScore`: opcional. Override solo para ese request; si no viene, usa `TELEGRAM_NOTIFICATION_MIN_SCORE`.
+- `opportunityMinScore`: opcional. Override solo para ese request; si no viene, usa `OPPORTUNITY_MIN_SCORE` desde `engine_config`.
+- `telegramNotificationMinScore`: opcional. Override solo para ese request; si no viene, usa `TELEGRAM_NOTIFICATION_MIN_SCORE` desde `engine_config`.
 
 También se aceptan los nombres equivalentes `OPPORTUNITY_MIN_SCORE` y
 `TELEGRAM_NOTIFICATION_MIN_SCORE` dentro del body o query string, útil si quieres copiar exactamente
-el nombre de la variable de entorno.
+el nombre de la configuración funcional.
 
 La respuesta HTTP incluye `opportunityType` en `opportunities` y `notifiedSignals` para interpretar
 el horizonte práctico de la señal según el `timeframe` solicitado. También incluye un `tradePlan`
-porcentual basado en el `entry` y en las variables `TRADE_*`. Si envías `capital`, el trade plan
+porcentual basado en el `entry` y en los parámetros `TRADE_*` guardados en `engine_config`. Si envías `capital`, el trade plan
 agrega pérdida/ganancia estimada y capital final esperado. `notifiedSignals` conserva su significado:
 solo señales que pasan el threshold de Telegram.
 
@@ -565,7 +564,7 @@ O:
 analiza SPY,QQQ
 ```
 
-Si el mensaje no trae tickers, se ejecuta con la watchlist configurada.
+Si el mensaje no trae tickers, se ejecuta con el universo activo configurado en PostgreSQL.
 
 ## ARGOS Engine — Opportunity Detection
 
@@ -679,21 +678,19 @@ En el endpoint manual `POST /api/market-scan`, ambos thresholds pueden sobreescr
 con `opportunityMinScore` y `telegramNotificationMinScore`. Ese override no cambia las variables de
 entorno ni afecta ejecuciones posteriores.
 
-Por defecto:
+Valores funcionales actuales sembrados en `engine_config`:
 
 ```text
 EVIDENCE_MIN_SCORE=80
-OPPORTUNITY_MIN_SCORE=50
-TELEGRAM_NOTIFICATION_MIN_SCORE=80
-TELEGRAM_NOTIFICATION_TIMEFRAMES=15m,1d,1w
+OPPORTUNITY_MIN_SCORE=90
+TELEGRAM_NOTIFICATION_MIN_SCORE=100
+TELEGRAM_NOTIFICATION_TIMEFRAMES=5m,15m
 TRADE_STOP_LOSS_PERCENT=1
 TRADE_TARGET_MIN_PERCENT=2
-TRADE_TARGET_MAX_PERCENT=3
+TRADE_TARGET_MAX_PERCENT=5
 BACKTEST_CONTEXT_ENABLED=true
 BACKTEST_CONTEXT_MONTHS=24
 PERFORMANCE_MIN_SAMPLE_SIZE=20
-FORWARD_TEST_CONTEXT_ENABLED=true
-FORWARD_SIGNAL_EVALUATION_SCHEDULE=0 0 * * * *
 OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
 ```
 
@@ -920,238 +917,39 @@ ORDER BY sample_size DESC;
 
 ## Market scan multi-timeframe
 
-El scan vivo puede recopilar evidencia real de varias temporalidades en paralelo lógico sin mezclar
-candles ni scores entre ellas. La configuración nueva es:
+El scan vivo recopila evidencia real de varias temporalidades en paralelo lógico sin mezclar candles ni scores entre ellas.
+
+La lista de timeframes activos ya no vive en variables de entorno. Se administra por símbolo en PostgreSQL:
 
 ```text
-MARKET_SCAN_TIMEFRAMES=1m,5m,15m,1d,1w
+market_signal_engine.symbol_timeframes
 ```
 
-Compatibilidad:
-
-- si `MARKET_SCAN_TIMEFRAMES` existe, se usa esa lista;
-- si no existe, se usa `MARKET_SCAN_TIMEFRAME` como antes;
-- `MARKET_SCAN_TIMEFRAME` no se elimina para no romper configuraciones existentes.
-
-Cada combinación `ticker + timeframe` se evalúa de forma independiente:
+Cada combinación `symbol + timeframe` se evalúa de forma independiente:
 
 ```text
 NVDA 1m
 NVDA 5m
 NVDA 15m
+NVDA 1h
 NVDA 1d
 NVDA 1w
 ```
 
-La deduplicación y persistencia siguen separadas por `ticker + timeframe`, por lo que `NVDA 1m` y
-`NVDA 15m` pueden producir oportunidades/señales distintas. El response HTTP conserva
-`scannedTickers` y agrega `scanned`:
+La deduplicación y persistencia siguen separadas por `ticker + timeframe + signal_candle_timestamp + strategy_version`, por lo que `NVDA 5m` y `NVDA 15m` pueden producir oportunidades/señales distintas.
 
-```json
-{
-  "scannedTickers": ["NVDA"],
-  "scanned": [
-    { "ticker": "NVDA", "timeframe": "1m" },
-    { "ticker": "NVDA", "timeframe": "15m" }
-  ],
-  "timeframes": ["1m", "15m"]
-}
-```
+## Watchlists / Universo de mercado
 
-Para proteger Yahoo Finance sin volver lentísimo el escaneo, el modo recomendado ahora es un pool de
-concurrencia controlada:
+El universo operacional ya no se toma de `MARKET_SCAN_TICKERS` ni de `MARKET_SCAN_WATCHLIST`.
+
+La fuente única de verdad es PostgreSQL:
 
 ```text
-MARKET_DATA_MAX_CONCURRENCY=5
-MARKET_DATA_BATCH_DELAY_MS=250
-MARKET_DATA_MAX_RETRIES=3
-MARKET_DATA_RETRY_BASE_DELAY_MS=1000
+market_signal_engine.market_symbols
+market_signal_engine.symbol_timeframes
 ```
 
-Con ese modo, ARGOS Engine no dispara toda la matriz `ticker × timeframe` al mismo tiempo. Procesa hasta
-`MARKET_DATA_MAX_CONCURRENCY` requests de datos de mercado en paralelo, aplica una pausa opcional entre
-jobs del pool con `MARKET_DATA_BATCH_DELAY_MS`, y reintenta solo errores recuperables con exponential
-backoff. Las combinaciones fuera de sesión se marcan como `market-closed` antes de llamar Yahoo, así que
-no consumen requests reales.
-
-`MARKET_DATA_SEQUENTIAL` y `MARKET_DATA_REQUEST_DELAY_MS` quedan deprecadas desde V1.1.1. Se conservan
-solo por compatibilidad/fallback, pero el escaneo vivo usa el pool controlado.
-
-## RiskService
-
-`RiskService` convierte una `Opportunity` en `Signal`.
-
-```text
-Opportunity
-  -> RiskService
-  -> Signal
-```
-
-Reglas actuales:
-
-- `entry = close` de la última vela.
-- `stop = low` de la última vela; este valor se conserva como `technicalStop`.
-- `target` técnico todavía se calcula internamente para compatibilidad, pero ya no es el objetivo
-  principal mostrado al usuario.
-- Los targets principales del `tradePlan` vienen de `TRADE_TARGET_MIN_PERCENT` y
-  `TRADE_TARGET_MAX_PERCENT`.
-
-Las estrategias y analyzers no crean `Signal` directamente. El score responde “qué tan bueno se ve
-el setup técnico”; el `tradePlan` responde “qué pasa con mi capital si el precio cae/sube ciertos
-porcentajes”.
-
-## Configuración dinámica y universo de mercado
-
-ARGOS ya no depende únicamente de variables de entorno para decidir qué analizar ni con qué
-parámetros funcionales operar. Cuando `DATABASE_URL` está configurado y las migraciones fueron
-ejecutadas, PostgreSQL se vuelve la fuente primaria para:
-
-- configuración funcional de ARGOS Engine en `market_signal_engine.engine_config`;
-- catálogo de símbolos en `market_signal_engine.market_symbols`;
-- timeframes activos por símbolo en `market_signal_engine.symbol_timeframes`;
-- versión funcional de estrategia mediante `ENGINE_STRATEGY_VERSION` / `engine_config`.
-
-Las variables de entorno siguen existiendo como fallback y bootstrap. La separación queda así:
-
-| Fuente     | Responsabilidad                                                                          |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| ENV        | Secretos, infraestructura, schedules y fallback local.                                   |
-| PostgreSQL | Configuración funcional, universo de mercado, símbolos activos y timeframes por símbolo. |
-
-No se guardan secretos en PostgreSQL. `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `DATABASE_URL`,
-`AzureWebJobsStorage` y `FUNCTIONS_WORKER_RUNTIME` permanecen en variables de entorno.
-
-Al inicio de cada scan el flujo conceptual es:
-
-```text
-scan starts
-  -> load ARGOS Engine config snapshot
-  -> load market universe snapshot
-  -> build symbol/timeframe matrix
-  -> skip market-closed combinations
-  -> call Yahoo only when it makes sense
-  -> analyze opportunities
-```
-
-El snapshot de configuración de ARGOS Engine se carga una sola vez por ejecución; no se consulta `engine_config` por
-ticker. Lo mismo aplica al universo de mercado.
-
-### `engine_config`
-
-Cada fila tiene una descripción humana para poder entenderla desde DBeaver sin abrir el código:
-
-```sql
-SELECT key, value, value_type, category, description
-FROM market_signal_engine.engine_config
-WHERE is_active = true
-ORDER BY category, key;
-```
-
-Ejemplo para cambiar el score mínimo de oportunidades:
-
-```sql
-UPDATE market_signal_engine.engine_config
-SET value = '85', updated_at = now()
-WHERE key = 'OPPORTUNITY_MIN_SCORE';
-```
-
-### Universo de mercado
-
-`market_symbols` guarda el ticker lógico de ARGOS Engine y `provider_symbol` guarda el símbolo que se manda
-al proveedor de datos. Por ahora Yahoo es el proveedor principal y normalmente ambos valores son iguales,
-pero el diseño ya permite desacoplarlos.
-
-Ejemplo:
-
-```sql
-SELECT symbol, provider_symbol, asset_type, sector, industry, market, exchange, session_type
-FROM market_signal_engine.market_symbols
-WHERE is_active = true
-ORDER BY symbol;
-```
-
-Para activar o desactivar un símbolo:
-
-```sql
-UPDATE market_signal_engine.market_symbols
-SET is_active = false, updated_at = now()
-WHERE symbol = 'NVDA';
-```
-
-Para activar o desactivar un timeframe específico:
-
-```sql
-UPDATE market_signal_engine.symbol_timeframes timeframe
-SET is_active = false, updated_at = now()
-FROM market_signal_engine.market_symbols symbol
-WHERE timeframe.symbol_id = symbol.id
-  AND symbol.symbol = 'KO'
-  AND timeframe.timeframe = '1m';
-```
-
-### Expansión del universo V1.6-A
-
-V1.6-A amplía el universo operativo a un rango objetivo de 90-110 símbolos activos, manteniendo
-el universo anterior y agregando segmentos que antes estaban subrepresentados: Broad Market ETFs,
-sector ETFs, semiconductores, tasas/bonos, utilities, real estate/REITs y metales.
-
-Esta etapa es **data-only**: no cambia scoring, analyzers, Evidence, Strategy Profiles, Telegram ni
-RiskService. El objetivo es que ARGOS tenga mejor cobertura y pueda observar más contextos de mercado
-sin alterar la metodología de decisión.
-
-Los nuevos símbolos fueron validados contra Yahoo Finance antes de insertarse. Si un `provider_symbol`
-no responde correctamente, no debe entrar al catálogo. La metadata debe mantenerse conservadora: si
-un dato no es confiable, se deja `NULL` en vez de inventarlo.
-
-Más detalle: [`docs/MARKET_UNIVERSE.md`](docs/MARKET_UNIVERSE.md).
-
-### Market hours awareness
-
-ARGOS Engine separa `market-closed` de `stale-market-data`:
-
-- `STOCK`/`ETF` con `session_type=US_REGULAR` en `1m`, `5m`, `15m`, `30m` o `1h` solo consultan Yahoo
-  durante sesión regular de Estados Unidos: lunes a viernes, 09:30-16:00, `America/New_York`.
-- `STOCK`/`ETF` en `1d` o `1w` sí pueden analizarse fuera de sesión usando la última vela cerrada.
-- `CRYPTO` con `session_type=TWENTY_FOUR_SEVEN` puede analizarse 24/7; si la última vela intradía está
-  vieja, seguirá apareciendo como `stale-market-data`.
-
-Limitación actual: todavía no hay calendario bursátil completo para feriados, early close, pre-market o
-after-hours. La arquitectura queda preparada para agregar un `MarketCalendarProvider` más adelante.
-
-### Strategy version
-
-Las señales reales y oportunidades se etiquetan con `strategy_version`. Esto permite distinguir señales
-históricas generadas con reglas anteriores de señales futuras cuando cambien scoring, TP/SL u otros
-parámetros.
-
-Registros previos a esta migración quedan con `legacy` por compatibilidad. Las nuevas señales usan el
-valor activo de `ENGINE_STRATEGY_VERSION`, actualmente `v1`.
-
-Próxima evolución documentada: además de `strategy_version`, guardar un `config_version` o
-`config_snapshot` completo por señal para auditoría exacta.
-
-## Watchlists
-
-Watchlists disponibles:
-
-- `etfs`: VOO, XLP, XLV, VGT, SPY, QQQ
-- `growth`: NVDA, AMD, META, TSLA, NFLX, MSFT
-- `dividends`: KO, PG, PEP, JNJ, MCD
-- `custom`: usa `MARKET_SCAN_TICKERS`
-
-Configuración:
-
-```text
-MARKET_SCAN_WATCHLIST=etfs
-MARKET_SCAN_DEBUG=false
-```
-
-Para una lista personalizada:
-
-```text
-MARKET_SCAN_WATCHLIST=custom
-MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
-```
+Para agregar, desactivar o segmentar activos se debe modificar la BD mediante migraciones o SQL controlado. Si un ticker manual no existe activo en `market_symbols`, ARGOS lo rechaza con error explícito en lugar de construir metadata fallback.
 
 ## Market Data
 
@@ -1250,7 +1048,7 @@ existe, intento y mensaje resumido.
 ## PostgreSQL local y migraciones
 
 Fase 2 agrega persistencia opcional para construir el dataset de Forward Testing real. El proyecto
-sigue funcionando sin PostgreSQL: si `DATABASE_URL` está vacío, usa repositorios en memoria y no bloquea
+requiere PostgreSQL para configuración funcional y universo operacional. Los repositorios en memoria se reservan para pruebas unitarias aisladas y no son fallback runtime.
 Telegram.
 
 Para levantar PostgreSQL local con Docker:
@@ -1539,7 +1337,7 @@ wins / (wins + losses) * 100
 ```
 
 No se incluyen `EXPIRED` ni `AMBIGUOUS` como wins/losses. Si hay menos casos que
-`PERFORMANCE_MIN_SAMPLE_SIZE`, la alerta muestra `⚠️ Muestra pequeña`. Si Yahoo o el backtest no
+`PERFORMANCE_MIN_SAMPLE_SIZE` desde `engine_config`, la alerta muestra `⚠️ Muestra pequeña`. Si Yahoo o el backtest no
 tienen datos suficientes, muestra `Datos históricos insuficientes` y no inventa estadísticas.
 
 ### 3. Forward Test
@@ -1661,7 +1459,7 @@ https://api.telegram.org/bot<TELEGRAM_ALERTS_BOT_TOKEN>/getUpdates
 }
 ```
 
-Compatibilidad: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `TELEGRAM_ENABLED` siguen funcionando como fallback del Alerts Bot. Las variables `TELEGRAM_ALERTS_*` tienen precedencia si existen. `TELEGRAM_NOTIFICATION_MIN_SCORE` define el score mínimo para entrar a `notifiedSignals` y enviar Telegram cuando `notify=true`. `TELEGRAM_NOTIFICATION_TIMEFRAMES` limita la capa de alertas; por default temporal `1m` y `5m` siguen analizándose y generando Evidence, pero no se envían al Alerts Bot.
+Compatibilidad: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `TELEGRAM_ENABLED` siguen funcionando como fallback únicamente de secretos/configuración del Alerts Bot. `TELEGRAM_NOTIFICATION_MIN_SCORE` y `TELEGRAM_NOTIFICATION_TIMEFRAMES` ya no se leen de ENV para el motor; viven en `engine_config`.
 
 El Control Bot autoriza por `user_id` de Telegram: identifica la cuenta del usuario. `chat_id` identifica una conversación/chat y sólo se usa como destino de respuesta. Si `TELEGRAM_CONTROL_ALLOWED_USER_IDS` está vacío, el worker puede arrancar, pero todos los usuarios serán rechazados con `Unauthorized.`. No documentes IDs reales ni tokens.
 
@@ -1934,7 +1732,7 @@ npm start
 
 `npm start` usa `func start`, por lo que necesitas Azure Functions Core Tools v4 instalado.
 
-Variables principales:
+Variables locales principales:
 
 ```text
 DATABASE_URL=
@@ -1942,97 +1740,51 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 TELEGRAM_ENABLED=true
 MARKET_SCAN_SCHEDULE=0 */15 14-21 * * 1-5
-MARKET_SCAN_WATCHLIST=custom
-MARKET_SCAN_TICKERS=SPY,QQQ,AAPL,MSFT,NVDA
-MARKET_SCAN_TIMEFRAME=15m
-MARKET_SCAN_TIMEFRAMES=1m,5m,15m,1d,1w
-MARKET_SCAN_CANDLE_LIMIT=80
-MARKET_DATA_MAX_AGE_MINUTES=30
-MARKET_DATA_MAX_CONCURRENCY=5
-MARKET_DATA_BATCH_DELAY_MS=250
-MARKET_DATA_MAX_RETRIES=3
-MARKET_DATA_RETRY_BASE_DELAY_MS=1000
-MARKET_DATA_REQUEST_DELAY_MS=13000 # deprecated
-MARKET_DATA_SEQUENTIAL=true # deprecated
-OPPORTUNITY_MIN_SCORE=50
-TELEGRAM_NOTIFICATION_MIN_SCORE=80
-EVIDENCE_MIN_SCORE=80
-TRADE_STOP_LOSS_PERCENT=1
-TRADE_TARGET_MIN_PERCENT=2
-TRADE_TARGET_MAX_PERCENT=3
-BACKTEST_CONTEXT_ENABLED=true
-BACKTEST_CONTEXT_MONTHS=24
-PERFORMANCE_MIN_SAMPLE_SIZE=20
 FORWARD_TEST_CONTEXT_ENABLED=true
 FORWARD_SIGNAL_EVALUATION_SCHEDULE=0 0 * * * *
-OPPORTUNITY_DUPLICATE_WINDOW_MINUTES=60
+```
+
+La configuración funcional del motor ya no vive en variables de entorno.
+Umbrales, timeframes, límites de velas, parámetros de scoring, trade plan,
+Evidence y contexto de inteligencia se leen exclusivamente desde PostgreSQL:
+
+```text
+market_signal_engine.engine_config
+market_signal_engine.market_symbols
+market_signal_engine.symbol_timeframes
 ```
 
 ### Variables De Entorno
 
-| Variable                               | Descripción corta                                                                                         |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `AzureWebJobsStorage`                  | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`.          |
-| `FUNCTIONS_WORKER_RUNTIME`             | Runtime de Azure Functions. Debe ser `node`.                                                              |
-| `DATABASE_URL`                         | URL de PostgreSQL para persistir señales reales y evaluaciones forward.                                   |
-| `DATABASE_BACKUP_ENABLED`              | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                                   |
-| `DATABASE_BACKUP_SCHEDULE`             | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                                    |
-| `DATABASE_BACKUP_BASE_PATH`            | Directorio base donde se escriben snapshots locales; default `./backups`.                                 |
-| `DATABASE_BACKUP_TIMEZONE`             | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                                 |
-| `DATABASE_PG_DUMP_BIN`                 | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.                           |
-| `DATABASE_PG_RESTORE_BIN`              | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.                  |
-| `DATABASE_PSQL_BIN`                    | Binario de `psql` usado para registrar versión de tooling en el manifest.                                 |
-| `TELEGRAM_BOT_TOKEN`                   | Token del bot de Telegram creado con BotFather. No debe subirse a git.                                    |
-| `TELEGRAM_CHAT_ID`                     | Chat o usuario destino para recibir notificaciones de Telegram.                                           |
-| `TELEGRAM_ENABLED`                     | Legacy fallback para activar/desactivar Alerts Bot si `TELEGRAM_ALERTS_ENABLED` no existe.                |
-| `TELEGRAM_ALERTS_BOT_TOKEN`            | Token explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_BOT_TOKEN`.                             |
-| `TELEGRAM_ALERTS_CHAT_ID`              | Chat destino explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_CHAT_ID`.                        |
-| `TELEGRAM_ALERTS_ENABLED`              | Activa/desactiva explícitamente el Alerts Bot; tiene precedencia sobre `TELEGRAM_ENABLED`.                |
-| `TELEGRAM_CONTROL_BOT_TOKEN`           | Token del Control Bot usado por el worker `npm run telegram:control`. No debe subirse a git.              |
-| `TELEGRAM_CONTROL_ENABLED`             | Habilita/deshabilita el Control Bot Long Polling Worker; default `false`.                                 |
-| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`    | Lista CSV de `user_id` autorizados para usar Control Bot. Si está vacía, todos quedan denegados.          |
-| `MARKET_SCAN_SCHEDULE`                 | Cron del Timer Trigger `marketScan`.                                                                      |
-| `MARKET_SCAN_TIMEFRAMES`               | Lista CSV de temporalidades para el scan vivo; si no existe, se usa `MARKET_SCAN_TIMEFRAME`.              |
-| `FORWARD_SIGNAL_EVALUATION_SCHEDULE`   | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.                      |
-| `MARKET_SCAN_TICKERS`                  | Tickers usados cuando `MARKET_SCAN_WATCHLIST=custom`.                                                     |
-| `MARKET_SCAN_TIMEFRAME`                | Temporalidad por defecto para pedir velas, por ejemplo `15m`.                                             |
-| `MARKET_SCAN_CANDLE_LIMIT`             | Número de velas útiles que ARGOS Engine espera analizar por ticker.                                       |
-| `MARKET_SCAN_WATCHLIST`                | Watchlist a usar: `custom`, `etfs`, `growth` o `dividends`.                                               |
-| `MARKET_SCAN_DEBUG`                    | Habilita logs debug seguros de escaneo y datos de mercado.                                                |
-| `MARKET_DATA_MAX_AGE_MINUTES`          | Edad máxima permitida para la última vela en timeframes intradía.                                         |
-| `MARKET_DATA_MAX_CONCURRENCY`          | Máximo de requests simultáneos al proveedor de datos durante el market scan.                              |
-| `MARKET_DATA_BATCH_DELAY_MS`           | Pausa opcional entre jobs del pool; `0` la desactiva.                                                     |
-| `MARKET_DATA_MAX_RETRIES`              | Número máximo de reintentos para errores recuperables del proveedor.                                      |
-| `MARKET_DATA_RETRY_BASE_DELAY_MS`      | Delay base para exponential backoff de rate limit, 5xx y timeouts.                                        |
-| `MARKET_DATA_REQUEST_DELAY_MS`         | Deprecated: delay secuencial antiguo, conservado solo por compatibilidad.                                 |
-| `MARKET_DATA_SEQUENTIAL`               | Deprecated: modo secuencial antiguo, conservado solo por compatibilidad.                                  |
-| `ENGINE_STRATEGY_VERSION`              | Versión funcional usada para etiquetar señales nuevas; si PostgreSQL está activo vive en `engine_config`. |
-| `OPPORTUNITY_MIN_SCORE`                | Score mínimo para considerar válida una oportunidad.                                                      |
-| `TELEGRAM_NOTIFICATION_MIN_SCORE`      | Score mínimo para incluir una señal en `notifiedSignals` y enviar Telegram si `notify=true`.              |
-| `TELEGRAM_NOTIFICATION_TIMEFRAMES`      | Lista CSV de temporalidades notificables por Alerts Bot; default temporal `15m,1d,1w`. `1m` y `5m` siguen en Evidence/Research. |
-| `EVIDENCE_MIN_SCORE`                   | Score mínimo para capturar Evidence de investigación sin cambiar thresholds operativos.                   |
-| `TRADE_STOP_LOSS_PERCENT`              | Caída porcentual desde entry usada para calcular stop financiero y pérdida estimada.                      |
-| `TRADE_TARGET_MIN_PERCENT`             | Primer escenario de take profit porcentual sobre entry.                                                   |
-| `TRADE_TARGET_MAX_PERCENT`             | Segundo escenario de take profit; debe ser mayor que `TRADE_TARGET_MIN_PERCENT`.                          |
-| `BACKTEST_CONTEXT_ENABLED`             | Activa/desactiva la sección `📊 BACKTEST` en alertas Telegram.                                            |
-| `BACKTEST_CONTEXT_MONTHS`              | Meses de historia usados para buscar setups comparables en el contexto histórico.                         |
-| `PERFORMANCE_MIN_SAMPLE_SIZE`          | Muestra mínima esperada antes de advertir `⚠️ Muestra pequeña`.                                           |
-| `FORWARD_TEST_CONTEXT_ENABLED`         | Activa/desactiva la sección `🧪 FORWARD TEST` en el mensaje enriquecido.                                  |
-| `OPPORTUNITY_DUPLICATE_WINDOW_MINUTES` | Ventana para evitar duplicados por ticker/timeframe.                                                      |
-| `SCORING_MAX_ANALYZER_SCORE`           | Score máximo esperado por analyzer.                                                                       |
-| `TREND_EMA_FAST_PERIOD`                | Periodo de EMA rápida para `TrendAnalyzer`.                                                               |
-| `TREND_EMA_SLOW_PERIOD`                | Periodo de EMA lenta para `TrendAnalyzer`.                                                                |
-| `VOLUME_LOOKBACK_PERIOD`               | Velas usadas para calcular volumen promedio.                                                              |
-| `VOLUME_STRONG_RATIO`                  | Ratio de volumen para score fuerte.                                                                       |
-| `VOLUME_MODERATE_RATIO`                | Ratio de volumen para score moderado.                                                                     |
-| `VOLUME_WEAK_RATIO`                    | Ratio de volumen para score débil.                                                                        |
-| `MOMENTUM_RSI_PERIOD`                  | Periodo RSI usado por `MomentumAnalyzer`.                                                                 |
-| `MOMENTUM_RSI_IDEAL_MIN`               | Límite inferior del rango RSI ideal.                                                                      |
-| `MOMENTUM_RSI_IDEAL_MAX`               | Límite superior del rango RSI ideal.                                                                      |
-| `MOMENTUM_RSI_NEUTRAL_MIN`             | Límite inferior del rango RSI neutral.                                                                    |
-| `MOMENTUM_RSI_NEUTRAL_MAX`             | Límite superior del rango RSI neutral.                                                                    |
-| `MOMENTUM_RSI_EXTENDED_MAX`            | Máximo RSI considerado extendido pero todavía puntuable.                                                  |
-| `STRUCTURE_LOOKBACK_PERIOD`            | Velas usadas para evaluar estructura/breakout.                                                            |
+| Variable                             | Descripción corta                                                                            |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `AzureWebJobsStorage`                | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
+| `FUNCTIONS_WORKER_RUNTIME`           | Runtime de Azure Functions. Debe ser `node`.                                                 |
+| `DATABASE_URL`                       | URL de PostgreSQL. Es obligatoria para leer configuración funcional, universo y persistencia. |
+| `DATABASE_BACKUP_ENABLED`            | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                      |
+| `DATABASE_BACKUP_SCHEDULE`           | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                      |
+| `DATABASE_BACKUP_BASE_PATH`          | Directorio base donde se escriben snapshots locales; default `./backups`.                    |
+| `DATABASE_BACKUP_TIMEZONE`           | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                  |
+| `DATABASE_PG_DUMP_BIN`               | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.              |
+| `DATABASE_PG_RESTORE_BIN`            | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.     |
+| `DATABASE_PSQL_BIN`                  | Binario de `psql` usado para registrar versión de tooling en el manifest.                    |
+| `TELEGRAM_BOT_TOKEN`                 | Token legacy del Alerts Bot. No debe subirse a git.                                           |
+| `TELEGRAM_CHAT_ID`                   | Chat destino legacy del Alerts Bot.                                                           |
+| `TELEGRAM_ENABLED`                   | Legacy fallback para activar/desactivar Alerts Bot si `TELEGRAM_ALERTS_ENABLED` no existe.   |
+| `TELEGRAM_ALERTS_BOT_TOKEN`          | Token explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_BOT_TOKEN`.                |
+| `TELEGRAM_ALERTS_CHAT_ID`            | Chat destino explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_CHAT_ID`.           |
+| `TELEGRAM_ALERTS_ENABLED`            | Activa/desactiva explícitamente el Alerts Bot; tiene precedencia sobre `TELEGRAM_ENABLED`.   |
+| `TELEGRAM_CONTROL_BOT_TOKEN`         | Token del Control Bot usado por el worker `npm run telegram:control`. No debe subirse a git. |
+| `TELEGRAM_CONTROL_ENABLED`           | Habilita/deshabilita el Control Bot Long Polling Worker; default `false`.                    |
+| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`  | Lista CSV de `user_id` autorizados para usar Control Bot.                                   |
+| `MARKET_SCAN_SCHEDULE`               | Cron del Timer Trigger `marketScan`.                                                        |
+| `FORWARD_SIGNAL_EVALUATION_SCHEDULE` | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.      |
+| `MARKET_SCAN_DEBUG`                  | Habilita logs debug seguros de escaneo y datos de mercado.                                    |
+
+Los valores como `OPPORTUNITY_MIN_SCORE`, `TELEGRAM_NOTIFICATION_MIN_SCORE`,
+`TELEGRAM_NOTIFICATION_TIMEFRAMES`, `MARKET_SCAN_CANDLE_LIMIT`,
+`EVIDENCE_MIN_SCORE`, parámetros `TRADE_*`, scoring, performance y retry de
+market data pertenecen a `engine_config`, no a `local.settings.json`.
 
 ## Scripts
 
@@ -2064,3 +1816,38 @@ class VolatilityAnalyzer implements Analyzer {
 Para reglas discretas todavía existe `TradingStrategy`, pero el camino recomendado es crear analyzers independientes y combinarlos en una oportunidad rankeable.
 
 Esto mantiene el sistema extensible: puedes agregar momentum, volatilidad, fuerza relativa, short interest, earnings proximity o breadth sin reescribir el pipeline.
+
+
+## Configuración funcional desde PostgreSQL
+
+ARGOS usa PostgreSQL como fuente única de verdad para la configuración funcional del motor. Los valores se consultan desde `market_signal_engine.engine_config` y cada fila incluye descripción, categoría, tipo y estado activo.
+
+Ejemplo para consultar la configuración activa:
+
+```sql
+SELECT key, value, value_type, category, description
+FROM market_signal_engine.engine_config
+WHERE is_active = true
+ORDER BY category, key;
+```
+
+Ejemplo para ajustar alertas sin tocar `local.settings.json`:
+
+```sql
+UPDATE market_signal_engine.engine_config
+SET value = '100', updated_at = now()
+WHERE key = 'TELEGRAM_NOTIFICATION_MIN_SCORE';
+
+UPDATE market_signal_engine.engine_config
+SET value = '5m,15m', updated_at = now()
+WHERE key = 'TELEGRAM_NOTIFICATION_TIMEFRAMES';
+```
+
+El universo operacional se administra en:
+
+```text
+market_signal_engine.market_symbols
+market_signal_engine.symbol_timeframes
+```
+
+`local.settings.json` queda reservado para secretos, conexión a PostgreSQL, schedules de Azure Functions y parámetros de infraestructura local. Si PostgreSQL no está disponible o falta configuración activa requerida, ARGOS falla explícitamente en lugar de usar ENV como fallback.

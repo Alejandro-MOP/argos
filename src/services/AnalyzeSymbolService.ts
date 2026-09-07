@@ -1,4 +1,5 @@
 import type { Candle } from '../models/Candle';
+import type { EngineRuntimeConfig } from '../models/EngineConfig';
 import type { AssetType, MarketScanCandidate } from '../models/MarketSymbol';
 import type { Opportunity } from '../models/Opportunity';
 import {
@@ -8,15 +9,17 @@ import {
 } from '../errors/MarketDataErrors';
 import type { MarketDataService } from './MarketDataService';
 import type { MarketUniverseService } from './MarketUniverseService';
+import type { EngineConfigService } from './EngineConfigService';
 import type { OpportunityService } from './OpportunityService';
 
 const MINIMUM_ANALYSIS_CANDLES = 60;
-export const SUPPORTED_ANALYZE_SYMBOL_TIMEFRAMES = ['1m', '5m', '15m', '1d', '1w'] as const;
+export const SUPPORTED_ANALYZE_SYMBOL_TIMEFRAMES = ['1m', '5m', '15m', '1h', '1d', '1w'] as const;
 
 export type AnalyzeSymbolTimeframe = (typeof SUPPORTED_ANALYZE_SYMBOL_TIMEFRAMES)[number];
 export type AnalyzeSymbolErrorCode =
   | 'invalid-symbol'
   | 'unsupported-timeframe'
+  | 'symbol-not-in-market-universe'
   | 'insufficient-candles'
   | 'rate-limit-exceeded'
   | 'market-data-unavailable'
@@ -47,10 +50,9 @@ export interface AnalyzeSymbolResult {
 
 export interface AnalyzeSymbolServiceDependencies {
   marketDataService: Pick<MarketDataService, 'getCandles'>;
-  opportunityService: Pick<OpportunityService, 'analyze'>;
-  marketUniverseService?: Pick<MarketUniverseService, 'loadSnapshot' | 'buildScanCandidates'>;
-  candleLimit: number;
-  operationalThreshold: number;
+  engineConfigService: Pick<EngineConfigService, 'loadSnapshot'>;
+  opportunityServiceFactory: (config: EngineRuntimeConfig) => Pick<OpportunityService, 'analyze'>;
+  marketUniverseService: Pick<MarketUniverseService, 'loadSnapshot' | 'buildScanCandidates'>;
 }
 
 export class AnalyzeSymbolService {
@@ -59,13 +61,16 @@ export class AnalyzeSymbolService {
   public async analyze(request: AnalyzeSymbolRequest): Promise<AnalyzeSymbolResult> {
     const symbol = normalizeAnalyzeSymbol(request.symbol);
     const timeframe = normalizeAnalyzeTimeframe(request.timeframe);
+    const configSnapshot = await this.dependencies.engineConfigService.loadSnapshot();
+    const config = configSnapshot.values;
+    const opportunityService = this.dependencies.opportunityServiceFactory(config);
     const candidate = await this.resolveCandidate(symbol, timeframe);
 
     try {
       const candles = await this.dependencies.marketDataService.getCandles(
         candidate.providerSymbol,
         timeframe,
-        this.dependencies.candleLimit,
+        config.marketScanCandleLimit,
       );
 
       if (candles.length < MINIMUM_ANALYSIS_CANDLES) {
@@ -84,7 +89,7 @@ export class AnalyzeSymbolService {
         );
       }
 
-      const opportunity = this.dependencies.opportunityService.analyze(
+      const opportunity = opportunityService.analyze(
         candidate.symbol,
         timeframe,
         candles,
@@ -95,7 +100,7 @@ export class AnalyzeSymbolService {
         latestCandle,
         candlesReturned: candles.length,
         candidate,
-        operationalThreshold: this.dependencies.operationalThreshold,
+        operationalThreshold: config.scoring.opportunityMinScore,
       });
     } catch (error) {
       if (error instanceof AnalyzeSymbolServiceError) {
@@ -107,18 +112,35 @@ export class AnalyzeSymbolService {
   }
 
   private async resolveCandidate(symbol: string, timeframe: AnalyzeSymbolTimeframe): Promise<MarketScanCandidate> {
-    if (!this.dependencies.marketUniverseService) {
-      return buildManualFallbackCandidate(symbol, timeframe);
+    try {
+      const snapshot = await this.dependencies.marketUniverseService.loadSnapshot();
+      const [candidate] = this.dependencies.marketUniverseService.buildScanCandidates(snapshot, {
+        tickers: [symbol],
+        timeframes: [timeframe],
+      });
+
+      if (!candidate) {
+        throw new AnalyzeSymbolServiceError(
+          'symbol-not-in-market-universe',
+          `Symbol ${symbol} is not active in market universe.`,
+        );
+      }
+
+      return candidate;
+    } catch (error) {
+      if (error instanceof AnalyzeSymbolServiceError) {
+        throw error;
+      }
+
+      if (error instanceof Error && error.message.startsWith('symbol-not-in-market-universe')) {
+        throw new AnalyzeSymbolServiceError(
+          'symbol-not-in-market-universe',
+          `Symbol ${symbol} is not active in market universe.`,
+        );
+      }
+
+      throw error;
     }
-
-    const snapshot = await this.dependencies.marketUniverseService.loadSnapshot();
-    const [candidate] = this.dependencies.marketUniverseService.buildScanCandidates(snapshot, {
-      tickers: [symbol],
-      timeframes: [timeframe],
-      fallbackTimeframes: [timeframe],
-    });
-
-    return candidate ?? buildManualFallbackCandidate(symbol, timeframe);
   }
 }
 
@@ -179,30 +201,6 @@ const toAnalyzeSymbolResult = (params: {
   operationalThreshold: params.operationalThreshold,
   aboveOperationalThreshold: params.opportunity.score >= params.operationalThreshold,
 });
-
-const buildManualFallbackCandidate = (symbol: string, timeframe: AnalyzeSymbolTimeframe): MarketScanCandidate => {
-  const isCrypto = symbol.endsWith('-USD');
-
-  return {
-    symbol,
-    providerSymbol: symbol,
-    timeframe,
-    source: 'manual-fallback',
-    metadata: {
-      symbol,
-      providerSymbol: symbol,
-      displayName: symbol,
-      assetType: isCrypto ? 'CRYPTO' : 'STOCK',
-      sector: isCrypto ? 'Crypto' : undefined,
-      market: isCrypto ? 'Crypto' : 'US',
-      timezone: isCrypto ? 'UTC' : 'America/New_York',
-      sessionType: isCrypto ? 'TWENTY_FOUR_SEVEN' : 'US_REGULAR',
-      supportsIntraday: true,
-      isActive: true,
-      timeframes: [],
-    },
-  };
-};
 
 const mapAnalyzeSymbolError = (error: unknown, symbol: string, timeframe: AnalyzeSymbolTimeframe): AnalyzeSymbolServiceError => {
   if (error instanceof InsufficientCandlesError) {

@@ -125,6 +125,17 @@ const strategyProfileSummary: StrategyProfileSummary = {
   ],
 };
 
+
+const engineConfigService = {
+  loadSnapshot: jest.fn().mockResolvedValue({
+    source: 'postgres',
+    values: {
+      strategyVersion: 'v1',
+      scoring: { opportunityMinScore: 90 },
+    },
+  }),
+};
+
 describe('ResearchSnapshotService', () => {
   it('generates a self-contained read-only snapshot using existing providers once', async () => {
     const snapshotProvider = { getAggregates: jest.fn().mockResolvedValue(baseAggregates) };
@@ -132,8 +143,7 @@ describe('ResearchSnapshotService', () => {
     const performanceProvider = { getPerformance: jest.fn().mockResolvedValue(forwardPerformance) };
     const service = new ResearchSnapshotService(snapshotProvider, strategyProvider, performanceProvider, {
       timeZone: 'America/Mexico_City',
-      strategyVersion: 'v1',
-      operationalThreshold: 90,
+      engineConfigService,
     });
 
     const snapshot = await service.generate(new Date('2026-08-29T04:30:00.000Z'));
@@ -156,6 +166,7 @@ describe('ResearchSnapshotService', () => {
     expect(snapshot.strategyProfiles).toHaveLength(5);
     expect(snapshot.watchProfiles).toHaveLength(4);
     expect(snapshot.forwardPerformance).toBe(forwardPerformance);
+    expect(engineConfigService.loadSnapshot).toHaveBeenCalled();
     expect(snapshotProvider.getAggregates).toHaveBeenCalledTimes(1);
     expect(strategyProvider.getProfiles).toHaveBeenCalledWith({ strategyVersion: 'v1' });
     expect(performanceProvider.getPerformance).toHaveBeenCalledWith({ strategyVersion: 'v1' });

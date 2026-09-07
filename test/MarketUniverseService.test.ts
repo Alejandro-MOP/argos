@@ -23,7 +23,7 @@ const buildLogger = () => ({ log: jest.fn(), error: jest.fn() });
 describe('MarketUniverseService', () => {
   it('loads active symbols and builds symbol/timeframe candidates from PostgreSQL universe', async () => {
     const repository = { findActiveWithTimeframes: jest.fn().mockResolvedValue([nvdaSymbol]) };
-    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+    const service = new MarketUniverseService(repository);
     const logger = buildLogger();
 
     const snapshot = await service.loadSnapshot(logger);
@@ -67,7 +67,7 @@ describe('MarketUniverseService', () => {
       timeframes: ['15m', '1d'],
     };
     const repository = { findActiveWithTimeframes: jest.fn().mockResolvedValue([spySymbol, smhSymbol]) };
-    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+    const service = new MarketUniverseService(repository);
 
     const snapshot = await service.loadSnapshot();
     const candidates = service.buildScanCandidates(snapshot, { tickers: ['SMH'], fallbackTimeframes: ['1d'] });
@@ -88,27 +88,19 @@ describe('MarketUniverseService', () => {
     ]);
   });
 
-  it('allows manual unknown tickers with minimal metadata and does not insert them', async () => {
+  it('rejects manual unknown tickers instead of creating fallback metadata', async () => {
     const repository = { findActiveWithTimeframes: jest.fn().mockResolvedValue([nvdaSymbol]) };
-    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+    const service = new MarketUniverseService(repository);
     const logger = buildLogger();
 
     const snapshot = await service.loadSnapshot(logger);
-    const candidates = service.buildScanCandidates(
+
+    expect(() => service.buildScanCandidates(
       snapshot,
       { tickers: ['XYZ'], timeframes: ['1m'], fallbackTimeframes: ['15m'] },
       logger,
-    );
-
-    expect(candidates).toEqual([
-      expect.objectContaining({
-        symbol: 'XYZ',
-        providerSymbol: 'XYZ',
-        timeframe: '1m',
-        source: 'manual-fallback',
-      }),
-    ]);
-    expect(logger.log).toHaveBeenCalledWith('symbol-not-in-market-universe symbol=XYZ');
+    )).toThrow('symbol-not-in-market-universe: XYZ');
+    expect(logger.error).toHaveBeenCalledWith('symbol-not-in-market-universe symbol=XYZ');
     expect(repository.findActiveWithTimeframes).toHaveBeenCalledTimes(1);
   });
 
@@ -129,7 +121,7 @@ describe('MarketUniverseService', () => {
       },
     ];
     const repository = { findActiveWithTimeframes: jest.fn().mockResolvedValue(symbols) };
-    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+    const service = new MarketUniverseService(repository);
 
     const snapshot = await service.loadSnapshot();
 
@@ -150,7 +142,7 @@ describe('MarketUniverseService', () => {
         { ...nvdaSymbol, industry: undefined },
       ]),
     };
-    const service = new MarketUniverseService(repository, { getTickers: jest.fn() } as never);
+    const service = new MarketUniverseService(repository);
 
     const snapshot = await service.loadSnapshot();
 

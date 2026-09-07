@@ -38,7 +38,6 @@ const marketSymbol = (overrides: Record<string, unknown> = {}) => ({
 
 const buildMarketUniverseService = (symbols = [marketSymbol()]): MarketUniverseService => new MarketUniverseService(
   { findActiveWithTimeframes: jest.fn().mockResolvedValue(symbols) },
-  { getTickers: jest.fn() } as never,
 );
 
 const update = (overrides: Partial<TelegramControlUpdate>): TelegramControlUpdate => ({

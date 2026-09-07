@@ -33,13 +33,16 @@ interface TargetPerformanceRow {
   outcome: BacktestOutcome | null;
 }
 
+type MinimumSampleSizeProvider = number | (() => Promise<number> | number);
+
 export class PostgresForwardPerformanceProvider {
   public constructor(
     private readonly database: Queryable,
-    private readonly minimumSampleSize: number,
+    private readonly minimumSampleSizeProvider: MinimumSampleSizeProvider,
   ) {}
 
   public async getPerformance(filters: ForwardPerformanceFilters = {}): Promise<ForwardPerformanceSummary> {
+    const minimumSampleSize = await this.resolveMinimumSampleSize();
     const rows = await this.fetchRows(filters);
     const targetRows = rows.length > 0 ? await this.fetchTargetRows(rows.map((row) => row.id)) : [];
     const targetRowsBySignalId = groupTargetRows(targetRows);
@@ -47,7 +50,7 @@ export class PostgresForwardPerformanceProvider {
     return {
       filters: serializeFilters(filters),
       sampleSize: rows.length,
-      smallSample: rows.length < this.minimumSampleSize,
+      smallSample: rows.length < minimumSampleSize,
       tp1: summarizeOutcome(rows.map((row) => row.outcome_tp1)),
       tp2: summarizeOutcome(rows.map((row) => row.outcome_tp2)),
       experimentalTargets: EXPERIMENTAL_TARGET_PERCENTS.map((targetPercent) =>
@@ -63,14 +66,22 @@ export class PostgresForwardPerformanceProvider {
       },
       expiredRate: rate(rows.filter((row) => row.status === 'EXPIRED').length, rows.length),
       ambiguousRate: rate(rows.filter((row) => row.status === 'AMBIGUOUS').length, rows.length),
-      scoreBuckets: buildScoreBuckets(rows, this.minimumSampleSize),
-      byTimeframe: summarizeDimension(rows, 'timeframe', this.minimumSampleSize, 'timeframe'),
-      byTicker: summarizeDimension(rows, 'ticker', this.minimumSampleSize, 'ticker'),
-      byAssetType: summarizeDimension(rows, 'asset_type', this.minimumSampleSize, 'assetType'),
-      bySector: summarizeDimension(rows, 'sector', this.minimumSampleSize, 'sector'),
-      byIndustry: summarizeDimension(rows, 'industry', this.minimumSampleSize, 'industry'),
-      byStrategyVersion: summarizeDimension(rows, 'strategy_version', this.minimumSampleSize, 'strategyVersion'),
+      scoreBuckets: buildScoreBuckets(rows, minimumSampleSize),
+      byTimeframe: summarizeDimension(rows, 'timeframe', minimumSampleSize, 'timeframe'),
+      byTicker: summarizeDimension(rows, 'ticker', minimumSampleSize, 'ticker'),
+      byAssetType: summarizeDimension(rows, 'asset_type', minimumSampleSize, 'assetType'),
+      bySector: summarizeDimension(rows, 'sector', minimumSampleSize, 'sector'),
+      byIndustry: summarizeDimension(rows, 'industry', minimumSampleSize, 'industry'),
+      byStrategyVersion: summarizeDimension(rows, 'strategy_version', minimumSampleSize, 'strategyVersion'),
     };
+  }
+
+  private async resolveMinimumSampleSize(): Promise<number> {
+    if (typeof this.minimumSampleSizeProvider === 'number') {
+      return this.minimumSampleSizeProvider;
+    }
+
+    return this.minimumSampleSizeProvider();
   }
 
   private async fetchRows(filters: ForwardPerformanceFilters): Promise<EvidencePerformanceRow[]> {

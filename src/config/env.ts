@@ -1,9 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import dotenv from 'dotenv';
-import type { WatchlistName } from '../services/WatchlistService';
-import type { EngineRuntimeConfig } from '../models/EngineConfig';
-import type { TradePlanConfig } from '../utils/tradeSizing.utils';
 
 dotenv.config();
 loadLocalSettingsValues();
@@ -39,114 +36,6 @@ function loadLocalSettingsValues(): void {
   }
 }
 
-const parseInteger = (value: string | undefined, fallback: number): number => {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? fallback : parsed;
-};
-
-const parseNumber = (value: string | undefined, fallback: number): number => {
-  if (!value) {
-    return fallback;
-  }
-
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? fallback : parsed;
-};
-
-const parseRequiredPositiveNumber = (
-  value: string | undefined,
-  fallback: number,
-  envName: string,
-): number => {
-  const parsed = parseNumber(value, fallback);
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${envName} must be greater than 0`);
-  }
-
-  return parsed;
-};
-
-const SUPPORTED_MARKET_SCAN_TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '1d', '1w'];
-
-export const parseMarketScanTimeframes = (values: NodeJS.ProcessEnv = process.env): string[] => {
-  const configuredTimeframes = parseTimeframeList(values.MARKET_SCAN_TIMEFRAMES, 'MARKET_SCAN_TIMEFRAMES');
-
-  if (configuredTimeframes.length > 0) {
-    return configuredTimeframes;
-  }
-
-  return parseTimeframeList(values.MARKET_SCAN_TIMEFRAME ?? '15m', 'MARKET_SCAN_TIMEFRAME');
-};
-
-export const parseTelegramNotificationTimeframes = (values: NodeJS.ProcessEnv = process.env): string[] => {
-  const configuredTimeframes = parseTimeframeList(
-    values.TELEGRAM_NOTIFICATION_TIMEFRAMES ?? '15m,1d,1w',
-    'TELEGRAM_NOTIFICATION_TIMEFRAMES',
-  );
-
-  return configuredTimeframes.length > 0 ? configuredTimeframes : ['15m', '1d', '1w'];
-};
-
-const parseTimeframeList = (value: string | undefined, envName: string): string[] => {
-  if (!value) {
-    return [];
-  }
-
-  const timeframes = [
-    ...new Set(
-      value
-        .split(',')
-        .map((timeframe) => timeframe.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  ];
-
-  const invalidTimeframes = timeframes.filter(
-    (timeframe) => !SUPPORTED_MARKET_SCAN_TIMEFRAMES.includes(timeframe),
-  );
-
-  if (invalidTimeframes.length > 0) {
-    throw new Error(
-      `Unsupported ${envName} value(s): ${invalidTimeframes.join(', ')}. Supported: ${SUPPORTED_MARKET_SCAN_TIMEFRAMES.join(', ')}`,
-    );
-  }
-
-  return timeframes;
-};
-
-export const parseTradePlanConfig = (values: NodeJS.ProcessEnv = process.env): TradePlanConfig => {
-  const stopLossPercent = parseRequiredPositiveNumber(
-    values.TRADE_STOP_LOSS_PERCENT,
-    1,
-    'TRADE_STOP_LOSS_PERCENT',
-  );
-  const targetMinPercent = parseRequiredPositiveNumber(
-    values.TRADE_TARGET_MIN_PERCENT,
-    2,
-    'TRADE_TARGET_MIN_PERCENT',
-  );
-  const targetMaxPercent = parseRequiredPositiveNumber(
-    values.TRADE_TARGET_MAX_PERCENT,
-    3,
-    'TRADE_TARGET_MAX_PERCENT',
-  );
-
-  if (targetMaxPercent <= targetMinPercent) {
-    throw new Error('TRADE_TARGET_MAX_PERCENT must be greater than TRADE_TARGET_MIN_PERCENT');
-  }
-
-  return {
-    stopLossPercent,
-    targetMinPercent,
-    targetMaxPercent,
-  };
-};
-
 const parseBoolean = (value: string | undefined, fallback: boolean): boolean => {
   if (!value) {
     return fallback;
@@ -173,67 +62,6 @@ export const parseTelegramAllowedUserIds = (value: string | undefined): string[]
     .map((userId) => userId.trim())
     .filter((userId) => userId.length > 0 && /^\d+$/.test(userId));
 };
-
-const parseTickers = (value: string | undefined): string[] => {
-  const rawTickers = value ?? 'SPY,QQQ,AAPL,MSFT,NVDA';
-
-  return rawTickers
-    .split(',')
-    .map((ticker) => ticker.trim().toUpperCase())
-    .filter(Boolean);
-};
-
-const parseWatchlistName = (value: string | undefined): WatchlistName => {
-  const watchlist = value ?? 'custom';
-
-  if (watchlist === 'etfs' || watchlist === 'growth' || watchlist === 'dividends') {
-    return watchlist;
-  }
-
-  return 'custom';
-};
-
-export const buildEnvRuntimeConfig = (values: NodeJS.ProcessEnv = process.env): EngineRuntimeConfig => ({
-  strategyVersion: values.ENGINE_STRATEGY_VERSION ?? 'v1',
-  marketScanCandleLimit: parseInteger(values.MARKET_SCAN_CANDLE_LIMIT, 80),
-  marketDataMaxAgeMinutes: parseInteger(values.MARKET_DATA_MAX_AGE_MINUTES, 30),
-  marketDataRequestDelayMs: parseInteger(values.MARKET_DATA_REQUEST_DELAY_MS, 13_000),
-  marketDataMaxConcurrency: parseInteger(values.MARKET_DATA_MAX_CONCURRENCY, 5),
-  marketDataBatchDelayMs: parseInteger(values.MARKET_DATA_BATCH_DELAY_MS, 250),
-  marketDataMaxRetries: parseInteger(values.MARKET_DATA_MAX_RETRIES, 3),
-  marketDataRetryBaseDelayMs: parseInteger(values.MARKET_DATA_RETRY_BASE_DELAY_MS, 1_000),
-  marketDataSequential: parseBoolean(values.MARKET_DATA_SEQUENTIAL, true),
-  tradePlan: parseTradePlanConfig(values),
-  signalIntelligence: {
-    backtestContextEnabled: parseBoolean(values.BACKTEST_CONTEXT_ENABLED, true),
-    backtestContextMonths: parseInteger(values.BACKTEST_CONTEXT_MONTHS, 24),
-    performanceMinSampleSize: parseInteger(values.PERFORMANCE_MIN_SAMPLE_SIZE, 20),
-    forwardTestContextEnabled: parseBoolean(values.FORWARD_TEST_CONTEXT_ENABLED, true),
-  },
-  telegramNotificationTimeframes: parseTelegramNotificationTimeframes(values),
-  scoring: {
-    maxAnalyzerScore: parseInteger(values.SCORING_MAX_ANALYZER_SCORE, 25),
-    opportunityMinScore: parseInteger(values.OPPORTUNITY_MIN_SCORE, 50),
-    telegramNotificationMinScore: parseInteger(values.TELEGRAM_NOTIFICATION_MIN_SCORE, 80),
-    evidenceMinScore: parseInteger(values.EVIDENCE_MIN_SCORE, 80),
-    duplicateWindowMinutes: parseInteger(values.OPPORTUNITY_DUPLICATE_WINDOW_MINUTES, 60),
-    emaFastPeriod: parseInteger(values.TREND_EMA_FAST_PERIOD, 20),
-    emaSlowPeriod: parseInteger(values.TREND_EMA_SLOW_PERIOD, 50),
-    volumeLookbackPeriod: parseInteger(values.VOLUME_LOOKBACK_PERIOD, 20),
-    volumeStrongRatio: parseNumber(values.VOLUME_STRONG_RATIO, 1.5),
-    volumeModerateRatio: parseNumber(values.VOLUME_MODERATE_RATIO, 1.3),
-    volumeWeakRatio: parseNumber(values.VOLUME_WEAK_RATIO, 1.1),
-    rsiPeriod: parseInteger(values.MOMENTUM_RSI_PERIOD, 14),
-    rsiIdealMin: parseNumber(values.MOMENTUM_RSI_IDEAL_MIN, 55),
-    rsiIdealMax: parseNumber(values.MOMENTUM_RSI_IDEAL_MAX, 70),
-    rsiNeutralMin: parseNumber(values.MOMENTUM_RSI_NEUTRAL_MIN, 45),
-    rsiNeutralMax: parseNumber(values.MOMENTUM_RSI_NEUTRAL_MAX, 55),
-    rsiExtendedMax: parseNumber(values.MOMENTUM_RSI_EXTENDED_MAX, 80),
-    structureLookbackPeriod: parseInteger(values.STRUCTURE_LOOKBACK_PERIOD, 20),
-  },
-});
-
-const runtimeConfig = buildEnvRuntimeConfig();
 
 const telegramAlertsBotToken = process.env.TELEGRAM_ALERTS_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? '';
 const telegramAlertsChatId = process.env.TELEGRAM_ALERTS_CHAT_ID ?? process.env.TELEGRAM_CHAT_ID ?? '';
@@ -264,22 +92,5 @@ export const env = {
   databasePgDumpBin: process.env.DATABASE_PG_DUMP_BIN ?? 'pg_dump',
   databasePgRestoreBin: process.env.DATABASE_PG_RESTORE_BIN ?? 'pg_restore',
   databasePsqlBin: process.env.DATABASE_PSQL_BIN ?? 'psql',
-  marketScanTickers: parseTickers(process.env.MARKET_SCAN_TICKERS),
-  marketScanTimeframe: process.env.MARKET_SCAN_TIMEFRAME ?? '15m',
-  marketScanTimeframes: parseMarketScanTimeframes(),
-  telegramNotificationTimeframes: runtimeConfig.telegramNotificationTimeframes,
-  marketScanCandleLimit: runtimeConfig.marketScanCandleLimit,
-  marketScanWatchlist: parseWatchlistName(process.env.MARKET_SCAN_WATCHLIST),
   marketScanDebug: parseBoolean(process.env.MARKET_SCAN_DEBUG, false),
-  marketDataMaxAgeMinutes: runtimeConfig.marketDataMaxAgeMinutes,
-  marketDataRequestDelayMs: runtimeConfig.marketDataRequestDelayMs,
-  marketDataMaxConcurrency: runtimeConfig.marketDataMaxConcurrency,
-  marketDataBatchDelayMs: runtimeConfig.marketDataBatchDelayMs,
-  marketDataMaxRetries: runtimeConfig.marketDataMaxRetries,
-  marketDataRetryBaseDelayMs: runtimeConfig.marketDataRetryBaseDelayMs,
-  marketDataSequential: runtimeConfig.marketDataSequential,
-  tradePlan: runtimeConfig.tradePlan,
-  signalIntelligence: runtimeConfig.signalIntelligence,
-  scoring: runtimeConfig.scoring,
-  strategyVersion: runtimeConfig.strategyVersion,
 };

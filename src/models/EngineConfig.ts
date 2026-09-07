@@ -53,7 +53,7 @@ export interface EngineRuntimeConfig {
   };
 }
 
-export type EngineConfigSource = 'postgres' | 'env-fallback';
+export type EngineConfigSource = 'postgres';
 
 export interface EngineConfigSnapshot {
   source: EngineConfigSource;

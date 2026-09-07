@@ -5,7 +5,6 @@ import {
   type InvocationContext,
 } from '@azure/functions';
 import { marketScanExecutor } from '../../config/container';
-import { env } from '../../config/env';
 import {
   parseBody,
   parseCapital,
@@ -96,9 +95,10 @@ export async function marketScanHttp(
       timeframes: timeframes ?? [...new Set(result.scanned.map((item) => item.timeframe))],
       capital,
       thresholds: {
-        opportunityMinScore: opportunityMinScore ?? env.scoring.opportunityMinScore,
+        opportunityMinScore: opportunityMinScore ?? result.runtimeConfig.scoring.opportunityMinScore,
         telegramNotificationMinScore:
-          telegramNotificationMinScore ?? env.scoring.telegramNotificationMinScore,
+          telegramNotificationMinScore ?? result.runtimeConfig.scoring.telegramNotificationMinScore,
+        telegramNotificationTimeframes: result.runtimeConfig.telegramNotificationTimeframes,
       },
       opportunities: result.opportunities.map((opportunity) => {
         const signal = signalByOpportunity.get(
@@ -116,13 +116,13 @@ export async function marketScanHttp(
           structureScore: opportunity.structureScore,
           reasons: opportunity.reasons,
           detectedAt: opportunity.detectedAt,
-          tradePlan: signal ? calculateTradePlan(signal, env.tradePlan, capital) : undefined,
+          tradePlan: signal ? calculateTradePlan(signal, result.runtimeConfig.tradePlan, capital) : undefined,
         };
       }),
       notifiedSignals: result.notifiedSignals.map((signal) => ({
         ...signal,
         opportunityType: getOpportunityTypeFromTimeframe(signal.timeframe),
-        tradePlan: calculateTradePlan(signal, env.tradePlan, capital),
+        tradePlan: calculateTradePlan(signal, result.runtimeConfig.tradePlan, capital),
       })),
       skipped: result.skipped,
       errors: result.errors,

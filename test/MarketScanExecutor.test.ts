@@ -1,4 +1,6 @@
 import type { Candle } from '../src/models/Candle';
+import type { EngineRuntimeConfig } from '../src/models/EngineConfig';
+import type { MarketSymbol } from '../src/models/MarketSymbol';
 import type { Opportunity } from '../src/models/Opportunity';
 import { MarketDataProviderError, MarketDataRateLimitError } from '../src/errors/MarketDataErrors';
 import {
@@ -19,6 +21,63 @@ const buildCandles = (count: number, lastTimestamp = new Date()): Candle[] => {
   }));
 };
 
+
+const runtimeConfig: EngineRuntimeConfig = {
+  strategyVersion: 'v1',
+  marketScanCandleLimit: 80,
+  marketDataMaxAgeMinutes: 30,
+  marketDataRequestDelayMs: 0,
+  marketDataMaxConcurrency: 5,
+  marketDataBatchDelayMs: 0,
+  marketDataMaxRetries: 3,
+  marketDataRetryBaseDelayMs: 30000,
+  marketDataSequential: false,
+  tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 5 },
+  signalIntelligence: {
+    backtestContextEnabled: true,
+    backtestContextMonths: 24,
+    performanceMinSampleSize: 20,
+    forwardTestContextEnabled: true,
+  },
+  telegramNotificationTimeframes: ['5m', '15m'],
+  scoring: {
+    maxAnalyzerScore: 25,
+    opportunityMinScore: 50,
+    telegramNotificationMinScore: 80,
+    evidenceMinScore: 80,
+    duplicateWindowMinutes: 60,
+    emaFastPeriod: 20,
+    emaSlowPeriod: 50,
+    volumeLookbackPeriod: 20,
+    volumeStrongRatio: 1.5,
+    volumeModerateRatio: 1.3,
+    volumeWeakRatio: 1.1,
+    rsiPeriod: 14,
+    rsiIdealMin: 55,
+    rsiIdealMax: 70,
+    rsiNeutralMin: 45,
+    rsiNeutralMax: 55,
+    rsiExtendedMax: 80,
+    structureLookbackPeriod: 20,
+  },
+};
+
+const buildMarketSymbol = (symbol: string, timeframes = ['15m']) => ({
+  symbol,
+  providerSymbol: symbol,
+  displayName: symbol,
+  assetType: symbol.endsWith('-USD') ? 'CRYPTO' as const : 'STOCK' as const,
+  sector: symbol.endsWith('-USD') ? 'Crypto' : 'Technology',
+  industry: undefined,
+  exchange: undefined,
+  market: symbol.endsWith('-USD') ? 'Crypto' : 'US',
+  timezone: symbol.endsWith('-USD') ? 'UTC' : 'America/New_York',
+  sessionType: symbol.endsWith('-USD') ? 'TWENTY_FOUR_SEVEN' as const : 'US_REGULAR' as const,
+  supportsIntraday: true,
+  isActive: true,
+  timeframes,
+});
+
 const buildOpportunity = (ticker: string, score: number): Opportunity => ({
   ticker,
   timeframe: '15m',
@@ -37,12 +96,54 @@ const buildLogger = (): MarketScanLogger => ({
 });
 
 const buildExecutor = (overrides: Partial<MarketScanExecutorDependencies>): MarketScanExecutor => {
+  const config = {
+    ...runtimeConfig,
+    marketDataMaxAgeMinutes: overrides.marketDataMaxAgeMinutes ?? runtimeConfig.marketDataMaxAgeMinutes,
+    marketDataMaxConcurrency: overrides.marketDataMaxConcurrency ?? runtimeConfig.marketDataMaxConcurrency,
+    marketDataBatchDelayMs: overrides.marketDataBatchDelayMs ?? runtimeConfig.marketDataBatchDelayMs,
+    marketDataMaxRetries: overrides.marketDataMaxRetries ?? runtimeConfig.marketDataMaxRetries,
+    marketDataRetryBaseDelayMs: overrides.marketDataRetryBaseDelayMs ?? runtimeConfig.marketDataRetryBaseDelayMs,
+    marketDataSequential: overrides.marketDataSequential ?? runtimeConfig.marketDataSequential,
+    tradePlan: overrides.tradePlan ?? runtimeConfig.tradePlan,
+  };
+
   const dependencies = {
     marketDataService: {
       getCandles: jest.fn(),
     },
-    watchlistService: {
-      getTickers: jest.fn().mockReturnValue(['SPY']),
+    engineConfigService: {
+      loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', values: config }),
+    },
+    marketUniverseService: {
+      loadSnapshot: jest.fn().mockResolvedValue({
+        source: 'postgres',
+        symbols: [
+          buildMarketSymbol('SPY'),
+          buildMarketSymbol('QQQ'),
+          buildMarketSymbol('AMD'),
+          buildMarketSymbol('IWM'),
+          buildMarketSymbol('DIA'),
+          buildMarketSymbol('NVDA', ['1m', '15m']),
+          buildMarketSymbol('BTC-USD', ['1m', '5m', '15m']),
+        ],
+      }),
+      buildScanCandidates: jest.fn((snapshot: { symbols: MarketSymbol[]; source: 'postgres' }, options: { tickers?: string[]; timeframe?: string; timeframes?: string[] }) => {
+        const requested = options.tickers?.length ? options.tickers : snapshot.symbols.map((symbol) => symbol.symbol);
+        return requested.flatMap((ticker: string) => {
+          const metadata = snapshot.symbols.find((symbol) => symbol.symbol === ticker);
+          if (!metadata) {
+            throw new Error(`symbol-not-in-market-universe: ${ticker}`);
+          }
+          const timeframes = options.timeframes?.length ? options.timeframes : options.timeframe ? [options.timeframe] : metadata.timeframes;
+          return timeframes.map((timeframe: string) => ({
+            symbol: metadata.symbol,
+            providerSymbol: metadata.providerSymbol,
+            timeframe,
+            metadata,
+            source: 'postgres' as const,
+          }));
+        });
+      }),
     },
     opportunityService: {
       analyze: jest.fn(),
@@ -589,8 +690,8 @@ describe('MarketScanExecutor', () => {
       financialStopPrice: 99,
       tp1Percent: 2,
       tp1Price: 102,
-      tp2Percent: 3,
-      tp2Price: 103,
+      tp2Percent: 5,
+      tp2Price: 105,
       telegramSent: true,
       strategyVersion: 'v1',
     });

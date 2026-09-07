@@ -16,7 +16,7 @@ import { PostgresForwardPerformanceProvider } from '../performance/PostgresForwa
 import { PostgresStrategyProfileProvider } from '../research/PostgresStrategyProfileProvider';
 import { PostgresResearchSnapshotProvider } from '../research/PostgresResearchSnapshotProvider';
 import { createRepositories } from './repositories';
-import { buildEnvRuntimeConfig, env } from './env';
+import { env } from './env';
 import { AnalyzeSymbolService } from '../services/AnalyzeSymbolService';
 import { ScorePerformanceResearchService } from '../research/ScorePerformanceResearchService';
 import { EngineConfigService } from '../services/EngineConfigService';
@@ -43,7 +43,6 @@ import { TelegramMarketScanExecutionGuard } from '../services/TelegramMarketScan
 import { TelegramControlPresenter } from '../services/TelegramControlPresenter';
 import { TelegramControlReadOnlyQueryService } from '../services/TelegramControlReadOnlyQueryService';
 import { SignalContextService } from '../services/SignalContextService';
-import { WatchlistService } from '../services/WatchlistService';
 
 const transactionCostCalculator = new TransactionCostCalculator();
 const transactionCostService = new TransactionCostService(transactionCostCalculator);
@@ -74,13 +73,14 @@ const {
   database,
 } = createRepositories(env.databaseUrl);
 
-const watchlistService = new WatchlistService(env.marketScanWatchlist, env.marketScanTickers);
-const fallbackRuntimeConfig = buildEnvRuntimeConfig();
-const engineConfigService = new EngineConfigService(engineConfigRepository, fallbackRuntimeConfig);
-const marketUniverseService = new MarketUniverseService(marketSymbolRepository, watchlistService);
+const engineConfigService = new EngineConfigService(engineConfigRepository);
+const marketUniverseService = new MarketUniverseService(marketSymbolRepository);
 const marketSessionService = new MarketSessionService();
 const forwardPerformanceReportProvider = database
-  ? new PostgresForwardPerformanceProvider(database, fallbackRuntimeConfig.signalIntelligence.performanceMinSampleSize)
+  ? new PostgresForwardPerformanceProvider(
+      database,
+      async () => (await engineConfigService.loadSnapshot()).values.signalIntelligence.performanceMinSampleSize,
+    )
   : undefined;
 const strategyProfileProvider = database
   ? new PostgresStrategyProfileProvider(database)
@@ -99,8 +99,7 @@ const researchSnapshotService =
         forwardPerformanceReportProvider,
         {
           timeZone: env.databaseBackupTimezone,
-          strategyVersion: fallbackRuntimeConfig.strategyVersion,
-          operationalThreshold: fallbackRuntimeConfig.scoring.opportunityMinScore,
+          engineConfigService,
         },
       )
     : undefined;
@@ -158,25 +157,24 @@ const paperTradeMonitorService = new PaperTradeMonitorService(paperTradeReposito
 
 const analyzeSymbolService = new AnalyzeSymbolService({
   marketDataService,
-  opportunityService: createOpportunityService(fallbackRuntimeConfig),
+  engineConfigService,
+  opportunityServiceFactory: createOpportunityService,
   marketUniverseService,
-  candleLimit: fallbackRuntimeConfig.marketScanCandleLimit,
-  operationalThreshold: fallbackRuntimeConfig.scoring.opportunityMinScore,
 });
 
 const rankingService = new RankingService();
 const riskService = new RiskService();
 
-export const backtestEngine = new BacktestEngine({
+export const createBacktestEngine = (config: EngineRuntimeConfig): BacktestEngine => new BacktestEngine({
   marketDataService,
-  opportunityService: createOpportunityService(fallbackRuntimeConfig),
+  opportunityService: createOpportunityService(config),
   riskService,
 });
 
 const createSignalContextService = (config: EngineRuntimeConfig): SignalContextService =>
   new SignalContextService(
     {
-      historicalPerformanceProvider: new BacktestHistoricalPerformanceProvider(backtestEngine),
+      historicalPerformanceProvider: new BacktestHistoricalPerformanceProvider(createBacktestEngine(config)),
       forwardPerformanceProvider: new EmptyForwardPerformanceProvider(),
     },
     {
@@ -196,7 +194,7 @@ const createNotificationService = (config: EngineRuntimeConfig): NotificationSer
     tradePlan: config.tradePlan,
   });
 
-export const notificationService = createNotificationService(fallbackRuntimeConfig);
+export const notificationService = new NotificationService(telegramClient);
 
 export const forwardSignalEvaluator = new ForwardSignalEvaluator({
   forwardSignalRepository,
@@ -212,17 +210,15 @@ export const evidenceSignalEvaluator = new EvidenceSignalEvaluator({
 
 export const marketScanExecutor = new MarketScanExecutor({
   marketDataService,
-  watchlistService,
-  opportunityService: createOpportunityService(fallbackRuntimeConfig),
+
   rankingService,
-  opportunityFilter: createOpportunityFilter(fallbackRuntimeConfig),
+
   riskService,
   opportunityRepository,
   signalRepository,
   forwardSignalRepository,
   evidenceSignalRepository,
-  notificationService,
-  signalContextService: createSignalContextService(fallbackRuntimeConfig),
+
   engineConfigService,
   marketUniverseService,
   marketSessionService,
@@ -231,15 +227,6 @@ export const marketScanExecutor = new MarketScanExecutor({
   notificationServiceFactory: createNotificationService,
   signalContextServiceFactory: createSignalContextService,
   debug: env.marketScanDebug,
-  marketDataMaxAgeMinutes: fallbackRuntimeConfig.marketDataMaxAgeMinutes,
-  marketDataMaxConcurrency: fallbackRuntimeConfig.marketDataMaxConcurrency,
-  marketDataBatchDelayMs: fallbackRuntimeConfig.marketDataBatchDelayMs,
-  marketDataMaxRetries: fallbackRuntimeConfig.marketDataMaxRetries,
-  marketDataRetryBaseDelayMs: fallbackRuntimeConfig.marketDataRetryBaseDelayMs,
-  marketDataSequential: fallbackRuntimeConfig.marketDataSequential,
-  tradePlan: fallbackRuntimeConfig.tradePlan,
-  strategyVersion: fallbackRuntimeConfig.strategyVersion,
-  defaultTimeframes: env.marketScanTimeframes,
 });
 
 const telegramCommandRouter = new TelegramCommandRouter(
@@ -257,6 +244,7 @@ const telegramCommandRouter = new TelegramCommandRouter(
 );
 
 export {
+  engineConfigService,
   forwardPerformanceReportProvider,
   strategyProfileProvider,
   researchSnapshotService,

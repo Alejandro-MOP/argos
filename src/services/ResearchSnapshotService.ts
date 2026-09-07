@@ -1,4 +1,5 @@
 import type { ForwardPerformanceFilters } from '../models/EvidenceSignal';
+import type { EngineConfigService } from './EngineConfigService';
 import type { ResearchSnapshot, ResearchSnapshotProvider } from '../models/ResearchSnapshot';
 import type { StrategyProfile, StrategyProfileFilters } from '../models/StrategyProfile';
 import type { PostgresForwardPerformanceProvider } from '../performance/PostgresForwardPerformanceProvider';
@@ -6,8 +7,7 @@ import type { PostgresStrategyProfileProvider } from '../research/PostgresStrate
 
 interface ResearchSnapshotServiceOptions {
   timeZone: string;
-  strategyVersion: string;
-  operationalThreshold: number;
+  engineConfigService: Pick<EngineConfigService, 'loadSnapshot'>;
 }
 
 const WATCH_PROFILE_KEYS = new Set([
@@ -26,11 +26,12 @@ export class ResearchSnapshotService {
   ) {}
 
   public async generate(now: Date = new Date()): Promise<ResearchSnapshot> {
-    const strategyVersion = this.options.strategyVersion;
+    const configSnapshot = await this.options.engineConfigService.loadSnapshot();
+    const strategyVersion = configSnapshot.values.strategyVersion;
     const [aggregates, strategyProfileSummary, forwardPerformance] = await Promise.all([
       this.snapshotProvider.getAggregates({
         strategyVersion,
-        operationalThreshold: this.options.operationalThreshold,
+        operationalThreshold: configSnapshot.values.scoring.opportunityMinScore,
       }),
       this.strategyProfileProvider.getProfiles(this.strategyProfileFilters(strategyVersion)),
       this.forwardPerformanceProvider.getPerformance(this.forwardPerformanceFilters(strategyVersion)),

@@ -1,3 +1,44 @@
+
+const runtimeConfig = {
+  strategyVersion: 'v1',
+  marketScanCandleLimit: 80,
+  marketDataMaxAgeMinutes: 20,
+  marketDataRequestDelayMs: 0,
+  marketDataMaxConcurrency: 5,
+  marketDataBatchDelayMs: 250,
+  marketDataMaxRetries: 3,
+  marketDataRetryBaseDelayMs: 30000,
+  marketDataSequential: false,
+  tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 5 },
+  signalIntelligence: {
+    backtestContextEnabled: true,
+    backtestContextMonths: 24,
+    performanceMinSampleSize: 20,
+    forwardTestContextEnabled: true,
+  },
+  telegramNotificationTimeframes: ['5m', '15m'],
+  scoring: {
+    maxAnalyzerScore: 25,
+    opportunityMinScore: 90,
+    telegramNotificationMinScore: 100,
+    evidenceMinScore: 80,
+    duplicateWindowMinutes: 60,
+    emaFastPeriod: 20,
+    emaSlowPeriod: 50,
+    volumeLookbackPeriod: 20,
+    volumeStrongRatio: 1.5,
+    volumeModerateRatio: 1.3,
+    volumeWeakRatio: 1.1,
+    rsiPeriod: 14,
+    rsiIdealMin: 55,
+    rsiIdealMax: 70,
+    rsiNeutralMin: 45,
+    rsiNeutralMax: 55,
+    rsiExtendedMax: 80,
+    structureLookbackPeriod: 20,
+  },
+};
+
 const defaultMetrics = {
   totalCombinations: 0,
   marketClosed: 0,
@@ -18,6 +59,7 @@ const run = jest.fn().mockResolvedValue({
   skipped: [],
   errors: [],
   metrics: defaultMetrics,
+  runtimeConfig,
 });
 
 jest.mock('../src/config/container', () => ({
@@ -53,6 +95,7 @@ describe('marketScanHttp', () => {
       skipped: [],
       errors: [],
       metrics: defaultMetrics,
+      runtimeConfig,
     });
   });
 
@@ -106,6 +149,7 @@ describe('marketScanHttp', () => {
         retryAttempts: 0,
         durationMs: 123,
       },
+      runtimeConfig,
     });
 
     const response = await marketScanHttp(buildRequest({ tickers: ['NVDA'] }) as never, context as never);

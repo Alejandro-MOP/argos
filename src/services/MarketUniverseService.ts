@@ -1,6 +1,5 @@
 import type { AssetType, MarketScanCandidate, MarketSymbol, MarketUniverseSnapshot } from '../models/MarketSymbol';
 import type { MarketSymbolRepository } from '../ports/MarketSymbolRepository';
-import type { WatchlistService } from './WatchlistService';
 
 export interface MarketUniverseLogger {
   log(message: string): void;
@@ -11,32 +10,28 @@ export interface BuildScanCandidatesOptions {
   tickers?: string[];
   timeframe?: string;
   timeframes?: string[];
-  fallbackTimeframes: string[];
+  fallbackTimeframes?: string[];
+}
+
+export class MarketUniverseSymbolNotFoundError extends Error {
+  public constructor(symbol: string) {
+    super(`symbol-not-in-market-universe: ${symbol}`);
+    this.name = 'MarketUniverseSymbolNotFoundError';
+  }
 }
 
 export class MarketUniverseService {
-  public constructor(
-    private readonly repository: MarketSymbolRepository,
-    private readonly watchlistService: WatchlistService,
-  ) {}
+  public constructor(private readonly repository: MarketSymbolRepository) {}
 
   public async loadSnapshot(logger?: MarketUniverseLogger): Promise<MarketUniverseSnapshot> {
-    try {
-      const symbols = await this.repository.findActiveWithTimeframes();
+    const symbols = await this.repository.findActiveWithTimeframes();
 
-      if (symbols.length === 0) {
-        logger?.log('universeSource=env-fallback reason=no-active-market-symbols');
-        return this.loadFallbackSnapshot();
-      }
-
-      logger?.log('universeSource=postgres');
-      return { source: 'postgres', symbols };
-    } catch (error) {
-      logger?.error('universeSource=env-fallback reason=market-universe-load-failed', {
-        message: error instanceof Error ? error.message : 'unknown-error',
-      });
-      return this.loadFallbackSnapshot();
+    if (symbols.length === 0) {
+      throw new Error('market-universe-unavailable: no active market_symbols rows found');
     }
+
+    logger?.log('universeSource=postgres');
+    return { source: 'postgres', symbols };
   }
 
   public buildScanCandidates(
@@ -55,22 +50,16 @@ export class MarketUniverseService {
       const metadata = symbolsByTicker.get(ticker);
 
       if (!metadata) {
-        logger?.log(`symbol-not-in-market-universe symbol=${ticker}`);
-        const fallbackMetadata = this.buildFallbackSymbol(ticker);
-        const timeframes = explicitTimeframes ?? options.fallbackTimeframes;
-        candidates.push(
-          ...timeframes.map((timeframe) => ({
-            symbol: fallbackMetadata.symbol,
-            providerSymbol: fallbackMetadata.providerSymbol,
-            timeframe,
-            metadata: fallbackMetadata,
-            source: 'manual-fallback' as const,
-          })),
-        );
-        continue;
+        logger?.error(`symbol-not-in-market-universe symbol=${ticker}`);
+        throw new MarketUniverseSymbolNotFoundError(ticker);
       }
 
-      const timeframes = explicitTimeframes ?? (metadata.timeframes.length > 0 ? metadata.timeframes : options.fallbackTimeframes);
+      const timeframes = explicitTimeframes ?? metadata.timeframes;
+
+      if (timeframes.length === 0) {
+        throw new Error(`market-universe-incomplete: ${ticker} has no active timeframes`);
+      }
+
       candidates.push(
         ...timeframes.map((timeframe) => ({
           symbol: metadata.symbol,
@@ -84,7 +73,6 @@ export class MarketUniverseService {
 
     return candidates;
   }
-
 
   public listAssetTypes(snapshot: MarketUniverseSnapshot): AssetType[] {
     return [...new Set(snapshot.symbols.map((symbol) => symbol.assetType))].sort();
@@ -135,40 +123,7 @@ export class MarketUniverseService {
 
     return [...new Set(timeframes.map((timeframe) => timeframe.trim().toLowerCase()).filter(Boolean))];
   }
-
-  private loadFallbackSnapshot(): MarketUniverseSnapshot {
-    const symbols = this.watchlistService.getTickers().map((ticker) => this.buildFallbackSymbol(ticker));
-
-    return { source: 'env-fallback', symbols };
-  }
-
-  private buildFallbackSymbol(ticker: string): MarketSymbol {
-    const symbol = ticker.trim().toUpperCase();
-    const isCrypto = symbol.endsWith('-USD');
-
-    return {
-      symbol,
-      providerSymbol: symbol,
-      displayName: symbol,
-      assetType: isCrypto ? 'CRYPTO' : this.getFallbackAssetType(symbol),
-      sector: isCrypto ? 'Crypto' : undefined,
-      industry: undefined,
-      exchange: undefined,
-      market: isCrypto ? 'Crypto' : 'US',
-      timezone: isCrypto ? 'UTC' : 'America/New_York',
-      sessionType: isCrypto ? 'TWENTY_FOUR_SEVEN' : 'US_REGULAR',
-      supportsIntraday: true,
-      description: 'Metadata mínima construida por fallback; no fue insertada automáticamente en PostgreSQL.',
-      isActive: true,
-      timeframes: [],
-    };
-  }
-
-  private getFallbackAssetType(symbol: string): AssetType {
-    return ['SPY', 'QQQ', 'VOO', 'XLP', 'XLV', 'VGT', 'GLD'].includes(symbol) ? 'ETF' : 'STOCK';
-  }
 }
-
 
 const normalizeNavigationGroup = (value: string | undefined): string => {
   const normalized = value?.trim();

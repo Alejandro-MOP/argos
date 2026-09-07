@@ -1,4 +1,5 @@
 import type { Candle } from '../src/models/Candle';
+import type { EngineRuntimeConfig } from '../src/models/EngineConfig';
 import type { MarketUniverseSnapshot } from '../src/models/MarketSymbol';
 import type { Opportunity } from '../src/models/Opportunity';
 import { MarketDataProviderError, MarketDataRateLimitError } from '../src/errors/MarketDataErrors';
@@ -18,6 +19,47 @@ const buildCandles = (count = 80): Candle[] =>
     close: 100.5 + index,
     volume: 1000 + index,
   }));
+
+
+const runtimeConfig: EngineRuntimeConfig = {
+  strategyVersion: 'v1',
+  marketScanCandleLimit: 80,
+  marketDataMaxAgeMinutes: 20,
+  marketDataRequestDelayMs: 0,
+  marketDataMaxConcurrency: 5,
+  marketDataBatchDelayMs: 250,
+  marketDataMaxRetries: 3,
+  marketDataRetryBaseDelayMs: 30000,
+  marketDataSequential: false,
+  tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 5 },
+  signalIntelligence: {
+    backtestContextEnabled: true,
+    backtestContextMonths: 24,
+    performanceMinSampleSize: 20,
+    forwardTestContextEnabled: true,
+  },
+  telegramNotificationTimeframes: ['5m', '15m'],
+  scoring: {
+    maxAnalyzerScore: 25,
+    opportunityMinScore: 90,
+    telegramNotificationMinScore: 100,
+    evidenceMinScore: 80,
+    duplicateWindowMinutes: 60,
+    emaFastPeriod: 20,
+    emaSlowPeriod: 50,
+    volumeLookbackPeriod: 20,
+    volumeStrongRatio: 1.5,
+    volumeModerateRatio: 1.3,
+    volumeWeakRatio: 1.1,
+    rsiPeriod: 14,
+    rsiIdealMin: 55,
+    rsiIdealMax: 70,
+    rsiNeutralMin: 45,
+    rsiNeutralMax: 55,
+    rsiExtendedMax: 80,
+    structureLookbackPeriod: 20,
+  },
+};
 
 const buildOpportunity = (overrides: Partial<Opportunity> = {}): Opportunity => ({
   ticker: 'NVDA',
@@ -94,16 +136,16 @@ const buildService = (overrides: Partial<ConstructorParameters<typeof AnalyzeSym
     }),
   };
 
+  const engineConfigService = { loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', values: runtimeConfig }) };
   const service = new AnalyzeSymbolService({
     marketDataService,
-    opportunityService,
+    engineConfigService,
+    opportunityServiceFactory: jest.fn().mockReturnValue(opportunityService),
     marketUniverseService,
-    candleLimit: 80,
-    operationalThreshold: 90,
     ...overrides,
   });
 
-  return { service, marketDataService, opportunityService, marketUniverseService, candles };
+  return { service, marketDataService, opportunityService, marketUniverseService, engineConfigService, candles };
 };
 
 describe('AnalyzeSymbolService', () => {
@@ -118,7 +160,7 @@ describe('AnalyzeSymbolService', () => {
 
   it('uses providerSymbol and asset metadata from the market universe', async () => {
     const { service, marketDataService } = buildService({
-      opportunityService: { analyze: jest.fn().mockReturnValue(buildOpportunity({ ticker: 'BTC', timeframe: '1m', score: 85 })) },
+      opportunityServiceFactory: jest.fn().mockReturnValue({ analyze: jest.fn().mockReturnValue(buildOpportunity({ ticker: 'BTC', timeframe: '1m', score: 85 })) }),
     });
 
     const result = await service.analyze({ symbol: 'btc', timeframe: '1m' });
@@ -138,7 +180,7 @@ describe('AnalyzeSymbolService', () => {
       analyze: jest.fn().mockReturnValue(buildOpportunity({ ticker: 'SPY', timeframe: '15m', score: 70 })),
     };
     const { service, marketDataService } = buildService({
-      opportunityService: expandedOpportunityService,
+      opportunityServiceFactory: jest.fn().mockReturnValue(expandedOpportunityService),
     });
 
     const result = await service.analyze({ symbol: 'spy', timeframe: '15m' });
@@ -164,14 +206,13 @@ describe('AnalyzeSymbolService', () => {
     expect(result.candlesReturned).toBe(80);
   });
 
-  it('falls back to minimal metadata for a manual unknown symbol without persisting it', async () => {
+  it('rejects manual unknown symbols that are not active in the market universe', async () => {
     const { service, marketDataService } = buildService();
 
-    const result = await service.analyze({ symbol: 'doge-usd', timeframe: '1d' });
-
-    expect(marketDataService.getCandles).toHaveBeenCalledWith('DOGE-USD', '1d', 80);
-    expect(result.assetType).toBe('CRYPTO');
-    expect(result.providerSymbol).toBe('DOGE-USD');
+    await expect(service.analyze({ symbol: 'doge-usd', timeframe: '1d' })).rejects.toMatchObject({
+      code: 'symbol-not-in-market-universe',
+    });
+    expect(marketDataService.getCandles).not.toHaveBeenCalled();
   });
 
   it('rejects invalid symbols and unsupported timeframes', () => {

@@ -76,7 +76,7 @@ Notas importantes del flujo:
 - El proveedor actual de datos de mercado es `YahooFinanceClient`.
 - `YahooFinanceClient` implementa `MarketDataProvider` y entrega velas normalizadas.
 - Una **vela** representa un periodo de mercado con precio de apertura, máximo, mínimo, cierre y volumen.
-- PostgreSQL se usa cuando `DATABASE_URL` está configurado. Si no, varias piezas usan repositorios en memoria.
+- PostgreSQL es la fuente única de verdad para configuración funcional y universo de mercado. Los repositorios en memoria quedan reservados para pruebas unitarias aisladas; el runtime operativo no usa fallback ENV para reglas del motor.
 - `Research Snapshot` no ejecuta evaluadores ni escaneos; sólo consolida información existente.
 
 ## Market Data
@@ -662,3 +662,12 @@ El universo de mercado se administra como catálogo persistente en PostgreSQL. `
 La expansión V1.6-A agrega símbolos curados en Broad Market ETFs, sector ETFs, semiconductores, rates/bonds, metals, utilities, real estate y líderes adicionales por sector. Es una migración data-only, idempotente y non-destructive: no borra históricos, no modifica señales/evidence y no cambia fórmulas ni thresholds.
 
 El flujo operacional sigue cargando un snapshot de configuración y un snapshot de universo al inicio de cada scan. Las reglas de sesión siguen filtrando combinaciones `market-closed` antes de llamar Yahoo.
+
+
+## Configuración funcional autoritativa
+
+ARGOS lee thresholds, scoring, trade plan, estrategia, límites de velas, throughput de market data y temporalidades notificables desde `market_signal_engine.engine_config`.
+
+El universo de símbolos y timeframes activos se lee desde `market_signal_engine.market_symbols` y `market_signal_engine.symbol_timeframes`.
+
+`local.settings.json` queda limitado a secretos, bootstrap local e infraestructura de Azure Functions. Si PostgreSQL no está disponible, la configuración está incompleta o un símbolo solicitado no existe en el universo activo, ARGOS falla con un error explícito en lugar de usar defaults de ENV.

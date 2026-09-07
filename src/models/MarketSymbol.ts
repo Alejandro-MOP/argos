@@ -19,7 +19,7 @@ export interface MarketSymbol {
   timeframes: string[];
 }
 
-export type MarketUniverseSource = 'postgres' | 'env-fallback';
+export type MarketUniverseSource = 'postgres';
 
 export interface MarketUniverseSnapshot {
   source: MarketUniverseSource;
@@ -31,5 +31,5 @@ export interface MarketScanCandidate {
   providerSymbol: string;
   timeframe: string;
   metadata: MarketSymbol;
-  source: MarketUniverseSource | 'manual-fallback';
+  source: MarketUniverseSource;
 }
