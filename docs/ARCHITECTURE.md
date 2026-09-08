@@ -671,3 +671,49 @@ ARGOS lee thresholds, scoring, trade plan, estrategia, límites de velas, throug
 El universo de símbolos y timeframes activos se lee desde `market_signal_engine.market_symbols` y `market_signal_engine.symbol_timeframes`.
 
 `local.settings.json` queda limitado a secretos, bootstrap local e infraestructura de Azure Functions. Si PostgreSQL no está disponible, la configuración está incompleta o un símbolo solicitado no existe en el universo activo, ARGOS falla con un error explícito en lugar de usar defaults de ENV.
+
+## ORB-FVG Scalping Research v0.1
+
+ORB-FVG es un dominio paralelo de research, aislado de Strategy v1.
+
+```text
+orbFvgScanner timer
+  ↓
+MarketUniverseService
+  ↓
+MarketDataService / Yahoo Finance
+  ↓
+Opening Range 15m + LONG Breakout 1m + bullish FVG 1m
+  ↓
+OrbFvgSignalRepository
+  ↓
+Telegram Alerts Bot research-only alert
+
+orbFvgForwardMonitor timer
+  ↓
+Open ORB-FVG candidates
+  ↓
+1m future candles after signalAt
+  ↓
+WIN / LOSS / AMBIGUOUS / EXPIRED + MFE / MAE + R levels
+```
+
+Este carril no llama ni modifica:
+
+- `MarketScanExecutor`
+- `OpportunityService`
+- analyzers/scoring
+- Evidence Strategy v1
+- Forward Evaluation Strategy v1
+- Shadow Paper Trading
+- `PaperTradeMonitorService`
+
+La identidad del experimento es `experiment_version=orb-fvg-v0.1`. Desde 2026-09-08 su detección prospectiva es LONG-only. Su persistencia vive en `market_signal_engine.orb_fvg_signals` y `market_signal_engine.orb_fvg_signal_levels`.
+
+La idempotencia principal se protege con una restricción única por:
+
+```text
+ticker + session_date + direction + experiment_version + breakout_candle_timestamp
+```
+
+El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de detecciones, niveles R y outcomes. Sigue permitiendo `direction=SHORT` para consultar históricos preservados, aunque el scanner ya no genera nuevas señales SHORT para v0.1.

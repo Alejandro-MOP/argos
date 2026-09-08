@@ -29,6 +29,9 @@ import { MarketUniverseService } from '../services/MarketUniverseService';
 import { NotificationService } from '../services/NotificationService';
 import { PaperTradeMonitorService } from '../services/PaperTradeMonitorService';
 import { PaperTradeService } from '../services/PaperTradeService';
+import { OrbFvgForwardMonitorService } from '../orbFvg/OrbFvgForwardMonitorService';
+import { OrbFvgScannerService } from '../orbFvg/OrbFvgScannerService';
+import { OrbFvgSessionService } from '../orbFvg/OrbFvgSessionService';
 import { OpportunityFilter } from '../services/OpportunityFilter';
 import { OpportunityService } from '../services/OpportunityService';
 import { RankingService } from '../services/RankingService';
@@ -70,12 +73,14 @@ const {
   evidenceSignalRepository,
   evidenceSignalEvaluationRepository,
   paperTradeRepository,
+  orbFvgSignalRepository,
   database,
 } = createRepositories(env.databaseUrl);
 
 const engineConfigService = new EngineConfigService(engineConfigRepository);
 const marketUniverseService = new MarketUniverseService(marketSymbolRepository);
 const marketSessionService = new MarketSessionService();
+const orbFvgSessionService = new OrbFvgSessionService();
 const forwardPerformanceReportProvider = database
   ? new PostgresForwardPerformanceProvider(
       database,
@@ -154,6 +159,19 @@ const createOpportunityFilter = (config: EngineRuntimeConfig): OpportunityFilter
 
 const paperTradeService = new PaperTradeService(paperTradeRepository, marketDataService);
 const paperTradeMonitorService = new PaperTradeMonitorService(paperTradeRepository, marketDataService, telegramClient);
+const orbFvgScannerService = new OrbFvgScannerService({
+  marketUniverseService,
+  marketDataService,
+  repository: orbFvgSignalRepository,
+  telegramClient,
+  sessionService: orbFvgSessionService,
+});
+const orbFvgForwardMonitorService = new OrbFvgForwardMonitorService({
+  repository: orbFvgSignalRepository,
+  marketDataService,
+  telegramClient,
+  sessionService: orbFvgSessionService,
+});
 
 const analyzeSymbolService = new AnalyzeSymbolService({
   marketDataService,
@@ -258,5 +276,8 @@ export {
   analyzeSymbolService,
   paperTradeService,
   paperTradeMonitorService,
+  orbFvgScannerService,
+  orbFvgForwardMonitorService,
+  orbFvgSignalRepository,
   telegramMarketScanExecutionGuard,
 };

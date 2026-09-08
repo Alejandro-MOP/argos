@@ -1,0 +1,93 @@
+import type { AssetType } from './MarketSymbol';
+
+export const ORB_FVG_EXPERIMENT_VERSION = 'orb-fvg-v0.1';
+export const ORB_FVG_R_LEVELS = [0.5, 1, 1.5, 2, 3] as const;
+
+export type OrbFvgDirection = 'LONG' | 'SHORT';
+export type OrbFvgStatus = 'OPEN' | 'WIN' | 'LOSS' | 'AMBIGUOUS' | 'EXPIRED';
+export type OrbFvgOutcome = Exclude<OrbFvgStatus, 'OPEN'>;
+
+export interface OrbFvgCandleSnapshot {
+  timestamp: Date;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export interface OrbFvgSignalSnapshot {
+  id?: string;
+  experimentVersion: string;
+  ticker: string;
+  providerSymbol: string;
+  assetType: Extract<AssetType, 'STOCK' | 'ETF'>;
+  sector?: string;
+  industry?: string;
+  market?: string;
+  exchange?: string;
+  sessionDate: string;
+  direction: OrbFvgDirection;
+  openingRangeCandle: OrbFvgCandleSnapshot;
+  openingRangeSizePct: number;
+  breakoutAt: Date;
+  breakoutCandle: OrbFvgCandleSnapshot;
+  breakoutDistancePct: number;
+  wickBreakout: boolean;
+  closeBreakout: boolean;
+  fvgCandle1: OrbFvgCandleSnapshot;
+  fvgCandle2: OrbFvgCandleSnapshot;
+  fvgCandle3: OrbFvgCandleSnapshot;
+  fvgLow: number;
+  fvgHigh: number;
+  fvgSizePct: number;
+  candlesAfterBreakout: number;
+  signalAt: Date;
+  entryPrice: number;
+  stopPrice: number;
+  risk: number;
+  riskPct: number;
+  target2RPrice: number;
+  status: OrbFvgStatus;
+  outcome?: OrbFvgOutcome;
+  highestPriceSeen: number;
+  lowestPriceSeen: number;
+  mfePct: number;
+  maePct: number;
+  maxR: number;
+  targetReachedAt?: Date;
+  stopReachedAt?: Date;
+  resolvedAt?: Date;
+  telegramAlertSent: boolean;
+}
+
+export interface PersistedOrbFvgSignalSnapshot extends OrbFvgSignalSnapshot {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface OrbFvgSignalLevelSnapshot {
+  id?: string;
+  orbFvgSignalId: string;
+  rMultiple: number;
+  levelPrice: number;
+  triggeredAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface OrbFvgSignalFilters {
+  sessionDate?: string;
+  ticker?: string;
+  assetType?: 'STOCK' | 'ETF';
+  direction?: OrbFvgDirection;
+  status?: OrbFvgStatus;
+  experimentVersion?: string;
+  limit?: number;
+}
+
+export interface OrbFvgSignalWithLevels {
+  signal: PersistedOrbFvgSignalSnapshot;
+  levels: OrbFvgSignalLevelSnapshot[];
+}
+

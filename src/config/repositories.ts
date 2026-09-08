@@ -6,6 +6,7 @@ import type { EvidenceSignalRepository } from '../ports/EvidenceSignalRepository
 import type { ForwardSignalRepository } from '../ports/ForwardSignalRepository';
 import type { MarketSymbolRepository } from '../ports/MarketSymbolRepository';
 import type { OpportunityRepository } from '../ports/OpportunityRepository';
+import type { OrbFvgSignalRepository } from '../ports/OrbFvgSignalRepository';
 import type { PaperTradeRepository } from '../ports/PaperTradeRepository';
 import type { SignalRepository as SignalRepositoryPort } from '../ports/SignalRepository';
 import type { SignalEvaluationRepository } from '../ports/SignalEvaluationRepository';
@@ -16,12 +17,14 @@ import { MemoryForwardSignalRepository } from '../repositories/MemoryForwardSign
 import { MemoryMarketSymbolRepository } from '../repositories/MemoryMarketSymbolRepository';
 import { MemorySignalEvaluationRepository } from '../repositories/MemorySignalEvaluationRepository';
 import { OpportunityMemoryRepository } from '../repositories/OpportunityMemoryRepository';
+import { OrbFvgMemoryRepository } from '../repositories/OrbFvgMemoryRepository';
 import { PaperTradeMemoryRepository } from '../repositories/PaperTradeMemoryRepository';
 import { PostgresEngineConfigRepository } from '../repositories/PostgresEngineConfigRepository';
 import { PostgresEvidenceSignalEvaluationRepository } from '../repositories/PostgresEvidenceSignalEvaluationRepository';
 import { PostgresEvidenceSignalRepository } from '../repositories/PostgresEvidenceSignalRepository';
 import { PostgresMarketSymbolRepository } from '../repositories/PostgresMarketSymbolRepository';
 import { PostgresOpportunityRepository } from '../repositories/PostgresOpportunityRepository';
+import { PostgresOrbFvgSignalRepository } from '../repositories/PostgresOrbFvgSignalRepository';
 import { PostgresPaperTradeRepository } from '../repositories/PostgresPaperTradeRepository';
 import { PostgresSignalEvaluationRepository } from '../repositories/PostgresSignalEvaluationRepository';
 import { PostgresSignalRepository } from '../repositories/PostgresSignalRepository';
@@ -37,6 +40,7 @@ export interface RepositorySet {
   evidenceSignalRepository: EvidenceSignalRepository;
   evidenceSignalEvaluationRepository: EvidenceSignalEvaluationRepository;
   paperTradeRepository: PaperTradeRepository;
+  orbFvgSignalRepository: OrbFvgSignalRepository;
   database?: Queryable;
 }
 
@@ -54,6 +58,7 @@ export const createRepositories = (databaseUrl: string): RepositorySet => {
       evidenceSignalRepository: new MemoryEvidenceSignalRepository(),
       evidenceSignalEvaluationRepository: new MemoryEvidenceSignalEvaluationRepository(),
       paperTradeRepository: new PaperTradeMemoryRepository(),
+      orbFvgSignalRepository: new OrbFvgMemoryRepository(),
     };
   }
 
@@ -69,6 +74,7 @@ export const createRepositories = (databaseUrl: string): RepositorySet => {
     evidenceSignalRepository: new PostgresEvidenceSignalRepository(postgresPool),
     evidenceSignalEvaluationRepository: new PostgresEvidenceSignalEvaluationRepository(postgresPool),
     paperTradeRepository: new PostgresPaperTradeRepository(postgresPool),
+    orbFvgSignalRepository: new PostgresOrbFvgSignalRepository(postgresPool),
     database: postgresPool,
   };
 };

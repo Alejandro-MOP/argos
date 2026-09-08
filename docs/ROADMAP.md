@@ -2733,3 +2733,39 @@ Estado: **Implemented / Pending Manual Validation**.
 ARGOS deja de mantener dos fuentes funcionales de configuración. Thresholds, scoring, trade plan, strategy version, candle limit, throughput de market data y timeframes notificables viven en `engine_config`; el universo operacional vive en `market_symbols` y `symbol_timeframes`.
 
 `local.settings.json` queda reservado para secretos, bootstrap e infraestructura. Si PostgreSQL no tiene configuración activa suficiente o el universo está vacío, ARGOS falla explícitamente en lugar de usar `env-fallback`.
+
+## ORB-FVG Scalping Research v0.1 — Parallel Research Experiment
+
+Estado: **IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION**.
+
+ORB-FVG agrega un carril de investigación prospectiva separado de Strategy v1. No modifica scoring, analyzers, OpportunityService, Evidence v1, Forward Evaluation v1, Shadow Paper Trading ni Telegram alert filtering existente.
+
+Hipótesis inicial: un breakout alcista confirmado del Opening Range de 09:30–09:45 ET, acompañado por un bullish FVG 1m matemáticamente definido dentro del boundary temporal de v0.1, puede presentar comportamiento forward medible que justifique investigación posterior.
+
+Implementado:
+
+- universo `STOCK`/`ETF` desde Market Universe PostgreSQL;
+- exclusión inicial de `CRYPTO`;
+- Opening Range 15m en `America/New_York` sin offsets UTC hardcodeados;
+- detección prospectiva LONG-only reproducible desde 2026-09-08;
+- bullish FVG matemático de tres velas 1m;
+- `maxFvgLagCandles=3`;
+- entry reproducible en `candle3.close`;
+- stop detrás de breakout candle;
+- target principal `2R`;
+- R ladder descriptiva `0.5R, 1R, 1.5R, 2R, 3R`;
+- monitor prospectivo propio con MFE/MAE y outcomes;
+- persistencia propia en `orb_fvg_signals` y `orb_fvg_signal_levels`;
+- alertas Telegram marcadas `RESEARCH ONLY`;
+- endpoint read-only `GET /api/orb-fvg/signals`.
+
+Nota metodológica 2026-09-08:
+
+`orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. El experimento inicial podía generar LONG y SHORT, pero la hipótesis deseada para esta fase corresponde únicamente a rupturas alcistas del Opening Range acompañadas por bullish FVG. Señales SHORT previas, si existen, se preservan intactas y pueden terminar su forward evaluation; no deben mezclarse con el dataset LONG-only posterior al cambio.
+
+Limitaciones conocidas:
+
+- Yahoo Finance es suficiente para research experimental, no feed profesional de ejecución de scalping.
+- No hay calendario bursátil completo para holidays/early closes.
+- Resultados brutos no incluyen spread, slippage ni comisiones.
+- No está validado prospectivamente todavía.

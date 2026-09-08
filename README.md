@@ -1851,3 +1851,66 @@ market_signal_engine.symbol_timeframes
 ```
 
 `local.settings.json` queda reservado para secretos, conexión a PostgreSQL, schedules de Azure Functions y parámetros de infraestructura local. Si PostgreSQL no está disponible o falta configuración activa requerida, ARGOS falla explícitamente en lugar de usar ENV como fallback.
+
+## ORB-FVG Scalping Research v0.1
+
+Estado: `IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION`.
+
+ORB-FVG es un carril paralelo de investigación. No forma parte de `strategy_version=v1`, no usa el score de Trend/Volume/Momentum/Structure y no escribe en Evidence V1.
+
+Hipótesis inicial:
+
+> Un breakout alcista confirmado del Opening Range de 09:30–09:45 ET, acompañado por un bullish FVG 1m matemáticamente definido dentro del boundary temporal de v0.1, puede presentar comportamiento forward medible que justifique investigación posterior.
+
+Universo inicial:
+
+- `STOCK`
+- `ETF`
+- símbolos activos del Market Universe en PostgreSQL
+- excluye `CRYPTO`
+
+Reglas v0.1 prospectivas — LONG-only desde 2026-09-08:
+
+- Opening Range: primera vela regular `15m` de `09:30 → 09:45 America/New_York`.
+- LONG breakout: `candle.close > openingRangeHigh AND candle.open <= openingRangeHigh`.
+- Bullish FVG: `low(candle3) > high(candle1)`.
+- `maxFvgLagCandles = 3`.
+- `signalAt = timestamp de candle3`.
+- `entryPrice = candle3.close`.
+- LONG stop: `low` de breakout candle.
+- Target principal: `2R`.
+- Expiración: cierre regular US de la misma sesión; no mantiene candidates overnight.
+
+Timers:
+
+```text
+orbFvgScanner         -> cada 1 minuto
+orbFvgForwardMonitor -> cada 1 minuto
+```
+
+Endpoint read-only:
+
+```bash
+curl "http://localhost:7071/api/orb-fvg/signals?sessionDate=2026-09-07&status=OPEN"
+```
+
+Filtros opcionales:
+
+- `sessionDate` o `date`
+- `ticker`
+- `assetType`
+- `direction` — conserva compatibilidad de lectura para `SHORT` histórico
+- `status`
+- `experimentVersion`
+- `limit`
+
+Tablas:
+
+```text
+market_signal_engine.orb_fvg_signals
+market_signal_engine.orb_fvg_signal_levels
+```
+
+Yahoo Finance se usa únicamente como feed experimental de research. No debe interpretarse como feed profesional de ejecución de scalping. Los resultados son brutos: no incluyen spread, slippage ni comisiones.
+
+Nota metodológica 2026-09-08: `orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. Si existen señales SHORT anteriores en PostgreSQL, se preservan como histórico y pueden consultarse, pero no deben mezclarse con el dataset LONG-only posterior al cambio.

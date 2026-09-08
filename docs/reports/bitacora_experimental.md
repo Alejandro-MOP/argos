@@ -63,6 +63,47 @@ A partir de esta nota, Strategy Profiles, Research Snapshot y Forward Performanc
 
 ---
 
+# 2026-09-06 — ORB-FVG Scalping Research v0.1
+
+## Contexto
+
+Se implementó un carril paralelo de investigación prospectiva llamado `ORB-FVG Scalping Research v0.1`.
+
+Estado experimental:
+
+```text
+IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION
+```
+
+Identidad:
+
+```text
+experiment_version = orb-fvg-v0.1
+```
+
+Hipótesis inicial:
+
+> Un breakout confirmado del Opening Range de 09:30–09:45 ET, acompañado por un FVG 1m matemáticamente definido dentro del boundary temporal de v0.1, puede presentar comportamiento forward medible que justifique investigación posterior.
+
+## Límites
+
+- No forma parte de `strategy_version=v1`.
+- No usa el score de Trend/Volume/Momentum/Structure.
+- No modifica Evidence V1 ni Forward Evaluation V1.
+- No representa recomendación de trading.
+- No incluye broker, spread, slippage ni comisiones.
+- Yahoo Finance se usa como fuente experimental, no como feed profesional de ejecución.
+
+## Estado de la hipótesis
+
+```text
+OPEN / UNTESTED
+```
+
+La primera sesión prospectiva será necesaria para validar timestamps, frecuencia de detección, calidad de datos y comportamiento operativo real del experimento.
+
+---
+
 # 2026-08-26 — Primer corte real de Evidence V1
 
 ## Contexto
@@ -3084,3 +3125,32 @@ Conclusión vigente:
 ## Próximo paso
 
 Mantener V1.6-B — Sector-Aware Research como siguiente fase principal. Shadow Paper Trading v0.1 avanza en paralelo como observación prospectiva y no debe usarse para modificar Strategy v1 antes de revisión metodológica.
+
+## 2026-09-08 — ORB-FVG v0.1 queda LONG-only
+
+Cambio metodológico:
+
+`orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only.
+
+Motivo:
+
+> El experimento inicial generaba LONG y SHORT, pero la hipótesis que se desea estudiar en esta fase corresponde únicamente a rupturas alcistas del Opening Range acompañadas por bullish FVG.
+
+Impacto:
+
+- no se modifica Strategy v1;
+- no se modifica Evidence v1;
+- no se modifica Forward Evaluation v1;
+- no se modifica Shadow Paper Trading;
+- no se modifica scoring;
+- señales SHORT previas, si existen, se preservan como histórico;
+- señales SHORT previas abiertas pueden terminar su forward evaluation;
+- a partir de este boundary temporal no deben generarse nuevas señales ORB-FVG SHORT;
+- al analizar resultados, no mezclar posibles SHORT históricos con el dataset prospectivo LONG-only posterior al 2026-09-08.
+
+Estado:
+
+```text
+IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION
+```
+
