@@ -26,19 +26,5 @@ export const formatOrbFvgDetectionAlert = (signal: PersistedOrbFvgSignalSnapshot
   'NO TRADE RECOMMENDATION',
 ].join('\n');
 
-export const formatOrbFvgResolutionAlert = (signal: PersistedOrbFvgSignalSnapshot): string => [
-  '🧪 ARGOS ORB-FVG RESULT',
-  '',
-  `${signal.ticker} · ${signal.assetType} · ${signal.direction}`,
-  `Outcome: ${signal.outcome ?? signal.status}`,
-  `MFE: ${formatSignedPercent(signal.mfePct)}`,
-  `MAE: ${formatSignedPercent(signal.maePct)}`,
-  `Max R: ${signal.maxR.toFixed(2)}R`,
-  signal.resolvedAt ? `Resolved: ${sessionService.formatEt(signal.resolvedAt)}` : '',
-  '',
-  'RESEARCH ONLY',
-].filter(Boolean).join('\n');
-
 const formatPrice = (value: number): string => value < 1 ? value.toFixed(6) : value.toFixed(2);
-const formatSignedPercent = (value: number): string => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 

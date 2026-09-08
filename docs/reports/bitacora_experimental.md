@@ -3154,3 +3154,27 @@ Estado:
 IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION
 ```
 
+## 2026-09-08 — ORB-FVG RESULT Telegram notifications deshabilitadas
+
+Cambio UX/operacional del experimento:
+
+`orb-fvg-v0.1` conserva la alerta inicial de candidate LONG válido, pero deja de enviar notificaciones Telegram de resolución `ORB-FVG RESULT`.
+
+Telegram behavior:
+
+```text
+candidate detection alerts only
+```
+
+Final outcomes are persisted silently for research.
+
+Impacto:
+
+- forward monitoring sigue activo;
+- WIN / LOSS / AMBIGUOUS / EXPIRED siguen persistiendo;
+- MFE / MAE / maxR siguen actualizándose;
+- R ladder y timestamps de niveles siguen actualizándose;
+- Strategy v1 alerts no cambian;
+- Shadow Paper Trading alerts no cambian;
+- Telegram Control Bot no cambia.
+

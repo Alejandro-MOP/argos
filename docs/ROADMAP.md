@@ -2763,6 +2763,8 @@ Nota metodológica 2026-09-08:
 
 `orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. El experimento inicial podía generar LONG y SHORT, pero la hipótesis deseada para esta fase corresponde únicamente a rupturas alcistas del Opening Range acompañadas por bullish FVG. Señales SHORT previas, si existen, se preservan intactas y pueden terminar su forward evaluation; no deben mezclarse con el dataset LONG-only posterior al cambio.
 
+Telegram behavior: candidate detection alerts only. Final outcomes are persisted silently for research: no se envían notificaciones `ORB-FVG RESULT` para WIN, LOSS, AMBIGUOUS o EXPIRED.
+
 Limitaciones conocidas:
 
 - Yahoo Finance es suficiente para research experimental, no feed profesional de ejecución de scalping.

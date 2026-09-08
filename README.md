@@ -1914,3 +1914,5 @@ market_signal_engine.orb_fvg_signal_levels
 Yahoo Finance se usa únicamente como feed experimental de research. No debe interpretarse como feed profesional de ejecución de scalping. Los resultados son brutos: no incluyen spread, slippage ni comisiones.
 
 Nota metodológica 2026-09-08: `orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. Si existen señales SHORT anteriores en PostgreSQL, se preservan como histórico y pueden consultarse, pero no deben mezclarse con el dataset LONG-only posterior al cambio.
+
+Telegram behavior: candidate detection alerts only. Final outcomes are persisted silently for research: no se envían notificaciones `ORB-FVG RESULT` para WIN, LOSS, AMBIGUOUS o EXPIRED.

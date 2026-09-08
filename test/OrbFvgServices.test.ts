@@ -134,6 +134,7 @@ describe('ORB-FVG services', () => {
     });
     await scanner.run(logger);
     const signal = (await repository.find())[0].signal;
+    const sendMessage = jest.fn().mockResolvedValue(true);
     const monitor = new OrbFvgForwardMonitorService({
       repository,
       marketDataService: {
@@ -141,6 +142,7 @@ describe('ORB-FVG services', () => {
           candle('2026-09-04T13:49:00.000Z', signal.entryPrice, signal.target2RPrice + 0.5, signal.entryPrice, signal.target2RPrice),
         ]),
       } as never,
+      telegramClient: { sendMessage },
       now: () => new Date('2026-09-04T14:10:00.000Z'),
     });
 
@@ -151,9 +153,13 @@ describe('ORB-FVG services', () => {
     expect(first.resolved).toBe(1);
     expect(first.wins).toBe(1);
     expect(first.levelsTriggered).toBeGreaterThan(0);
+    expect(first.telegramResolutionAlertsSent).toBe(0);
     expect(second.openSignals).toBe(0);
     expect(stored[0].signal.status).toBe('WIN');
+    expect(stored[0].signal.mfePct).toBeGreaterThan(0);
+    expect(stored[0].signal.maePct).toBe(0);
     expect(stored[0].levels.filter((level) => level.triggeredAt)).toHaveLength(4);
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('keeps existing SHORT signals queryable and lets the monitor finish their forward evaluation', async () => {
@@ -186,8 +192,98 @@ describe('ORB-FVG services', () => {
     expect(result.resolved).toBe(1);
     expect(result.wins).toBe(1);
     expect(stored[0].signal.status).toBe('WIN');
-    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result.telegramResolutionAlertsSent).toBe(0);
+    expect(sendMessage).not.toHaveBeenCalled();
   });
+
+  it.each([
+    {
+      name: 'LOSS',
+      candles: [candle('2026-09-04T13:52:00.000Z', 100, 100.4, 98.8, 99)],
+      now: new Date('2026-09-04T14:10:00.000Z'),
+      expectedStatus: 'LOSS' as const,
+    },
+    {
+      name: 'AMBIGUOUS',
+      candles: [candle('2026-09-04T13:52:00.000Z', 100, 102.1, 98.8, 100)],
+      now: new Date('2026-09-04T14:10:00.000Z'),
+      expectedStatus: 'AMBIGUOUS' as const,
+    },
+    {
+      name: 'EXPIRED',
+      candles: [candle('2026-09-04T13:52:00.000Z', 100, 100.5, 99.5, 100.2)],
+      now: new Date('2026-09-04T20:01:00.000Z'),
+      expectedStatus: 'EXPIRED' as const,
+    },
+  ])('persists $name ORB-FVG outcomes silently without Telegram RESULT alerts', async ({ candles, now, expectedStatus }) => {
+    const repository = new OrbFvgMemoryRepository();
+    const signal = buildLongSignal();
+    const levels = ORB_FVG_R_LEVELS.map((rMultiple) => ({
+      orbFvgSignalId: '',
+      rMultiple,
+      levelPrice: signal.entryPrice + signal.risk * rMultiple,
+    }));
+    await repository.saveIfNotDuplicate(signal, levels);
+    const sendMessage = jest.fn().mockResolvedValue(true);
+    const monitor = new OrbFvgForwardMonitorService({
+      repository,
+      marketDataService: { getHistoricalCandles: jest.fn().mockResolvedValue(candles) } as never,
+      telegramClient: { sendMessage },
+      now: () => now,
+    });
+
+    const result = await monitor.run(logger);
+    const stored = await repository.find();
+
+    expect(result.resolved).toBe(1);
+    expect(result.telegramResolutionAlertsSent).toBe(0);
+    expect(stored[0].signal.status).toBe(expectedStatus);
+    expect(stored[0].signal.outcome).toBe(expectedStatus);
+    expect(stored[0].signal.resolvedAt).toBeDefined();
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+});
+
+
+const buildLongSignal = (): OrbFvgSignalSnapshot => ({
+  experimentVersion: ORB_FVG_EXPERIMENT_VERSION,
+  ticker: 'NVDA',
+  providerSymbol: 'NVDA',
+  assetType: 'STOCK',
+  sector: 'Technology',
+  industry: 'Semiconductors',
+  market: 'US',
+  exchange: 'NASDAQ',
+  sessionDate: '2026-09-04',
+  direction: 'LONG',
+  openingRangeCandle: { timestamp: new Date('2026-09-04T13:30:00.000Z'), open: 100, high: 102, low: 99, close: 101 },
+  openingRangeSizePct: 3.0303,
+  breakoutAt: new Date('2026-09-04T13:46:00.000Z'),
+  breakoutCandle: { timestamp: new Date('2026-09-04T13:46:00.000Z'), open: 101.5, high: 103, low: 99, close: 102.5 },
+  breakoutDistancePct: 0.4902,
+  wickBreakout: true,
+  closeBreakout: true,
+  fvgCandle1: { timestamp: new Date('2026-09-04T13:46:00.000Z'), open: 101.5, high: 103, low: 99, close: 102.5 },
+  fvgCandle2: { timestamp: new Date('2026-09-04T13:47:00.000Z'), open: 102.5, high: 104, low: 102.2, close: 103.5 },
+  fvgCandle3: { timestamp: new Date('2026-09-04T13:48:00.000Z'), open: 103.5, high: 105, low: 103.2, close: 100 },
+  fvgLow: 103,
+  fvgHigh: 103.2,
+  fvgSizePct: 0.1942,
+  candlesAfterBreakout: 2,
+  signalAt: new Date('2026-09-04T13:48:00.000Z'),
+  entryPrice: 100,
+  stopPrice: 99,
+  risk: 1,
+  riskPct: 1,
+  target2RPrice: 102,
+  status: 'OPEN',
+  highestPriceSeen: 100,
+  lowestPriceSeen: 100,
+  mfePct: 0,
+  maePct: 0,
+  maxR: 0,
+  telegramAlertSent: true,
 });
 
 const buildShortSignal = (): OrbFvgSignalSnapshot => ({

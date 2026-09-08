@@ -5,7 +5,6 @@ import type { HistoricalMarketDataProvider } from '../services/MarketDataService
 import { ORB_FVG_R_LEVELS } from '../models/OrbFvgSignal';
 import { calculateRLevelPrice, evaluateOrbFvgOutcome } from './OrbFvgMath';
 import { OrbFvgSessionService } from './OrbFvgSessionService';
-import { formatOrbFvgResolutionAlert } from './OrbFvgTelegramFormatter';
 
 export interface OrbFvgForwardMonitorLogger {
   log(message: string): void;
@@ -115,9 +114,6 @@ export class OrbFvgForwardMonitorService {
       if (evaluation.status === 'LOSS') metrics.losses += 1;
       if (evaluation.status === 'AMBIGUOUS') metrics.ambiguous += 1;
       if (evaluation.status === 'EXPIRED') metrics.expired += 1;
-      if (this.dependencies.telegramClient && await this.dependencies.telegramClient.sendMessage(formatOrbFvgResolutionAlert(updated))) {
-        metrics.telegramResolutionAlertsSent += 1;
-      }
     }
   }
 
