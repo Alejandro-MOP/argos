@@ -418,3 +418,81 @@ Medir primero.
 No mover Strategy v1 por intuición.
 No confundir señales interesantes con edge validado.
 ```
+
+---
+
+# Actualización ejecutiva — 08-SEP-2026
+
+## Líneas paralelas de investigación
+
+ARGOS ya no debe leerse como una sola estrategia monolítica. El estado actual se entiende mejor como varias líneas paralelas que comparten infraestructura, pero no mezclan metodología ni conclusiones:
+
+```text
+ARGOS
+│
+├── Strategy v1 — Signal / Evidence Research
+│   ├── Technical scoring
+│   ├── Evidence capture
+│   ├── Forward evaluation
+│   └── Strategy research
+│
+├── Shadow Paper Trading
+│   └── STOCK 5m Score100 / paper-v0.1
+│
+└── ORB-FVG Research
+    ├── Opening Range 15m
+    ├── Setup Structure 5m
+    ├── FVG
+    ├── Retest
+    ├── Structure confirmation
+    ├── TRADE_READY
+    ├── Telegram selective alert
+    └── Human discretionary entry / management
+```
+
+Estas líneas son paralelas. ORB-FVG no reemplaza Strategy v1. Shadow Paper Trading permanece independiente.
+
+## Estado actual por línea
+
+| Línea | Estado | Lectura correcta |
+| --- | --- | --- |
+| Strategy v1 / Evidence | ACTIVE — evidence accumulation | Estrategia principal congelada en `strategy_version=v1`, acumulando Evidence y Forward Evaluation. |
+| Shadow Paper Trading | Implemented / pending broader manual validation | Carril paralelo para observar trades paper manuales/simulados, sin broker ni dinero real. |
+| ORB-FVG Retest Structure Confirmation | ACTIVE DEVELOPMENT / PROSPECTIVE VALIDATION | Estructura exploratoria prometedora, todavía no validada ni rentable. |
+
+## ORB-FVG en lenguaje ejecutivo
+
+ORB-FVG investiga si una estructura basada en Opening Range, Fair Value Gap, retest y confirmación de continuación puede reducir ruido frente a alertar cada breakout/FVG preliminar.
+
+La hipótesis actual no es “comprar cuando aparece un FVG”. La hipótesis es esperar una estructura completa:
+
+```text
+Opening Range breakout
+→ bullish FVG
+→ FVG retest
+→ recovery above pre-retrace high
+→ continuation confirmation
+→ TRADE_READY
+```
+
+`TRADE_READY` no significa comprar. Significa: “el setup completó la estructura experimental; revisar 1m y decidir manualmente”.
+
+## Qué aprendió ARGOS el 2026-09-08
+
+La primera sesión prospectiva de ORB-FVG v0.1 produjo muchos candidates, pero la auditoría manual mostró que outcome correcto no equivale a setup discrecional válido.
+
+Puntos relevantes:
+
+- 192 candidates y 65 tickers únicos en v0.1.
+- Outcomes observados al corte: 43 WIN, 148 LOSS, 1 EXPIRED.
+- 7 de los 43 WIN auditados tenían `targetReachedAt < createdAt`, señal de retrospective/backfill problem.
+- PLD ayudó a confirmar que ARGOS sí usaba `high/low` para Opening Range; la discrepancia principal fue Yahoo vs TradingView.
+- La revisión manual de TSLA, BA, PLD, GOOGL, SO y BAC motivó separar setup detection de trade forward evaluation.
+
+## Límites que deben quedar explícitos
+
+ORB-FVG todavía no demuestra profitability, edge, Profit Factor positivo, drawdown aceptable ni expectancy ajustada por costos. La muestra es pequeña, la revisión manual introduce discreción y los ejemplos auditados salieron de candidates ya clasificados como WIN por el detector anterior.
+
+ARGOS no ejecuta órdenes ni despliega capital real. La lectura correcta de ORB-FVG hoy es:
+
+> promising exploratory structure under active prospective validation.

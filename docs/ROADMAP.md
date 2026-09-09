@@ -2774,6 +2774,9 @@ Limitaciones conocidas:
 
 ## ORB-FVG v0.3 — Retest Structure Confirmation
 
+ORB-FVG se documenta como **Parallel Research Experiment**. Puede evolucionar por versiones experimentales propias (`orb-fvg-v0.1`, `orb-fvg-v0.2`, `orb-fvg-v0.3`) sin cambiar `strategy_version=v1` ni reemplazar el roadmap formal de Strategy v1. V1.6-B sigue siendo el desarrollo principal de investigación sector-aware para Evidence.
+
+
 Estado: **v0.3 IMPLEMENTED — PENDING PROSPECTIVE VALIDATION**.
 
 Hipótesis v0.3: breakout + bullish FVG no deben tratarse como entrada automática. Deben crear una zona de interés. El setup sólo queda listo si después existe retest del FVG, recuperación estructural sobre el high previo al retroceso y confirmación de continuación.
