@@ -1,10 +1,21 @@
 import type { Candle } from '../src/models/Candle';
-import { ORB_FVG_EXPERIMENT_VERSION, ORB_FVG_R_LEVELS, type OrbFvgSignalSnapshot } from '../src/models/OrbFvgSignal';
+import {
+  ORB_FVG_EXPERIMENT_VERSION,
+  ORB_FVG_EXPERIMENT_VERSION_V1,
+  ORB_FVG_R_LEVELS,
+  type OrbFvgSignalSnapshot,
+} from '../src/models/OrbFvgSignal';
 import { OrbFvgForwardMonitorService } from '../src/orbFvg/OrbFvgForwardMonitorService';
 import { OrbFvgScannerService } from '../src/orbFvg/OrbFvgScannerService';
 import { OrbFvgMemoryRepository } from '../src/repositories/OrbFvgMemoryRepository';
 
-const candle = (timestamp: string, open: number, high: number, low: number, close: number): Candle => ({
+const candle = (
+  timestamp: string,
+  open: number,
+  high: number,
+  low: number,
+  close: number,
+): Candle => ({
   timestamp: new Date(timestamp),
   open,
   high,
@@ -30,8 +41,21 @@ const stock = {
   timeframes: ['1m'],
 };
 
-const etf = { ...stock, symbol: 'VOO', providerSymbol: 'VOO', assetType: 'ETF' as const, sector: 'Broad Market', industry: 'Large Blend ETF' };
-const crypto = { ...stock, symbol: 'BTC-USD', providerSymbol: 'BTC-USD', assetType: 'CRYPTO' as const, sessionType: 'TWENTY_FOUR_SEVEN' as const };
+const etf = {
+  ...stock,
+  symbol: 'VOO',
+  providerSymbol: 'VOO',
+  assetType: 'ETF' as const,
+  sector: 'Broad Market',
+  industry: 'Large Blend ETF',
+};
+const crypto = {
+  ...stock,
+  symbol: 'BTC-USD',
+  providerSymbol: 'BTC-USD',
+  assetType: 'CRYPTO' as const,
+  sessionType: 'TWENTY_FOUR_SEVEN' as const,
+};
 
 describe('ORB-FVG services', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -44,18 +68,21 @@ describe('ORB-FVG services', () => {
         if (timeframe === '15m') return [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)];
         return [
           candle('2026-09-04T13:45:00.000Z', 101, 101.5, 100.5, 101),
-          candle('2026-09-04T13:46:00.000Z', 101, 103, 100.8, 102.5),
-          candle('2026-09-04T13:47:00.000Z', 102.5, 104, 102.2, 103.5),
-          candle('2026-09-04T13:48:00.000Z', 103.5, 105, 103.2, 104.5),
+          candle('2026-09-04T13:50:00.000Z', 101, 103, 100.8, 102.5),
+          candle('2026-09-04T13:55:00.000Z', 102.5, 104, 102.2, 103.5),
         ];
       }),
     };
     const service = new OrbFvgScannerService({
-      marketUniverseService: { loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock, etf, crypto] }) },
+      marketUniverseService: {
+        loadSnapshot: jest
+          .fn()
+          .mockResolvedValue({ source: 'postgres', symbols: [stock, etf, crypto] }),
+      },
       marketDataService: marketDataService as never,
       repository,
       telegramClient: { sendMessage },
-      now: () => new Date('2026-09-04T14:00:00.000Z'),
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
     });
 
     const first = await service.run(logger);
@@ -65,9 +92,14 @@ describe('ORB-FVG services', () => {
     expect(first.eligible).toBe(2);
     expect(first.persisted).toBe(2);
     expect(second.persisted).toBe(0);
-    expect(second.duplicates).toBe(2);
+    expect(second.duplicates).toBe(0);
     expect(stored).toHaveLength(2);
     expect(stored[0].signal.experimentVersion).toBe(ORB_FVG_EXPERIMENT_VERSION);
+    expect(stored[0].signal.setupTimeframe).toBe('5m');
+    expect(stored[0].signal.telegramAlertSent).toBe(false);
+    expect(stored[0].signal.scannerRunAt).toEqual(new Date('2026-09-04T14:01:00.000Z'));
+    expect(stored[0].signal.detectedAt).toEqual(new Date('2026-09-04T14:01:00.000Z'));
+    expect(stored[0].signal.detectionLagSeconds).toBe(660);
     expect(first.telegramAlertsSent).toBe(0);
     expect(second.telegramAlertsSent).toBe(0);
     expect(sendMessage).not.toHaveBeenCalled();
@@ -77,19 +109,23 @@ describe('ORB-FVG services', () => {
     const repository = new OrbFvgMemoryRepository();
     const sendMessage = jest.fn().mockResolvedValue(true);
     const service = new OrbFvgScannerService({
-      marketUniverseService: { loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }) },
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+      },
       marketDataService: {
-        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) => timeframe === '15m'
-          ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
-          : [
-              candle('2026-09-04T13:46:00.000Z', 99.2, 99.4, 98.4, 98.5),
-              candle('2026-09-04T13:47:00.000Z', 98.5, 98.8, 97.8, 98),
-              candle('2026-09-04T13:48:00.000Z', 98, 98.3, 97, 97.5),
-            ]),
+        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
+          timeframe === '15m'
+            ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
+            : [
+                candle('2026-09-04T13:45:00.000Z', 99.2, 99.4, 98.4, 98.5),
+                candle('2026-09-04T13:50:00.000Z', 98.5, 98.8, 97.8, 98),
+                candle('2026-09-04T13:55:00.000Z', 98, 98.3, 97, 97.5),
+              ],
+        ),
       } as never,
       repository,
       telegramClient: { sendMessage },
-      now: () => new Date('2026-09-04T14:00:00.000Z'),
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
     });
 
     const first = await service.run(logger);
@@ -104,18 +140,21 @@ describe('ORB-FVG services', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-
   it('logs that ORB-FVG Telegram is muted while research collection stays active', async () => {
     const service = new OrbFvgScannerService({
-      marketUniverseService: { loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [] }) },
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [] }),
+      },
       marketDataService: { getHistoricalCandles: jest.fn() } as never,
       repository: new OrbFvgMemoryRepository(),
-      now: () => new Date('2026-09-04T14:00:00.000Z'),
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
     });
 
     await service.run(logger);
 
-    expect(logger.log).toHaveBeenCalledWith('[ORB-FVG] telegramAlerts=DISABLED researchCollection=ACTIVE');
+    expect(logger.log).toHaveBeenCalledWith(
+      '[ORB-FVG] telegramAlerts=DISABLED researchCollection=ACTIVE',
+    );
   });
 
   it('does not scan before 09:45 ET', async () => {
@@ -132,21 +171,160 @@ describe('ORB-FVG services', () => {
     expect(result.marketDataRequests).toBe(0);
   });
 
+  it('keeps Opening Range boundaries on first 15m high/low instead of body boundaries', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = new OrbFvgScannerService({
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+      },
+      marketDataService: {
+        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
+          timeframe === '15m'
+            ? [candle('2026-09-04T13:30:00.000Z', 100, 110, 95, 101)]
+            : [
+                candle('2026-09-04T13:45:00.000Z', 101, 102, 100.5, 101),
+                candle('2026-09-04T13:50:00.000Z', 101, 106, 100.8, 105),
+                candle('2026-09-04T13:55:00.000Z', 105, 107, 102.2, 106),
+              ],
+        ),
+      } as never,
+      repository,
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
+    });
+
+    const result = await service.run(logger);
+
+    expect(result.persisted).toBe(0);
+    expect(await repository.find()).toHaveLength(0);
+  });
+
+  it('uses 5m candles only for automatic breakout and FVG detection', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const getHistoricalCandles = jest.fn(async (_ticker: string, timeframe: string) =>
+      timeframe === '15m'
+        ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
+        : [
+            candle('2026-09-04T13:45:00.000Z', 101, 101.5, 100.5, 101),
+            candle('2026-09-04T13:50:00.000Z', 101, 103, 100.8, 102.5),
+            candle('2026-09-04T13:55:00.000Z', 102.5, 104, 102.2, 103.5),
+          ],
+    );
+    const service = new OrbFvgScannerService({
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+      },
+      marketDataService: { getHistoricalCandles } as never,
+      repository,
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
+    });
+
+    await service.run(logger);
+
+    expect(getHistoricalCandles).toHaveBeenCalledWith(
+      'NVDA',
+      '15m',
+      expect.any(Date),
+      expect.any(Date),
+      { minimumCandles: 0 },
+    );
+    expect(getHistoricalCandles).toHaveBeenCalledWith(
+      'NVDA',
+      '5m',
+      expect.any(Date),
+      expect.any(Date),
+      { minimumCandles: 0 },
+    );
+    expect(getHistoricalCandles).not.toHaveBeenCalledWith(
+      'NVDA',
+      '1m',
+      expect.any(Date),
+      expect.any(Date),
+      expect.anything(),
+    );
+    expect((await repository.find())[0].signal.fvgCandle1.timestamp).toEqual(
+      new Date('2026-09-04T13:45:00.000Z'),
+    );
+    expect((await repository.find())[0].signal.fvgCandle2.timestamp).toEqual(
+      new Date('2026-09-04T13:50:00.000Z'),
+    );
+    expect((await repository.find())[0].signal.fvgCandle3.timestamp).toEqual(
+      new Date('2026-09-04T13:55:00.000Z'),
+    );
+  });
+
+  it('does not create a candidate for wick-only 5m breakouts', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = new OrbFvgScannerService({
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+      },
+      marketDataService: {
+        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
+          timeframe === '15m'
+            ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
+            : [
+                candle('2026-09-04T13:45:00.000Z', 100, 100.5, 99.8, 100.2),
+                candle('2026-09-04T13:50:00.000Z', 100.2, 103, 100.1, 101.9),
+                candle('2026-09-04T13:55:00.000Z', 101.9, 102, 100.8, 101.95),
+              ],
+        ),
+      } as never,
+      repository,
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
+    });
+
+    const result = await service.run(logger);
+
+    expect(result.persisted).toBe(0);
+    expect(await repository.find()).toHaveLength(0);
+  });
+
+  it('only processes the recent completed 5m structure and does not backfill stale patterns', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = new OrbFvgScannerService({
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+      },
+      marketDataService: {
+        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
+          timeframe === '15m'
+            ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
+            : [
+                candle('2026-09-04T13:45:00.000Z', 101, 101.5, 100.5, 101),
+                candle('2026-09-04T13:50:00.000Z', 101, 103, 100.8, 102.5),
+                candle('2026-09-04T13:55:00.000Z', 102.5, 104, 102.2, 103.5),
+              ],
+        ),
+      } as never,
+      repository,
+      now: () => new Date('2026-09-04T14:06:00.000Z'),
+    });
+
+    const result = await service.run(logger);
+
+    expect(result.persisted).toBe(0);
+    expect(await repository.find()).toHaveLength(0);
+  });
+
   it('monitors open signals, resolves a LONG win and triggers R levels once', async () => {
     const repository = new OrbFvgMemoryRepository();
     const scanner = new OrbFvgScannerService({
-      marketUniverseService: { loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }) },
+      marketUniverseService: {
+        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+      },
       marketDataService: {
-        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) => timeframe === '15m'
-          ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
-          : [
-              candle('2026-09-04T13:46:00.000Z', 101, 103, 100.8, 102.5),
-              candle('2026-09-04T13:47:00.000Z', 102.5, 104, 102.2, 103.5),
-              candle('2026-09-04T13:48:00.000Z', 103.5, 105, 103.2, 104.5),
-            ]),
+        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
+          timeframe === '15m'
+            ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
+            : [
+                candle('2026-09-04T13:45:00.000Z', 101, 101.5, 100.5, 101),
+                candle('2026-09-04T13:50:00.000Z', 101, 103, 100.8, 102.5),
+                candle('2026-09-04T13:55:00.000Z', 102.5, 104, 102.2, 103.5),
+              ],
+        ),
       } as never,
       repository,
-      now: () => new Date('2026-09-04T14:00:00.000Z'),
+      now: () => new Date('2026-09-04T14:01:00.000Z'),
     });
     await scanner.run(logger);
     const signal = (await repository.find())[0].signal;
@@ -154,9 +332,17 @@ describe('ORB-FVG services', () => {
     const monitor = new OrbFvgForwardMonitorService({
       repository,
       marketDataService: {
-        getHistoricalCandles: jest.fn().mockResolvedValue([
-          candle('2026-09-04T13:49:00.000Z', signal.entryPrice, signal.target2RPrice + 0.5, signal.entryPrice, signal.target2RPrice),
-        ]),
+        getHistoricalCandles: jest
+          .fn()
+          .mockResolvedValue([
+            candle(
+              '2026-09-04T14:00:00.000Z',
+              signal.entryPrice,
+              signal.target2RPrice + 0.5,
+              signal.entryPrice,
+              signal.target2RPrice,
+            ),
+          ]),
       } as never,
       telegramClient: { sendMessage },
       now: () => new Date('2026-09-04T14:10:00.000Z'),
@@ -192,9 +378,9 @@ describe('ORB-FVG services', () => {
     const monitor = new OrbFvgForwardMonitorService({
       repository,
       marketDataService: {
-        getHistoricalCandles: jest.fn().mockResolvedValue([
-          candle('2026-09-04T13:52:00.000Z', 100, 100.2, 97.8, 98),
-        ]),
+        getHistoricalCandles: jest
+          .fn()
+          .mockResolvedValue([candle('2026-09-04T13:52:00.000Z', 100, 100.2, 97.8, 98)]),
       } as never,
       telegramClient: { sendMessage },
       now: () => new Date('2026-09-04T14:10:00.000Z'),
@@ -231,39 +417,40 @@ describe('ORB-FVG services', () => {
       now: new Date('2026-09-04T20:01:00.000Z'),
       expectedStatus: 'EXPIRED' as const,
     },
-  ])('persists $name ORB-FVG outcomes silently without Telegram RESULT alerts', async ({ candles, now, expectedStatus }) => {
-    const repository = new OrbFvgMemoryRepository();
-    const signal = buildLongSignal();
-    const levels = ORB_FVG_R_LEVELS.map((rMultiple) => ({
-      orbFvgSignalId: '',
-      rMultiple,
-      levelPrice: signal.entryPrice + signal.risk * rMultiple,
-    }));
-    await repository.saveIfNotDuplicate(signal, levels);
-    const sendMessage = jest.fn().mockResolvedValue(true);
-    const monitor = new OrbFvgForwardMonitorService({
-      repository,
-      marketDataService: { getHistoricalCandles: jest.fn().mockResolvedValue(candles) } as never,
-      telegramClient: { sendMessage },
-      now: () => now,
-    });
+  ])(
+    'persists $name ORB-FVG outcomes silently without Telegram RESULT alerts',
+    async ({ candles, now, expectedStatus }) => {
+      const repository = new OrbFvgMemoryRepository();
+      const signal = buildLongSignal();
+      const levels = ORB_FVG_R_LEVELS.map((rMultiple) => ({
+        orbFvgSignalId: '',
+        rMultiple,
+        levelPrice: signal.entryPrice + signal.risk * rMultiple,
+      }));
+      await repository.saveIfNotDuplicate(signal, levels);
+      const sendMessage = jest.fn().mockResolvedValue(true);
+      const monitor = new OrbFvgForwardMonitorService({
+        repository,
+        marketDataService: { getHistoricalCandles: jest.fn().mockResolvedValue(candles) } as never,
+        telegramClient: { sendMessage },
+        now: () => now,
+      });
 
-    const result = await monitor.run(logger);
-    const stored = await repository.find();
+      const result = await monitor.run(logger);
+      const stored = await repository.find();
 
-    expect(result.resolved).toBe(1);
-    expect(result.telegramResolutionAlertsSent).toBe(0);
-    expect(stored[0].signal.status).toBe(expectedStatus);
-    expect(stored[0].signal.outcome).toBe(expectedStatus);
-    expect(stored[0].signal.resolvedAt).toBeDefined();
-    expect(sendMessage).not.toHaveBeenCalled();
-  });
-
+      expect(result.resolved).toBe(1);
+      expect(result.telegramResolutionAlertsSent).toBe(0);
+      expect(stored[0].signal.status).toBe(expectedStatus);
+      expect(stored[0].signal.outcome).toBe(expectedStatus);
+      expect(stored[0].signal.resolvedAt).toBeDefined();
+      expect(sendMessage).not.toHaveBeenCalled();
+    },
+  );
 });
 
-
 const buildLongSignal = (): OrbFvgSignalSnapshot => ({
-  experimentVersion: ORB_FVG_EXPERIMENT_VERSION,
+  experimentVersion: ORB_FVG_EXPERIMENT_VERSION_V1,
   ticker: 'NVDA',
   providerSymbol: 'NVDA',
   assetType: 'STOCK',
@@ -273,16 +460,46 @@ const buildLongSignal = (): OrbFvgSignalSnapshot => ({
   exchange: 'NASDAQ',
   sessionDate: '2026-09-04',
   direction: 'LONG',
-  openingRangeCandle: { timestamp: new Date('2026-09-04T13:30:00.000Z'), open: 100, high: 102, low: 99, close: 101 },
+  openingRangeCandle: {
+    timestamp: new Date('2026-09-04T13:30:00.000Z'),
+    open: 100,
+    high: 102,
+    low: 99,
+    close: 101,
+  },
   openingRangeSizePct: 3.0303,
   breakoutAt: new Date('2026-09-04T13:46:00.000Z'),
-  breakoutCandle: { timestamp: new Date('2026-09-04T13:46:00.000Z'), open: 101.5, high: 103, low: 99, close: 102.5 },
+  breakoutCandle: {
+    timestamp: new Date('2026-09-04T13:46:00.000Z'),
+    open: 101.5,
+    high: 103,
+    low: 99,
+    close: 102.5,
+  },
   breakoutDistancePct: 0.4902,
   wickBreakout: true,
   closeBreakout: true,
-  fvgCandle1: { timestamp: new Date('2026-09-04T13:46:00.000Z'), open: 101.5, high: 103, low: 99, close: 102.5 },
-  fvgCandle2: { timestamp: new Date('2026-09-04T13:47:00.000Z'), open: 102.5, high: 104, low: 102.2, close: 103.5 },
-  fvgCandle3: { timestamp: new Date('2026-09-04T13:48:00.000Z'), open: 103.5, high: 105, low: 103.2, close: 100 },
+  fvgCandle1: {
+    timestamp: new Date('2026-09-04T13:46:00.000Z'),
+    open: 101.5,
+    high: 103,
+    low: 99,
+    close: 102.5,
+  },
+  fvgCandle2: {
+    timestamp: new Date('2026-09-04T13:47:00.000Z'),
+    open: 102.5,
+    high: 104,
+    low: 102.2,
+    close: 103.5,
+  },
+  fvgCandle3: {
+    timestamp: new Date('2026-09-04T13:48:00.000Z'),
+    open: 103.5,
+    high: 105,
+    low: 103.2,
+    close: 100,
+  },
   fvgLow: 103,
   fvgHigh: 103.2,
   fvgSizePct: 0.1942,
@@ -303,7 +520,7 @@ const buildLongSignal = (): OrbFvgSignalSnapshot => ({
 });
 
 const buildShortSignal = (): OrbFvgSignalSnapshot => ({
-  experimentVersion: ORB_FVG_EXPERIMENT_VERSION,
+  experimentVersion: ORB_FVG_EXPERIMENT_VERSION_V1,
   ticker: 'NVDA',
   providerSymbol: 'NVDA',
   assetType: 'STOCK',
@@ -313,16 +530,46 @@ const buildShortSignal = (): OrbFvgSignalSnapshot => ({
   exchange: 'NASDAQ',
   sessionDate: '2026-09-04',
   direction: 'SHORT',
-  openingRangeCandle: { timestamp: new Date('2026-09-04T13:30:00.000Z'), open: 100, high: 102, low: 99, close: 101 },
+  openingRangeCandle: {
+    timestamp: new Date('2026-09-04T13:30:00.000Z'),
+    open: 100,
+    high: 102,
+    low: 99,
+    close: 101,
+  },
   openingRangeSizePct: 3.0303,
   breakoutAt: new Date('2026-09-04T13:46:00.000Z'),
-  breakoutCandle: { timestamp: new Date('2026-09-04T13:46:00.000Z'), open: 99.2, high: 100.4, low: 98.4, close: 98.5 },
+  breakoutCandle: {
+    timestamp: new Date('2026-09-04T13:46:00.000Z'),
+    open: 99.2,
+    high: 100.4,
+    low: 98.4,
+    close: 98.5,
+  },
   breakoutDistancePct: 0.5051,
   wickBreakout: true,
   closeBreakout: true,
-  fvgCandle1: { timestamp: new Date('2026-09-04T13:46:00.000Z'), open: 99.2, high: 100.4, low: 98.4, close: 98.5 },
-  fvgCandle2: { timestamp: new Date('2026-09-04T13:47:00.000Z'), open: 98.5, high: 98.8, low: 97.8, close: 98 },
-  fvgCandle3: { timestamp: new Date('2026-09-04T13:48:00.000Z'), open: 98, high: 98.3, low: 97, close: 97.5 },
+  fvgCandle1: {
+    timestamp: new Date('2026-09-04T13:46:00.000Z'),
+    open: 99.2,
+    high: 100.4,
+    low: 98.4,
+    close: 98.5,
+  },
+  fvgCandle2: {
+    timestamp: new Date('2026-09-04T13:47:00.000Z'),
+    open: 98.5,
+    high: 98.8,
+    low: 97.8,
+    close: 98,
+  },
+  fvgCandle3: {
+    timestamp: new Date('2026-09-04T13:48:00.000Z'),
+    open: 98,
+    high: 98.3,
+    low: 97,
+    close: 97.5,
+  },
   fvgLow: 98.3,
   fvgHigh: 98.4,
   fvgSizePct: 0.1016,

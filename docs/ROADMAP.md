@@ -69,33 +69,33 @@ El score representa:
 
 # 2. Estado general
 
-| Versión                                    | Objetivo                                                | Estado                                   |
-| ------------------------------------------ | ------------------------------------------------------- | ---------------------------------------- |
-| V0 — Core                                  | Núcleo cuantitativo desacoplado                         | ✅ Completado                            |
-| V1 — ARGOS Engine Signals                  | Detectar, persistir, notificar y evaluar señales        | ✅ Funcional                             |
-| V1.1 — Dynamic Configuration               | Configuración, universo y sesiones desde PostgreSQL     | ✅ Completado                            |
-| V1.1.1 — Market Data Throughput            | Concurrencia controlada y retries seguros               | ✅ Completado                            |
-| V1.2 — Evidence                            | Medir estadísticamente la calidad de los setups         | 🧪 Implementado / recolectando evidencia |
-| V1.3 — Strategy Profile Research           | Perfiles descriptivos por asset/timeframe/score/version | ✅ Implementado                          |
-| **V1.4-A — Transaction Cost Core** | Cálculo puro de costos, maker/taker y break-even | ✅ Implemented & Functionally Validated |
-| **V1.4-B — Cost Application Layer** | Servicio de aplicación y endpoint HTTP read-only para evaluar costos | ✅ Implemented & Functionally Validated |
-| **V1.5 — ARGOS Control Interface** | Interfaz privada de control vía Telegram separada de alertas | ✅ COMPLETED |
-| **V1.5-A — Control Core** | Configuración dual, autorización, router, presenter y estado en memoria | ✅ Completed & Validated |
-| **V1.5-B — Control Transport** | Telegram Bot API, Long Polling local y worker de control | ✅ Completed & Validated |
-| **V1.5-C — Read-only Research Integrations** | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot | ✅ Completed & Manually Validated |
-| **V1.5-D — Telegram Transaction Costs Integration** | Flujo conversacional read-only de costos desde Control Bot | ✅ Completed & Manually Validated |
-| **V1.5-E — Telegram Analyze Symbol** | Análisis técnico ad-hoc read-only desde Control Bot | ✅ Completed / Manually Validated |
-| **V1.5-E.1 — Telegram Analyze Symbol Guided Navigation** | Navegación guiada por Market Universe real para Analyze Symbol | 🚧 Implemented / Pending Manual Validation |
-| **V1.5-F — Telegram Full Market Scan** | Ejecución confirmada del Market Scan operacional real desde Control Bot | ✅ Completed / Manually Validated |
-| **V1.6-A — Market Universe Expansion & Segmentation** | Universo ampliado a 103 símbolos activos segmentados por asset/sector/industry/session | ✅ Completed & Validated |
-| **V1.6-B — Sector-Aware Research** | Investigación read-only por sector/industry usando metadata normalizada | 📋 NEXT / PLANNED |
-| **Shadow Paper Trading v0.1** | Registro experimental de trades paper STOCK 5m Score100 desde Telegram Control | 🧪 Implemented / Pending Manual Validation |
-| Portfolio Risk & Exposure Manager          | Riesgo agregado, concentración y exposición             | 📋 Backlog                               |
-| V2 — Strategy Calibration                  | Mejorar estrategia utilizando Evidence                  | 📊 Requiere muestra suficiente           |
-| V3 — Trade Companion                       | Seguimiento de trades realmente tomados                 | 📋 Backlog                               |
-| V3.1 — Trading Journal                     | Medir decisiones y resultados reales                    | 📋 Backlog                               |
-| V4 — Product                               | Dashboard y administración visual                       | 🌱 Futuro                                |
-| V5 — Platform                              | Usuarios, preferencias y posible comercialización       | 💭 Futuro                                |
+| Versión                                                  | Objetivo                                                                               | Estado                                     |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------ |
+| V0 — Core                                                | Núcleo cuantitativo desacoplado                                                        | ✅ Completado                              |
+| V1 — ARGOS Engine Signals                                | Detectar, persistir, notificar y evaluar señales                                       | ✅ Funcional                               |
+| V1.1 — Dynamic Configuration                             | Configuración, universo y sesiones desde PostgreSQL                                    | ✅ Completado                              |
+| V1.1.1 — Market Data Throughput                          | Concurrencia controlada y retries seguros                                              | ✅ Completado                              |
+| V1.2 — Evidence                                          | Medir estadísticamente la calidad de los setups                                        | 🧪 Implementado / recolectando evidencia   |
+| V1.3 — Strategy Profile Research                         | Perfiles descriptivos por asset/timeframe/score/version                                | ✅ Implementado                            |
+| **V1.4-A — Transaction Cost Core**                       | Cálculo puro de costos, maker/taker y break-even                                       | ✅ Implemented & Functionally Validated    |
+| **V1.4-B — Cost Application Layer**                      | Servicio de aplicación y endpoint HTTP read-only para evaluar costos                   | ✅ Implemented & Functionally Validated    |
+| **V1.5 — ARGOS Control Interface**                       | Interfaz privada de control vía Telegram separada de alertas                           | ✅ COMPLETED                               |
+| **V1.5-A — Control Core**                                | Configuración dual, autorización, router, presenter y estado en memoria                | ✅ Completed & Validated                   |
+| **V1.5-B — Control Transport**                           | Telegram Bot API, Long Polling local y worker de control                               | ✅ Completed & Validated                   |
+| **V1.5-C — Read-only Research Integrations**             | Snapshot, Strategy Profiles, Forward Performance y System Status desde Control Bot     | ✅ Completed & Manually Validated          |
+| **V1.5-D — Telegram Transaction Costs Integration**      | Flujo conversacional read-only de costos desde Control Bot                             | ✅ Completed & Manually Validated          |
+| **V1.5-E — Telegram Analyze Symbol**                     | Análisis técnico ad-hoc read-only desde Control Bot                                    | ✅ Completed / Manually Validated          |
+| **V1.5-E.1 — Telegram Analyze Symbol Guided Navigation** | Navegación guiada por Market Universe real para Analyze Symbol                         | 🚧 Implemented / Pending Manual Validation |
+| **V1.5-F — Telegram Full Market Scan**                   | Ejecución confirmada del Market Scan operacional real desde Control Bot                | ✅ Completed / Manually Validated          |
+| **V1.6-A — Market Universe Expansion & Segmentation**    | Universo ampliado a 103 símbolos activos segmentados por asset/sector/industry/session | ✅ Completed & Validated                   |
+| **V1.6-B — Sector-Aware Research**                       | Investigación read-only por sector/industry usando metadata normalizada                | 📋 NEXT / PLANNED                          |
+| **Shadow Paper Trading v0.1**                            | Registro experimental de trades paper STOCK 5m Score100 desde Telegram Control         | 🧪 Implemented / Pending Manual Validation |
+| Portfolio Risk & Exposure Manager                        | Riesgo agregado, concentración y exposición                                            | 📋 Backlog                                 |
+| V2 — Strategy Calibration                                | Mejorar estrategia utilizando Evidence                                                 | 📊 Requiere muestra suficiente             |
+| V3 — Trade Companion                                     | Seguimiento de trades realmente tomados                                                | 📋 Backlog                                 |
+| V3.1 — Trading Journal                                   | Medir decisiones y resultados reales                                                   | 📋 Backlog                                 |
+| V4 — Product                                             | Dashboard y administración visual                                                      | 🌱 Futuro                                  |
+| V5 — Platform                                            | Usuarios, preferencias y posible comercialización                                      | 💭 Futuro                                  |
 
 ---
 
@@ -1314,8 +1314,6 @@ Validación manual real: **PASS**.
 
 Se confirmó navegación, confirmación explícita, ejecución del pipeline operacional real, summary final, separación entre Control Bot y Alerts Bot, y protección in-memory contra doble ejecución desde el Control Bot.
 
-
-
 ## Shadow Paper Trading v0.1 🧪
 
 Estado: **Implemented / Pending Manual Validation**.
@@ -1394,7 +1392,6 @@ alerta por nivel alcanzado
 usuario decide continuar o cerrar
 ```
 
-
 ## 2026-09-05 — Research Documentation Cut
 
 Estado: **Documentation Cut / Research Update**.
@@ -1466,13 +1463,13 @@ Se limita temporalmente el Alerts Bot a `15m,1d,1w` mediante `TELEGRAM_NOTIFICAT
 
 Semántica operativa actual:
 
-| Timeframe | Market Scan | Signal/Evidence | Forward Evaluation | Strategy Research | Automatic Alerts Bot |
-| --------- | ----------- | --------------- | ------------------ | ----------------- | -------------------- |
-| `1m` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | SILENCED |
-| `5m` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | SILENCED |
-| `15m` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | ACTIVE según reglas normales |
-| `1d` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | ACTIVE según reglas normales |
-| `1w` | ACTIVE | ACTIVE | ACTIVE | ACTIVE | ACTIVE según reglas normales |
+| Timeframe | Market Scan | Signal/Evidence | Forward Evaluation | Strategy Research | Automatic Alerts Bot         |
+| --------- | ----------- | --------------- | ------------------ | ----------------- | ---------------------------- |
+| `1m`      | ACTIVE      | ACTIVE          | ACTIVE             | ACTIVE            | SILENCED                     |
+| `5m`      | ACTIVE      | ACTIVE          | ACTIVE             | ACTIVE            | SILENCED                     |
+| `15m`     | ACTIVE      | ACTIVE          | ACTIVE             | ACTIVE            | ACTIVE según reglas normales |
+| `1d`      | ACTIVE      | ACTIVE          | ACTIVE             | ACTIVE            | ACTIVE según reglas normales |
+| `1w`      | ACTIVE      | ACTIVE          | ACTIVE             | ACTIVE            | ACTIVE según reglas normales |
 
 Variable de configuración:
 
@@ -1654,7 +1651,6 @@ No debe:
 - favorecer sectores;
 - crear reglas operativas sectoriales;
 - cambiar `strategy_version`.
-
 
 ## V1.5-D — Telegram Transaction Costs Integration ✅
 
@@ -2550,7 +2546,6 @@ observaciones e hipótesis.
 
 # 19. Fases actuales de investigación
 
-
 ## Definiciones del camino metodológico
 
 - **Evidence / Research:** observa qué ocurrió después de las señales.
@@ -2725,7 +2720,6 @@ el objeto que estamos intentando medir.
 **Experimento activo:** `strategy_version=v1 — Evidence Collection`
 **Próximo release planeado:** `v1.0.0 — Detection & Evidence`
 
-
 ## 2026-09-06 — PostgreSQL authoritative configuration
 
 Estado: **Implemented / Pending Manual Validation**.
@@ -2734,21 +2728,23 @@ ARGOS deja de mantener dos fuentes funcionales de configuración. Thresholds, sc
 
 `local.settings.json` queda reservado para secretos, bootstrap e infraestructura. Si PostgreSQL no tiene configuración activa suficiente o el universo está vacío, ARGOS falla explícitamente en lugar de usar `env-fallback`.
 
-## ORB-FVG Scalping Research v0.1 — Parallel Research Experiment
+## ORB-FVG Scalping Research — Parallel Research Experiment
 
-Estado: **IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION**.
+Estado: **v0.2 IMPLEMENTED — PENDING PROSPECTIVE VALIDATION**.
 
 ORB-FVG agrega un carril de investigación prospectiva separado de Strategy v1. No modifica scoring, analyzers, OpportunityService, Evidence v1, Forward Evaluation v1, Shadow Paper Trading ni Telegram alert filtering existente.
 
-Hipótesis inicial: un breakout alcista confirmado del Opening Range de 09:30–09:45 ET, acompañado por un bullish FVG 1m matemáticamente definido dentro del boundary temporal de v0.1, puede presentar comportamiento forward medible que justifique investigación posterior.
+Hipótesis v0.2: usar Opening Range 15m y confirmar breakout/FVG en 5m puede reducir micro-noise frente a v0.1. Una vez confirmado el candidate en 5m, 1m queda reservado para refinamiento discrecional de entrada fuera del detector automático.
 
 Implementado:
 
 - universo `STOCK`/`ETF` desde Market Universe PostgreSQL;
 - exclusión inicial de `CRYPTO`;
 - Opening Range 15m en `America/New_York` sin offsets UTC hardcodeados;
+- `orb-fvg-v0.1` histórico preservado: 15m OR + detector automático 1m;
+- `orb-fvg-v0.2` activo: 15m OR + detector automático 5m;
 - detección prospectiva LONG-only reproducible desde 2026-09-08;
-- bullish FVG matemático de tres velas 1m;
+- bullish FVG matemático de tres velas 5m en v0.2;
 - `maxFvgLagCandles=3`;
 - entry reproducible en `candle3.close`;
 - stop detrás de breakout candle;
@@ -2756,20 +2752,22 @@ Implementado:
 - R ladder descriptiva `0.5R, 1R, 1.5R, 2R, 3R`;
 - monitor prospectivo propio con MFE/MAE y outcomes;
 - persistencia propia en `orb_fvg_signals` y `orb_fvg_signal_levels`;
-- alertas Telegram marcadas `RESEARCH ONLY`;
+- Telegram ORB-FVG silenciado durante validación técnica v0.2;
 - endpoint read-only `GET /api/orb-fvg/signals`.
 
 Nota metodológica 2026-09-08:
 
-`orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. El experimento inicial podía generar LONG y SHORT, pero la hipótesis deseada para esta fase corresponde únicamente a rupturas alcistas del Opening Range acompañadas por bullish FVG. Señales SHORT previas, si existen, se preservan intactas y pueden terminar su forward evaluation; no deben mezclarse con el dataset LONG-only posterior al cambio.
+`orb-fvg-v0.1` se conserva como histórico del experimento 15m OR + detector 1m. Su primera sesión prospectiva produjo 192 candidates, 65 tickers únicos, repeated crossings, detección retrospectiva, tiny 1m FVGs y discrepancia Yahoo/TradingView en PLD. Señales SHORT previas, si existen, se preservan intactas y pueden terminar su forward evaluation; no deben mezclarse con el dataset LONG-only posterior.
 
-Telegram behavior: temporarily muted for ORB-FVG on 2026-09-08. Candidate detection and final outcome notifications are disabled; final outcomes continue to be persisted silently for research.
+Boundary v0.2:
 
-Previous behavior: candidate detection alerts only. Final outcomes are persisted silently for research: no se envían notificaciones `ORB-FVG RESULT` para WIN, LOSS, AMBIGUOUS o EXPIRED.
+`orb-fvg-v0.2` cambia exclusivamente el timeframe de setup detection de 1m a 5m: Opening Range sigue siendo la primera vela 15m 09:30–09:45 ET con ORHigh/ORLow reales; breakout y FVG usan velas 5m nativas del provider; 1m queda fuera del detector automático y sólo se usa manualmente para refinamiento discrecional.
+
+Telegram behavior: ORB-FVG permanece silenciado durante validación técnica de v0.2. Candidate detection y final outcome notifications están deshabilitadas; final outcomes continúan persistiendo silenciosamente para research.
 
 Limitaciones conocidas:
 
 - Yahoo Finance es suficiente para research experimental, no feed profesional de ejecución de scalping.
 - No hay calendario bursátil completo para holidays/early closes.
 - Resultados brutos no incluyen spread, slippage ni comisiones.
-- No está validado prospectivamente todavía.
+- v0.2 todavía no está validado prospectivamente.

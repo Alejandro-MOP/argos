@@ -547,20 +547,20 @@ No existe schema, `ActiveTradeService` ni broker execution para esto.
 
 ## Function Map
 
-| Function | Trigger | Endpoint | Layer | Responsibility |
-|---|---|---|---|---|
-| `backtest` | HTTP | `POST /api/backtest` | Supporting / Backtest | Simular comportamiento histórico usando `BacktestEngine`. |
-| `databaseBackup` | HTTP | `POST /api/database-backup` | Supporting / Data Protection | Ejecutar backup manual de PostgreSQL. |
-| `dailyDatabaseBackup` | Timer | — | Supporting / Data Protection | Ejecutar backup automático según schedule. |
-| `forwardEvaluateHttp` | HTTP | `POST /api/forward-evaluate` | Forward Evaluation | Ejecutar evaluación manual de señales pendientes. |
-| `forwardPerformance` | HTTP | `GET /api/forward-performance` | Strategy Research | Consultar métricas agregadas de Evidence/Forward Performance. |
-| `forwardSignalEvaluation` | Timer | — | Forward Evaluation | Evaluar automáticamente señales forward y evidence pendientes. |
-| `marketScan` | Timer | — | Signal Engine | Ejecutar escaneo automático de mercado. |
-| `marketScanHttp` | HTTP | `GET,POST /api/market-scan` | Signal Engine | Ejecutar escaneo manual o bajo demanda. |
-| `researchSnapshot` | HTTP | `GET /api/research-snapshot` | Research | Consolidar el estado actual de investigación en un JSON read-only. |
-| `transactionCostsEvaluate` | HTTP | `POST /api/transaction-costs/evaluate` | Transaction Cost Model | Evaluar costos transaccionales modelados sin side effects. |
-| `strategyProfiles` | HTTP | `GET /api/strategy-profiles` | Strategy Research | Consultar perfiles descriptivos por asset/timeframe/score/version. |
-| `telegramTest` | HTTP | `GET,POST /api/telegram-test` | Supporting / Telegram | Enviar mensaje de prueba por Telegram. |
+| Function                   | Trigger | Endpoint                               | Layer                        | Responsibility                                                     |
+| -------------------------- | ------- | -------------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
+| `backtest`                 | HTTP    | `POST /api/backtest`                   | Supporting / Backtest        | Simular comportamiento histórico usando `BacktestEngine`.          |
+| `databaseBackup`           | HTTP    | `POST /api/database-backup`            | Supporting / Data Protection | Ejecutar backup manual de PostgreSQL.                              |
+| `dailyDatabaseBackup`      | Timer   | —                                      | Supporting / Data Protection | Ejecutar backup automático según schedule.                         |
+| `forwardEvaluateHttp`      | HTTP    | `POST /api/forward-evaluate`           | Forward Evaluation           | Ejecutar evaluación manual de señales pendientes.                  |
+| `forwardPerformance`       | HTTP    | `GET /api/forward-performance`         | Strategy Research            | Consultar métricas agregadas de Evidence/Forward Performance.      |
+| `forwardSignalEvaluation`  | Timer   | —                                      | Forward Evaluation           | Evaluar automáticamente señales forward y evidence pendientes.     |
+| `marketScan`               | Timer   | —                                      | Signal Engine                | Ejecutar escaneo automático de mercado.                            |
+| `marketScanHttp`           | HTTP    | `GET,POST /api/market-scan`            | Signal Engine                | Ejecutar escaneo manual o bajo demanda.                            |
+| `researchSnapshot`         | HTTP    | `GET /api/research-snapshot`           | Research                     | Consolidar el estado actual de investigación en un JSON read-only. |
+| `transactionCostsEvaluate` | HTTP    | `POST /api/transaction-costs/evaluate` | Transaction Cost Model       | Evaluar costos transaccionales modelados sin side effects.         |
+| `strategyProfiles`         | HTTP    | `GET /api/strategy-profiles`           | Strategy Research            | Consultar perfiles descriptivos por asset/timeframe/score/version. |
+| `telegramTest`             | HTTP    | `GET,POST /api/telegram-test`          | Supporting / Telegram        | Enviar mensaje de prueba por Telegram.                             |
 
 ## Automatic vs Manual Flows
 
@@ -595,34 +595,34 @@ Los endpoints HTTP permiten inspección, pruebas y ejecución bajo demanda cuand
 
 ## Lectura vs escritura de datos
 
-| Component | Reads PostgreSQL | Writes PostgreSQL | Notes |
-|---|---:|---:|---|
-| `marketScan` / `marketScanHttp` | Sí | Sí | Puede persistir opportunities, signals, forward signals y evidence signals. |
-| `forwardSignalEvaluation` | Sí | Sí | Lee señales pendientes y actualiza evaluaciones. |
-| `forwardEvaluateHttp` | Sí | Sí | Igual que la evaluación automática, pero bajo demanda. |
-| `strategyProfiles` | Sí | No | Consulta research descriptivo. |
-| `forwardPerformance` | Sí | No | Consulta performance agregada. |
-| `researchSnapshot` | Sí | No | Consolida datos existentes; read-only. |
-| `databaseBackup` | Sí | No | Read-only respecto a PostgreSQL; genera archivos de backup. |
-| `dailyDatabaseBackup` | Sí | No | Read-only respecto a PostgreSQL; genera archivos de backup. |
-| `backtest` | No necesariamente | No | Usa Market Data y simula; no persiste resultados en DB. |
-| `telegramTest` | No | No | Envía mensaje de prueba. |
+| Component                       |  Reads PostgreSQL | Writes PostgreSQL | Notes                                                                       |
+| ------------------------------- | ----------------: | ----------------: | --------------------------------------------------------------------------- |
+| `marketScan` / `marketScanHttp` |                Sí |                Sí | Puede persistir opportunities, signals, forward signals y evidence signals. |
+| `forwardSignalEvaluation`       |                Sí |                Sí | Lee señales pendientes y actualiza evaluaciones.                            |
+| `forwardEvaluateHttp`           |                Sí |                Sí | Igual que la evaluación automática, pero bajo demanda.                      |
+| `strategyProfiles`              |                Sí |                No | Consulta research descriptivo.                                              |
+| `forwardPerformance`            |                Sí |                No | Consulta performance agregada.                                              |
+| `researchSnapshot`              |                Sí |                No | Consolida datos existentes; read-only.                                      |
+| `databaseBackup`                |                Sí |                No | Read-only respecto a PostgreSQL; genera archivos de backup.                 |
+| `dailyDatabaseBackup`           |                Sí |                No | Read-only respecto a PostgreSQL; genera archivos de backup.                 |
+| `backtest`                      | No necesariamente |                No | Usa Market Data y simula; no persiste resultados en DB.                     |
+| `telegramTest`                  |                No |                No | Envía mensaje de prueba.                                                    |
 
 ## Separación de responsabilidades
 
-| Capa | Responsabilidad |
-|---|---|
-| Market Data | Obtiene información de mercado. |
-| Signal Engine | Detecta condiciones técnicas. |
-| Evidence | Conserva observaciones reales para estudio. |
-| Forward Evaluation | Mide qué ocurrió después de una señal. |
-| Strategy Research | Busca patrones descriptivos en la evidencia acumulada. |
-| Research Snapshot | Consolida resultados de investigación en una sola respuesta. |
-| Transaction Cost Model | Interpreta costos económicos de convertir un movimiento en operación. |
-| Backtest | Estudia comportamiento histórico. |
-| Database Backup | Protege información persistida. |
-| Telegram Alerts | Comunica alertas o mensajes de prueba. |
-| ARGOS Control Core | Prepara autorización, routing, presenter y estado para una futura interfaz Telegram interactiva. |
+| Capa                   | Responsabilidad                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| Market Data            | Obtiene información de mercado.                                                                  |
+| Signal Engine          | Detecta condiciones técnicas.                                                                    |
+| Evidence               | Conserva observaciones reales para estudio.                                                      |
+| Forward Evaluation     | Mide qué ocurrió después de una señal.                                                           |
+| Strategy Research      | Busca patrones descriptivos en la evidencia acumulada.                                           |
+| Research Snapshot      | Consolida resultados de investigación en una sola respuesta.                                     |
+| Transaction Cost Model | Interpreta costos económicos de convertir un movimiento en operación.                            |
+| Backtest               | Estudia comportamiento histórico.                                                                |
+| Database Backup        | Protege información persistida.                                                                  |
+| Telegram Alerts        | Comunica alertas o mensajes de prueba.                                                           |
+| ARGOS Control Core     | Prepara autorización, routing, presenter y estado para una futura interfaz Telegram interactiva. |
 
 ## What ARGOS Is Not
 
@@ -663,7 +663,6 @@ La expansión V1.6-A agrega símbolos curados en Broad Market ETFs, sector ETFs,
 
 El flujo operacional sigue cargando un snapshot de configuración y un snapshot de universo al inicio de cada scan. Las reglas de sesión siguen filtrando combinaciones `market-closed` antes de llamar Yahoo.
 
-
 ## Configuración funcional autoritativa
 
 ARGOS lee thresholds, scoring, trade plan, estrategia, límites de velas, throughput de market data y temporalidades notificables desde `market_signal_engine.engine_config`.
@@ -672,7 +671,7 @@ El universo de símbolos y timeframes activos se lee desde `market_signal_engine
 
 `local.settings.json` queda limitado a secretos, bootstrap local e infraestructura de Azure Functions. Si PostgreSQL no está disponible, la configuración está incompleta o un símbolo solicitado no existe en el universo activo, ARGOS falla con un error explícito en lugar de usar defaults de ENV.
 
-## ORB-FVG Scalping Research v0.1
+## ORB-FVG Scalping Research
 
 ORB-FVG es un dominio paralelo de research, aislado de Strategy v1.
 
@@ -683,11 +682,11 @@ MarketUniverseService
   ↓
 MarketDataService / Yahoo Finance
   ↓
-Opening Range 15m + LONG Breakout 1m + bullish FVG 1m
+Opening Range 15m + LONG Breakout 5m + bullish FVG 5m
   ↓
 OrbFvgSignalRepository
   ↓
-Telegram Alerts Bot research-only alert
+PostgreSQL silent research persistence
 
 orbFvgForwardMonitor timer
   ↓
@@ -708,7 +707,7 @@ Este carril no llama ni modifica:
 - Shadow Paper Trading
 - `PaperTradeMonitorService`
 
-La identidad del experimento es `experiment_version=orb-fvg-v0.1`. Desde 2026-09-08 su detección prospectiva es LONG-only. Su persistencia vive en `market_signal_engine.orb_fvg_signals` y `market_signal_engine.orb_fvg_signal_levels`.
+La variante histórica `experiment_version=orb-fvg-v0.1` preserva el experimento 15m OR + detector 1m. La variante activa `experiment_version=orb-fvg-v0.2` usa 15m OR + detector 5m. Ambas comparten `market_signal_engine.orb_fvg_signals` y `market_signal_engine.orb_fvg_signal_levels`, separadas por `experiment_version`.
 
 La idempotencia principal se protege con una restricción única por:
 
@@ -716,8 +715,8 @@ La idempotencia principal se protege con una restricción única por:
 ticker + session_date + direction + experiment_version + breakout_candle_timestamp
 ```
 
-El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de detecciones, niveles R y outcomes. Sigue permitiendo `direction=SHORT` para consultar históricos preservados, aunque el scanner ya no genera nuevas señales SHORT para v0.1.
+El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de detecciones, niveles R y outcomes. Por defecto consulta la versión activa v0.2; `experimentVersion=orb-fvg-v0.1` permite revisar históricos. Sigue permitiendo `direction=SHORT` para consultar históricos preservados, aunque el scanner activo no genera nuevas señales SHORT.
 
-Telegram behavior: temporarily muted for ORB-FVG on 2026-09-08. Candidate detection and final outcome notifications are disabled; el scanner y monitor siguen recolectando y persistiendo research data.
+Telegram behavior: ORB-FVG permanece temporalmente silenciado durante la validación técnica de v0.2. Candidate detection y final outcome notifications están deshabilitadas; el scanner y monitor siguen recolectando y persistiendo research data. Strategy v1 Telegram y Shadow Paper Trading no cambian.
 
-Previous behavior: candidate detection alerts only. Final outcomes are persisted silently for research: el monitor actualiza WIN/LOSS/AMBIGUOUS/EXPIRED, MFE/MAE, maxR y niveles R sin enviar mensajes `ORB-FVG RESULT`.
+v0.2 es prospectivo: el scanner corre alineado a cierre de 5m con tolerancia de publicación y evalúa únicamente la estructura 5m recientemente cerrada más las dos velas previas necesarias para FVG. No recorre 09:45 → now buscando patrones históricos.

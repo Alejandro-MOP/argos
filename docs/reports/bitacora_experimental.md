@@ -3488,6 +3488,44 @@ No actualizar reglas de Shadow Paper Trading.
 
 ---
 
+## 2026-09-08 — ORB-FVG v0.2 definido como variante 15m OR + 5m setup detection
+
+Se crea la boundary experimental para `orb-fvg-v0.2`.
+
+`orb-fvg-v0.1` queda preservado como histórico del experimento basado en:
+
+```text
+Opening Range = 15m
+Automatic setup detection = 1m breakout + 1m FVG
+```
+
+La primera sesión prospectiva del 2026-09-08 dejó señales metodológicas importantes:
+
+- 192 candidates;
+- 65 tickers únicos;
+- repeated crossings sobre el mismo Opening Range;
+- detección retrospectiva/backfill observada;
+- tiny 1m FVGs;
+- discrepancia Yahoo/TradingView observada en PLD.
+
+`orb-fvg-v0.2` cambia exclusivamente el timeframe de detección automática:
+
+```text
+Opening Range = 15m
+Automatic setup detection = 5m breakout + 5m FVG
+Manual entry refinement = 1m fuera del detector automático
+```
+
+Hipótesis:
+
+> Usar 15m Opening Range y 5m Breakout/FVG confirmation puede reducir microstructure noise y producir estructuras ORB-FVG más significativas que detectar directamente en 1m.
+
+Esto es una hipótesis experimental, no una afirmación de mejora, rentabilidad ni edge.
+
+Telegram ORB-FVG permanece silenciado durante la validación técnica de v0.2. Strategy v1 Telegram y Shadow Paper Trading no cambian.
+
+No se agregan todavía filtros de volumen, EMA, ATR, minimum FVG size, cooldown, one-candidate-per-day, retest automático, ejecución automática ni integración broker.
+
 ## 2026-09-08 — ORB-FVG v0.1 queda LONG-only
 
 Cambio metodológico:

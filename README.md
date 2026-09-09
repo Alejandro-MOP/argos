@@ -173,7 +173,6 @@ Pasos de `marketScan`:
 8. Si la oportunidad supera `TELEGRAM_NOTIFICATION_MIN_SCORE` y su timeframe está dentro de `TELEGRAM_NOTIFICATION_TIMEFRAMES`, la agrega a `notifiedSignals` y puede notificar Telegram. Excepción experimental: `STOCK + 5m + Score100 + strategy_version=v1` puede notificarse para Shadow Paper Trading v0.1 aunque `5m` esté fuera del filtro general.
 9. Persiste oportunidad, señal y Evidence en PostgreSQL cuando corresponde.
 
-
 ## V1.4-A — Transaction Cost Core
 
 La primera pieza del modelo de costos vive desacoplada del pipeline principal. No usa PostgreSQL y no modifica Evidence, Strategy Profiles ni las reglas de scoring.
@@ -310,6 +309,7 @@ vive en un solo lugar. `backtest` usa `BacktestEngine`, pero reutiliza los mismo
 `OpportunityService` y `RiskService` para evitar reglas paralelas.
 
 #
+
 ## Shadow Paper Trading v0.1
 
 Shadow Paper Trading es una capa experimental para registrar operaciones simuladas sin broker y sin dinero real.
@@ -1756,30 +1756,30 @@ market_signal_engine.symbol_timeframes
 
 ### Variables De Entorno
 
-| Variable                             | Descripción corta                                                                            |
-| ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Variable                             | Descripción corta                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | `AzureWebJobsStorage`                | Storage usado por Azure Functions local/deploy. En local puede ser `UseDevelopmentStorage=true`. |
-| `FUNCTIONS_WORKER_RUNTIME`           | Runtime de Azure Functions. Debe ser `node`.                                                 |
-| `DATABASE_URL`                       | URL de PostgreSQL. Es obligatoria para leer configuración funcional, universo y persistencia. |
-| `DATABASE_BACKUP_ENABLED`            | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                      |
-| `DATABASE_BACKUP_SCHEDULE`           | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                      |
-| `DATABASE_BACKUP_BASE_PATH`          | Directorio base donde se escriben snapshots locales; default `./backups`.                    |
-| `DATABASE_BACKUP_TIMEZONE`           | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                  |
-| `DATABASE_PG_DUMP_BIN`               | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.              |
-| `DATABASE_PG_RESTORE_BIN`            | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.     |
-| `DATABASE_PSQL_BIN`                  | Binario de `psql` usado para registrar versión de tooling en el manifest.                    |
-| `TELEGRAM_BOT_TOKEN`                 | Token legacy del Alerts Bot. No debe subirse a git.                                           |
-| `TELEGRAM_CHAT_ID`                   | Chat destino legacy del Alerts Bot.                                                           |
-| `TELEGRAM_ENABLED`                   | Legacy fallback para activar/desactivar Alerts Bot si `TELEGRAM_ALERTS_ENABLED` no existe.   |
-| `TELEGRAM_ALERTS_BOT_TOKEN`          | Token explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_BOT_TOKEN`.                |
-| `TELEGRAM_ALERTS_CHAT_ID`            | Chat destino explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_CHAT_ID`.           |
-| `TELEGRAM_ALERTS_ENABLED`            | Activa/desactiva explícitamente el Alerts Bot; tiene precedencia sobre `TELEGRAM_ENABLED`.   |
-| `TELEGRAM_CONTROL_BOT_TOKEN`         | Token del Control Bot usado por el worker `npm run telegram:control`. No debe subirse a git. |
-| `TELEGRAM_CONTROL_ENABLED`           | Habilita/deshabilita el Control Bot Long Polling Worker; default `false`.                    |
-| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`  | Lista CSV de `user_id` autorizados para usar Control Bot.                                   |
-| `MARKET_SCAN_SCHEDULE`               | Cron del Timer Trigger `marketScan`.                                                        |
-| `FORWARD_SIGNAL_EVALUATION_SCHEDULE` | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.      |
-| `MARKET_SCAN_DEBUG`                  | Habilita logs debug seguros de escaneo y datos de mercado.                                    |
+| `FUNCTIONS_WORKER_RUNTIME`           | Runtime de Azure Functions. Debe ser `node`.                                                     |
+| `DATABASE_URL`                       | URL de PostgreSQL. Es obligatoria para leer configuración funcional, universo y persistencia.    |
+| `DATABASE_BACKUP_ENABLED`            | Activa/desactiva el Timer diario de backup PostgreSQL; default `false`.                          |
+| `DATABASE_BACKUP_SCHEDULE`           | Cron NCRONTAB del Timer `dailyDatabaseBackup`; default `0 50 5 * * *`.                           |
+| `DATABASE_BACKUP_BASE_PATH`          | Directorio base donde se escriben snapshots locales; default `./backups`.                        |
+| `DATABASE_BACKUP_TIMEZONE`           | Timezone usada para carpetas `YYYY/MM/DD`; default `America/Mexico_City`.                        |
+| `DATABASE_PG_DUMP_BIN`               | Binario de `pg_dump`; permite apuntar a una versión compatible con el servidor.                  |
+| `DATABASE_PG_RESTORE_BIN`            | Binario de `pg_restore`; útil para restore-test con la misma versión mayor del servidor.         |
+| `DATABASE_PSQL_BIN`                  | Binario de `psql` usado para registrar versión de tooling en el manifest.                        |
+| `TELEGRAM_BOT_TOKEN`                 | Token legacy del Alerts Bot. No debe subirse a git.                                              |
+| `TELEGRAM_CHAT_ID`                   | Chat destino legacy del Alerts Bot.                                                              |
+| `TELEGRAM_ENABLED`                   | Legacy fallback para activar/desactivar Alerts Bot si `TELEGRAM_ALERTS_ENABLED` no existe.       |
+| `TELEGRAM_ALERTS_BOT_TOKEN`          | Token explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_BOT_TOKEN`.                    |
+| `TELEGRAM_ALERTS_CHAT_ID`            | Chat destino explícito del Alerts Bot; tiene precedencia sobre `TELEGRAM_CHAT_ID`.               |
+| `TELEGRAM_ALERTS_ENABLED`            | Activa/desactiva explícitamente el Alerts Bot; tiene precedencia sobre `TELEGRAM_ENABLED`.       |
+| `TELEGRAM_CONTROL_BOT_TOKEN`         | Token del Control Bot usado por el worker `npm run telegram:control`. No debe subirse a git.     |
+| `TELEGRAM_CONTROL_ENABLED`           | Habilita/deshabilita el Control Bot Long Polling Worker; default `false`.                        |
+| `TELEGRAM_CONTROL_ALLOWED_USER_IDS`  | Lista CSV de `user_id` autorizados para usar Control Bot.                                        |
+| `MARKET_SCAN_SCHEDULE`               | Cron del Timer Trigger `marketScan`.                                                             |
+| `FORWARD_SIGNAL_EVALUATION_SCHEDULE` | Cron NCRONTAB del Timer `forwardSignalEvaluation`; default cada hora: `0 0 * * * *`.             |
+| `MARKET_SCAN_DEBUG`                  | Habilita logs debug seguros de escaneo y datos de mercado.                                       |
 
 Los valores como `OPPORTUNITY_MIN_SCORE`, `TELEGRAM_NOTIFICATION_MIN_SCORE`,
 `TELEGRAM_NOTIFICATION_TIMEFRAMES`, `MARKET_SCAN_CANDLE_LIMIT`,
@@ -1817,7 +1817,6 @@ Para reglas discretas todavía existe `TradingStrategy`, pero el camino recomend
 
 Esto mantiene el sistema extensible: puedes agregar momentum, volatilidad, fuerza relativa, short interest, earnings proximity o breadth sin reescribir el pipeline.
 
-
 ## Configuración funcional desde PostgreSQL
 
 ARGOS usa PostgreSQL como fuente única de verdad para la configuración funcional del motor. Los valores se consultan desde `market_signal_engine.engine_config` y cada fila incluye descripción, categoría, tipo y estado activo.
@@ -1852,15 +1851,15 @@ market_signal_engine.symbol_timeframes
 
 `local.settings.json` queda reservado para secretos, conexión a PostgreSQL, schedules de Azure Functions y parámetros de infraestructura local. Si PostgreSQL no está disponible o falta configuración activa requerida, ARGOS falla explícitamente en lugar de usar ENV como fallback.
 
-## ORB-FVG Scalping Research v0.1
+## ORB-FVG Scalping Research
 
-Estado: `IMPLEMENTED — PENDING FIRST PROSPECTIVE SESSION VALIDATION`.
+Estado: `v0.2 IMPLEMENTED — PENDING PROSPECTIVE VALIDATION`.
 
 ORB-FVG es un carril paralelo de investigación. No forma parte de `strategy_version=v1`, no usa el score de Trend/Volume/Momentum/Structure y no escribe en Evidence V1.
 
-Hipótesis inicial:
+Hipótesis v0.2:
 
-> Un breakout alcista confirmado del Opening Range de 09:30–09:45 ET, acompañado por un bullish FVG 1m matemáticamente definido dentro del boundary temporal de v0.1, puede presentar comportamiento forward medible que justifique investigación posterior.
+> Usar Opening Range 15m y confirmar breakout/FVG en 5m puede reducir micro-noise frente a v0.1. Una vez confirmado el candidate en 5m, 1m queda reservado para refinamiento discrecional de entrada fuera del detector automático.
 
 Universo inicial:
 
@@ -1869,12 +1868,18 @@ Universo inicial:
 - símbolos activos del Market Universe en PostgreSQL
 - excluye `CRYPTO`
 
-Reglas v0.1 prospectivas — LONG-only desde 2026-09-08:
+Versiones experimentales:
+
+- `orb-fvg-v0.1`: histórico preservado; Opening Range 15m + detector automático 1m. La primera sesión prospectiva del 2026-09-08 produjo 192 candidates, 65 tickers únicos, repeated crossings, detección retrospectiva, tiny 1m FVGs y discrepancia Yahoo/TradingView en PLD.
+- `orb-fvg-v0.2`: variante activa; Opening Range 15m + detector automático 5m; 1m sólo para refinamiento manual del trader.
+
+Reglas v0.2 — LONG-only:
 
 - Opening Range: primera vela regular `15m` de `09:30 → 09:45 America/New_York`.
-- LONG breakout: `candle.close > openingRangeHigh AND candle.open <= openingRangeHigh`.
-- Bullish FVG: `low(candle3) > high(candle1)`.
-- `maxFvgLagCandles = 3`.
+- LONG breakout 5m: `candle.close > openingRangeHigh AND candle.open <= openingRangeHigh`.
+- Bullish FVG 5m: `low(candle3) > high(candle1)`.
+- Las tres velas de FVG son velas nativas `5m`; candles `1m` no participan en el detector automático.
+- No se agrega todavía mínimo de FVG, ATR, volumen, EMA, cooldown ni one-candidate-per-day.
 - `signalAt = timestamp de candle3`.
 - `entryPrice = candle3.close`.
 - LONG stop: `low` de breakout candle.
@@ -1884,7 +1889,7 @@ Reglas v0.1 prospectivas — LONG-only desde 2026-09-08:
 Timers:
 
 ```text
-orbFvgScanner         -> cada 1 minuto
+orbFvgScanner         -> segundo 15 cada 5 minutos; procesa sólo la última estructura 5m cerrada
 orbFvgForwardMonitor -> cada 1 minuto
 ```
 
@@ -1911,10 +1916,8 @@ market_signal_engine.orb_fvg_signals
 market_signal_engine.orb_fvg_signal_levels
 ```
 
-Yahoo Finance se usa únicamente como feed experimental de research. No debe interpretarse como feed profesional de ejecución de scalping. Los resultados son brutos: no incluyen spread, slippage ni comisiones.
+Yahoo Finance se usa únicamente como feed experimental de research. No debe interpretarse como feed profesional de ejecución de scalping. Los resultados son brutos: no incluyen spread, slippage ni comisiones. Yahoo etiqueta candles intradía por inicio de vela; por eso ARGOS espera tolerancia de publicación antes de evaluar una estructura 5m cerrada.
 
 Nota metodológica 2026-09-08: `orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. Si existen señales SHORT anteriores en PostgreSQL, se preservan como histórico y pueden consultarse, pero no deben mezclarse con el dataset LONG-only posterior al cambio.
 
-Telegram behavior: temporarily muted for ORB-FVG on 2026-09-08. Candidate detection and final outcome notifications are disabled; final outcomes continue to be persisted silently for research.
-
-Previous behavior: candidate detection alerts only. Final outcomes are persisted silently for research: no se envían notificaciones `ORB-FVG RESULT` para WIN, LOSS, AMBIGUOUS o EXPIRED.
+Telegram behavior: ORB-FVG permanece silenciado durante la validación técnica de v0.2. Candidate detection y final outcome notifications están deshabilitadas; scanner y monitor siguen persistiendo research data silenciosamente. Strategy v1 Telegram y Shadow Paper Trading no cambian.

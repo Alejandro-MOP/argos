@@ -57,6 +57,10 @@ interface OrbFvgSignalRow {
   fvg_size_pct: string | number;
   candles_after_breakout: number;
   signal_at: Date;
+  setup_timeframe: string | null;
+  scanner_run_at: Date | null;
+  detected_at: Date | null;
+  detection_lag_seconds: number | null;
   entry_price: string | number;
   stop_price: string | number;
   risk: string | number;
@@ -90,7 +94,10 @@ interface OrbFvgLevelRow {
 export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
   public constructor(private readonly database: Queryable) {}
 
-  public async saveIfNotDuplicate(signal: OrbFvgSignalSnapshot, levels: OrbFvgSignalLevelSnapshot[]): Promise<OrbFvgSaveResult> {
+  public async saveIfNotDuplicate(
+    signal: OrbFvgSignalSnapshot,
+    levels: OrbFvgSignalLevelSnapshot[],
+  ): Promise<OrbFvgSaveResult> {
     const id = signal.id ?? randomUUID();
     const result = await this.database.query<OrbFvgSignalRow>(
       `INSERT INTO orb_fvg_signals (
@@ -101,13 +108,15 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
         close_breakout, fvg_candle1_timestamp, fvg_candle1_open, fvg_candle1_high, fvg_candle1_low,
         fvg_candle1_close, fvg_candle2_timestamp, fvg_candle2_open, fvg_candle2_high, fvg_candle2_low,
         fvg_candle2_close, fvg_candle3_timestamp, fvg_candle3_open, fvg_candle3_high, fvg_candle3_low,
-        fvg_candle3_close, fvg_low, fvg_high, fvg_size_pct, candles_after_breakout, signal_at, entry_price,
+        fvg_candle3_close, fvg_low, fvg_high, fvg_size_pct, candles_after_breakout, signal_at, setup_timeframe,
+        scanner_run_at, detected_at, detection_lag_seconds, entry_price,
         stop_price, risk, risk_pct, target_2r_price, status, outcome, highest_price_seen, lowest_price_seen,
         mfe_pct, mae_pct, max_r, target_reached_at, stop_reached_at, resolved_at, telegram_alert_sent
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
         $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-        $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62
+        $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,
+        $61,$62,$63,$64,$65,$66
       ) ON CONFLICT (ticker, session_date, direction, experiment_version, breakout_candle_timestamp)
       DO NOTHING
       RETURNING *`,
@@ -158,6 +167,10 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
         signal.fvgSizePct,
         signal.candlesAfterBreakout,
         signal.signalAt,
+        signal.setupTimeframe ?? null,
+        signal.scannerRunAt ?? null,
+        signal.detectedAt ?? null,
+        signal.detectionLagSeconds ?? null,
         signal.entryPrice,
         signal.stopPrice,
         signal.risk,
@@ -227,7 +240,11 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
     );
   }
 
-  public async claimLevelTrigger(signalId: string, rMultiple: number, triggeredAt: Date): Promise<boolean> {
+  public async claimLevelTrigger(
+    signalId: string,
+    rMultiple: number,
+    triggeredAt: Date,
+  ): Promise<boolean> {
     const result = await this.database.query(
       `UPDATE orb_fvg_signal_levels
        SET triggered_at = $3, updated_at = now()
@@ -280,9 +297,15 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
     );
     const levelsBySignal = new Map<string, OrbFvgSignalLevelSnapshot[]>();
     for (const level of levels.rows) {
-      levelsBySignal.set(level.orb_fvg_signal_id, [...(levelsBySignal.get(level.orb_fvg_signal_id) ?? []), mapLevelRow(level)]);
+      levelsBySignal.set(level.orb_fvg_signal_id, [
+        ...(levelsBySignal.get(level.orb_fvg_signal_id) ?? []),
+        mapLevelRow(level),
+      ]);
     }
-    return signals.rows.map((row) => ({ signal: mapSignalRow(row), levels: levelsBySignal.get(row.id) ?? [] }));
+    return signals.rows.map((row) => ({
+      signal: mapSignalRow(row),
+      levels: levelsBySignal.get(row.id) ?? [],
+    }));
   }
 
   private async insertLevels(signalId: string, levels: OrbFvgSignalLevelSnapshot[]): Promise<void> {
@@ -291,13 +314,25 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
         `INSERT INTO orb_fvg_signal_levels (id, orb_fvg_signal_id, r_multiple, level_price, triggered_at)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (orb_fvg_signal_id, r_multiple) DO NOTHING`,
-        [level.id ?? randomUUID(), signalId, level.rMultiple, level.levelPrice, level.triggeredAt ?? null],
+        [
+          level.id ?? randomUUID(),
+          signalId,
+          level.rMultiple,
+          level.levelPrice,
+          level.triggeredAt ?? null,
+        ],
       );
     }
   }
 }
 
-const candle = (timestamp: Date, open: string | number, high: string | number, low: string | number, close: string | number): OrbFvgCandleSnapshot => ({
+const candle = (
+  timestamp: Date,
+  open: string | number,
+  high: string | number,
+  low: string | number,
+  close: string | number,
+): OrbFvgCandleSnapshot => ({
   timestamp: new Date(timestamp),
   open: Number(open),
   high: Number(high),
@@ -315,23 +350,60 @@ const mapSignalRow = (row: OrbFvgSignalRow): PersistedOrbFvgSignalSnapshot => ({
   industry: row.industry ?? undefined,
   market: row.market ?? undefined,
   exchange: row.exchange ?? undefined,
-  sessionDate: typeof row.session_date === 'string' ? row.session_date : row.session_date.toISOString().slice(0, 10),
+  sessionDate:
+    typeof row.session_date === 'string'
+      ? row.session_date
+      : row.session_date.toISOString().slice(0, 10),
   direction: row.direction,
-  openingRangeCandle: candle(row.opening_range_candle_timestamp, row.opening_range_open, row.opening_range_high, row.opening_range_low, row.opening_range_close),
+  openingRangeCandle: candle(
+    row.opening_range_candle_timestamp,
+    row.opening_range_open,
+    row.opening_range_high,
+    row.opening_range_low,
+    row.opening_range_close,
+  ),
   openingRangeSizePct: Number(row.opening_range_size_pct),
   breakoutAt: new Date(row.breakout_at),
-  breakoutCandle: candle(row.breakout_candle_timestamp, row.breakout_open, row.breakout_high, row.breakout_low, row.breakout_close),
+  breakoutCandle: candle(
+    row.breakout_candle_timestamp,
+    row.breakout_open,
+    row.breakout_high,
+    row.breakout_low,
+    row.breakout_close,
+  ),
   breakoutDistancePct: Number(row.breakout_distance_pct),
   wickBreakout: row.wick_breakout,
   closeBreakout: row.close_breakout,
-  fvgCandle1: candle(row.fvg_candle1_timestamp, row.fvg_candle1_open, row.fvg_candle1_high, row.fvg_candle1_low, row.fvg_candle1_close),
-  fvgCandle2: candle(row.fvg_candle2_timestamp, row.fvg_candle2_open, row.fvg_candle2_high, row.fvg_candle2_low, row.fvg_candle2_close),
-  fvgCandle3: candle(row.fvg_candle3_timestamp, row.fvg_candle3_open, row.fvg_candle3_high, row.fvg_candle3_low, row.fvg_candle3_close),
+  fvgCandle1: candle(
+    row.fvg_candle1_timestamp,
+    row.fvg_candle1_open,
+    row.fvg_candle1_high,
+    row.fvg_candle1_low,
+    row.fvg_candle1_close,
+  ),
+  fvgCandle2: candle(
+    row.fvg_candle2_timestamp,
+    row.fvg_candle2_open,
+    row.fvg_candle2_high,
+    row.fvg_candle2_low,
+    row.fvg_candle2_close,
+  ),
+  fvgCandle3: candle(
+    row.fvg_candle3_timestamp,
+    row.fvg_candle3_open,
+    row.fvg_candle3_high,
+    row.fvg_candle3_low,
+    row.fvg_candle3_close,
+  ),
   fvgLow: Number(row.fvg_low),
   fvgHigh: Number(row.fvg_high),
   fvgSizePct: Number(row.fvg_size_pct),
   candlesAfterBreakout: row.candles_after_breakout,
   signalAt: new Date(row.signal_at),
+  setupTimeframe: row.setup_timeframe ?? undefined,
+  scannerRunAt: row.scanner_run_at ? new Date(row.scanner_run_at) : undefined,
+  detectedAt: row.detected_at ? new Date(row.detected_at) : undefined,
+  detectionLagSeconds: row.detection_lag_seconds ?? undefined,
   entryPrice: Number(row.entry_price),
   stopPrice: Number(row.stop_price),
   risk: Number(row.risk),
@@ -361,4 +433,3 @@ const mapLevelRow = (row: OrbFvgLevelRow): OrbFvgSignalLevelSnapshot => ({
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at),
 });
-

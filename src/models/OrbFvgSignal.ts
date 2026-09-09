@@ -1,6 +1,8 @@
 import type { AssetType } from './MarketSymbol';
 
-export const ORB_FVG_EXPERIMENT_VERSION = 'orb-fvg-v0.1';
+export const ORB_FVG_EXPERIMENT_VERSION_V1 = 'orb-fvg-v0.1';
+export const ORB_FVG_EXPERIMENT_VERSION_V2 = 'orb-fvg-v0.2';
+export const ORB_FVG_EXPERIMENT_VERSION = ORB_FVG_EXPERIMENT_VERSION_V2;
 export const ORB_FVG_R_LEVELS = [0.5, 1, 1.5, 2, 3] as const;
 
 export type OrbFvgDirection = 'LONG' | 'SHORT';
@@ -42,6 +44,10 @@ export interface OrbFvgSignalSnapshot {
   fvgSizePct: number;
   candlesAfterBreakout: number;
   signalAt: Date;
+  setupTimeframe?: string;
+  scannerRunAt?: Date;
+  detectedAt?: Date;
+  detectionLagSeconds?: number;
   entryPrice: number;
   stopPrice: number;
   risk: number;
@@ -90,4 +96,3 @@ export interface OrbFvgSignalWithLevels {
   signal: PersistedOrbFvgSignalSnapshot;
   levels: OrbFvgSignalLevelSnapshot[];
 }
-

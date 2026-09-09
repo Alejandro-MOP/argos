@@ -6,7 +6,6 @@ export async function orbFvgScanner(_timer: Timer, context: InvocationContext): 
 }
 
 app.timer('orbFvgScanner', {
-  schedule: '0 */1 * * * *',
+  schedule: '15 */5 * * * *',
   handler: orbFvgScanner,
 });
-
