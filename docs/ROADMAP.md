@@ -2785,7 +2785,8 @@ Boundary v0.3:
 
 ```text
 Breakout + FVG = setup de interés
-TRADE_READY = estructura confirmada
+SETUP_PREVIEW = estructura avanzada para revisión
+TRADE_READY = estructura completa confirmada
 WIN/LOSS = no aplica sin entry manual/paper definida
 ```
 
@@ -2797,15 +2798,34 @@ Implementado:
 - small FVG permitido si es matemáticamente válido;
 - `preRetraceHigh` calculado prospectivamente como máximo high observado desde FVG creation hasta antes del primer retest;
 - multiple retests permitidos sin reiniciar `preRetraceHigh`;
-- estado terminal `TRADE_READY` para setup listo;
+- estado `SETUP_PREVIEW` cuando el precio recupera `preRetraceHigh`;
+- estado terminal `TRADE_READY` para setup completo;
 - estado terminal `EXPIRED_SETUP` si termina la sesión antes de confirmar;
 - v0.3 no inventa `entry`, `stop`, `risk` ni `target2R`;
 - el forward monitor de outcomes no evalúa setups v0.3 que no tengan modelo de trade;
 - Telegram ORB-FVG queda controlado por `ORB_FVG_TRADE_READY_ALERTS_ENABLED`;
   default `false` durante validación técnica.
-- Si se habilita, sólo alerta setups que llegan a `TRADE_READY`; estados
-  preliminares no generan Telegram.
+- Si se habilita, alerta únicamente `SETUP_PREVIEW` y `TRADE_READY`; breakout, FVG y retest no generan Telegram.
 
 Ejemplos exploratorios que motivaron la hipótesis: TSLA, BA, PLD, GOOGL, SO y BAC. Estas observaciones no afirman rentabilidad.
 
 Limitación consciente: invalidation estructural distinta de `EXPIRED_SETUP` queda para investigación posterior.
+
+
+## Objetivos de la próxima sesión ORB-FVG
+
+La próxima sesión de ORB-FVG no busca demostrar profitability. Busca observar prospectivamente si el esquema `SETUP_PREVIEW` / `TRADE_READY` reduce ruido y mejora la calidad de revisión manual.
+
+Objetivos:
+
+1. verificar que `SETUP_PREVIEW` reduzca spam;
+2. verificar visualmente que las alertas correspondan con la estructura esperada;
+3. observar cuántos previews terminan en `TRADE_READY`;
+4. comparar `setupPreviewPrice` vs `tradeReadyPrice`;
+5. observar setups que fallan entre preview y ready;
+6. estudiar posibles referencias estructurales de SL;
+7. estudiar potencial R:R 2:1 sin convertirlo todavía en regla;
+8. preparar análisis posterior de MFE/MAE desde preview y ready;
+9. detectar patrones antes de congelar Entry/SL/TP.
+
+No se agregan filtros de FVG mínimo, ATR, volumen, EMA, RSI, displacement, candle body threshold, cooldown ni one-trade-per-day por esta hipótesis.

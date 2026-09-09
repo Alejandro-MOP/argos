@@ -708,6 +708,8 @@ WAITING_FOR_STRUCTURE_BREAK
   ↓
 PRE_RETRACE_HIGH_BROKEN
   ↓
+SETUP_PREVIEW
+  ↓
 WAITING_FOR_CONTINUATION
   ↓
 CONTINUATION_CONFIRMED
@@ -734,6 +736,8 @@ FVG retest
   ↓
 close above pre-retrace high
   ↓
+SETUP_PREVIEW
+  ↓
 next candle continuation
   ↓
 TRADE_READY
@@ -746,14 +750,14 @@ Reglas v0.3:
 - Bullish FVG: `candle3.low > candle1.high`.
 - Retest: una vela posterior intersecta la zona `[fvgLow, fvgHigh]`.
 - `preRetraceHigh`: máximo high observado prospectivamente desde la vela que crea el FVG hasta antes del primer retest. No usa swing detection retrospectivo.
-- Structure break: una vela posterior al retest cierra arriba de `preRetraceHigh`.
-- Continuation: la siguiente vela completada cierra arriba de `preRetraceHigh` y arriba del cierre de la vela de structure break.
+- Structure break: una vela posterior al retest cierra arriba de `preRetraceHigh`; esto persiste `SETUP_PREVIEW`.
+- Continuation: la siguiente vela completada cierra arriba de `preRetraceHigh` y arriba del cierre de la vela de structure break; esto persiste `TRADE_READY`.
 - Multiple retests: se permiten y se cuentan mientras no exista `TRADE_READY` ni expire la sesión; no reinician `preRetraceHigh`.
 - Expiration: si termina la regular session antes de `TRADE_READY`, el setup pasa a `EXPIRED_SETUP`.
 
-`TRADE_READY` significa que ARGOS encontró una estructura que cumple la hipótesis experimental. No significa recomendación, orden automática ni ejecución broker.
+`SETUP_PREVIEW` significa que ARGOS encontró una estructura avanzada que merece revisión visual. `TRADE_READY` significa que la estructura completa cumple la hipótesis experimental. Ninguno significa recomendación, orden automática ni ejecución broker.
 
-Importante: v0.3 no inventa `entry`, `stop`, `risk` ni `target2R`. Esos campos pueden permanecer `NULL` para setups v0.3 hasta que exista una entrada manual/paper trade metodológicamente definida. Por lo mismo, el forward monitor de WIN/LOSS no evalúa setups v0.3 sin modelo de trade.
+Importante: v0.3 no inventa `entry`, `stop`, `risk` ni `target2R`. Esos campos pueden permanecer `NULL` para setups v0.3 hasta que exista una entrada manual/paper trade metodológicamente definida. `setupPreviewPrice` usa el close de la vela que rompe `preRetraceHigh`; `tradeReadyPrice` usa el close de la vela de confirmación. Son precios de referencia para research, no Entry. Por lo mismo, el forward monitor de WIN/LOSS no evalúa setups v0.3 sin modelo de trade.
 
 La historia se preserva:
 
@@ -767,9 +771,8 @@ El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de s
 
 Telegram behavior: ORB-FVG usa `ORB_FVG_TRADE_READY_ALERTS_ENABLED`. El default
 es `false`, por lo que scanner y persistencia siguen activos pero Telegram queda
-silencioso. Si se habilita, sólo se envía una alerta por transición completa a
-`TRADE_READY`; los estados preliminares (`OR_READY`, `BREAKOUT_CONFIRMED`,
-`FVG_CREATED`, `FVG_RETESTED`, `PRE_RETRACE_HIGH_BROKEN`) permanecen observables
+silencioso. Si se habilita, sólo se envían alertas para `SETUP_PREVIEW` y `TRADE_READY`, una vez por transición; los estados preliminares (`OR_READY`, `BREAKOUT_CONFIRMED`,
+`FVG_CREATED`, `FVG_RETESTED`) permanecen observables
 en logs/DB pero no alertan. Strategy v1 Telegram y Shadow Paper Trading no cambian.
 
 v0.3 es prospectivo: cada ejecución procesa la última vela 5m completada y sólo avanza el estado con información disponible hasta ese momento. No recorre toda la sesión buscando retrospectivamente la mejor combinación breakout/FVG/retest/continuation.

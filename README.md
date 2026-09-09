@@ -1930,10 +1930,13 @@ Idea principal:
 
 ```text
 Breakout + FVG = zona de interés
-Retest + structure break + continuation = TRADE_READY
+Retest + structure break = SETUP_PREVIEW
+Continuation = TRADE_READY
 ```
 
-`TRADE_READY` no significa recomendación ni orden automática. Significa solamente que ARGOS encontró una estructura que cumple la hipótesis experimental. La entrada real/manual sigue siendo discrecional.
+`SETUP_PREVIEW` no significa recomendación ni orden automática. Significa que la estructura ya está suficientemente avanzada para revisar el gráfico si se desea.
+
+`TRADE_READY` tampoco significa compra. Significa que ARGOS encontró una estructura completa que cumple la hipótesis experimental. La entrada real/manual sigue siendo discrecional.
 
 Reglas v0.3:
 
@@ -1942,8 +1945,8 @@ Reglas v0.3:
 3. FVG bullish: `candle3.low > candle1.high`.
 4. Retest: una vela posterior toca/intersecta la zona del FVG.
 5. `preRetraceHigh`: máximo high observado prospectivamente desde FVG creation hasta antes del primer retest.
-6. Structure break: una vela posterior al retest cierra arriba de `preRetraceHigh`.
-7. Continuation: la siguiente vela completada cierra arriba de `preRetraceHigh` y arriba del cierre del structure break.
+6. Structure break: una vela posterior al retest cierra arriba de `preRetraceHigh` y produce `SETUP_PREVIEW`.
+7. Continuation: la siguiente vela completada cierra arriba de `preRetraceHigh` y arriba del cierre del structure break; esto produce `TRADE_READY`.
 
 v0.3 permite FVGs pequeños si son matemáticamente válidos. No agrega filtros de EMA, RSI, volumen, ATR, patrón de vela, cooldown ni SHORT.
 
@@ -1951,7 +1954,7 @@ Multiple retests: se cuentan con `retestCount`, `firstRetestAt` y `latestRetestA
 
 Expiration: si termina la sesión regular antes de `TRADE_READY`, el setup pasa a `EXPIRED_SETUP`.
 
-Forward outcomes: v0.3 no calcula WIN/LOSS/AMBIGUOUS/EXPIRED desde `FVG_CREATED`. Como no hay entry automática aprobada, `entryPrice`, `stopPrice`, `risk` y `target2RPrice` pueden quedar vacíos para setups v0.3. El forward monitor sólo evalúa señales legacy o futuras señales con modelo de trade definido.
+Forward outcomes: v0.3 no calcula WIN/LOSS/AMBIGUOUS/EXPIRED desde `FVG_CREATED`, `SETUP_PREVIEW` ni `TRADE_READY` si no hay entry automática aprobada. `entryPrice`, `stopPrice`, `risk` y `target2RPrice` pueden quedar vacíos para setups v0.3. El forward monitor sólo evalúa señales legacy o futuras señales con modelo de trade definido.
 
 Endpoint read-only:
 
@@ -1963,9 +1966,7 @@ GET /api/orb-fvg/signals?experimentVersion=orb-fvg-v0.2
 
 Telegram behavior: ORB-FVG usa el flag funcional `ORB_FVG_TRADE_READY_ALERTS_ENABLED`.
 Por default queda en `false`. Con el flag apagado, ORB-FVG recolecta research data
-silenciosamente en PostgreSQL. Con el flag encendido, Telegram sólo alerta cuando
-un setup alcanza `TRADE_READY`; no alerta `OR_READY`, `BREAKOUT_CONFIRMED`,
-`FVG_CREATED`, `FVG_RETESTED` ni `PRE_RETRACE_HIGH_BROKEN`. Strategy v1 Telegram
+silenciosamente en PostgreSQL. Con el flag encendido, Telegram alerta sólo dos eventos informativos: `SETUP_PREVIEW` al romper `preRetraceHigh` y `TRADE_READY` al confirmar continuación. No alerta `OR_READY`, `BREAKOUT_CONFIRMED`, `FVG_CREATED` ni `FVG_RETESTED`. Strategy v1 Telegram
 y Shadow Paper Trading no cambian.
 
 Para habilitar alertas `TRADE_READY` después de validar la sesión:
@@ -1975,3 +1976,20 @@ UPDATE market_signal_engine.engine_config
 SET value = 'true', updated_at = now()
 WHERE key = 'ORB_FVG_TRADE_READY_ALERTS_ENABLED';
 ```
+
+
+### ORB-FVG Telegram Preview / Ready
+
+ORB-FVG v0.3 maneja dos niveles informativos de Telegram cuando `ORB_FVG_TRADE_READY_ALERTS_ENABLED=true`:
+
+- `SETUP_PREVIEW`: se emite una sola vez cuando el setup ya hizo breakout, FVG, retest y recuperación sobre `preRetraceHigh`. Sirve para decir “este gráfico ya merece revisión”.
+- `TRADE_READY`: se emite una sola vez cuando, después del preview, una vela 5m posterior confirma continuación cerrando arriba de `preRetraceHigh` y arriba del cierre de la vela de structure break.
+
+Ambos mensajes son research/discretionary. No incluyen BUY, Entry, Stop Loss, Take Profit, position sizing ni ejecución broker.
+
+Campos de research guardados para análisis futuro:
+
+- candle inmediatamente anterior al breakout;
+- `setupPreviewAt` y `setupPreviewPrice`, usando el close de la vela que rompe `preRetraceHigh`;
+- `tradeReadyAt` y `tradeReadyPrice`, usando el close de la vela de confirmación;
+- timestamps de alertas preview/ready para auditar detection lag.

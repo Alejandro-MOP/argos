@@ -20,6 +20,7 @@ export type OrbFvgResearchState =
   | 'FVG_RETESTED'
   | 'WAITING_FOR_STRUCTURE_BREAK'
   | 'PRE_RETRACE_HIGH_BROKEN'
+  | 'SETUP_PREVIEW'
   | 'WAITING_FOR_CONTINUATION'
   | 'CONTINUATION_CONFIRMED'
   | 'TRADE_READY'
@@ -50,6 +51,7 @@ export interface OrbFvgSignalSnapshot {
   openingRangeSizePct: number;
   breakoutAt: Date;
   breakoutCandle: OrbFvgCandleSnapshot;
+  previousBreakoutCandle?: OrbFvgCandleSnapshot;
   breakoutDistancePct: number;
   wickBreakout: boolean;
   closeBreakout: boolean;
@@ -71,6 +73,10 @@ export interface OrbFvgSignalSnapshot {
   firstRetestAt?: Date;
   latestRetestAt?: Date;
   retestCandleTimestamp?: Date;
+  firstRetestOpen?: number;
+  firstRetestHigh?: number;
+  firstRetestLow?: number;
+  firstRetestClose?: number;
   retestLow?: number;
   retestHigh?: number;
   retestClose?: number;
@@ -82,12 +88,20 @@ export interface OrbFvgSignalSnapshot {
   structureBreakHigh?: number;
   structureBreakLow?: number;
   structureBreakClose?: number;
+  setupPreviewAt?: Date;
+  setupPreviewPrice?: number;
+  setupPreviewAlertSent?: boolean;
+  setupPreviewAlertedAt?: Date;
   continuationCandleTimestamp?: Date;
   continuationOpen?: number;
   continuationHigh?: number;
   continuationLow?: number;
   continuationClose?: number;
   setupReadyAt?: Date;
+  tradeReadyAt?: Date;
+  tradeReadyPrice?: number;
+  tradeReadyAlertSent?: boolean;
+  tradeReadyAlertedAt?: Date;
   expiredAt?: Date;
   entryPrice?: number;
   stopPrice?: number;

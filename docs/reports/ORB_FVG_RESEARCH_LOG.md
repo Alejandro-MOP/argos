@@ -349,6 +349,8 @@ WAITING_FOR_STRUCTURE_BREAK
       ↓
 PRE_RETRACE_HIGH_BROKEN
       ↓
+SETUP_PREVIEW
+      ↓
 WAITING_FOR_CONTINUATION
       ↓
 CONTINUATION_CONFIRMED
@@ -361,7 +363,8 @@ Interpretación obligatoria:
 - `BREAKOUT_CONFIRMED` no significa trade.
 - `FVG_CREATED` no significa trade.
 - `FVG_RETESTED` no significa trade.
-- `PRE_RETRACE_HIGH_BROKEN` no necesariamente significa trade.
+- `PRE_RETRACE_HIGH_BROKEN` produce `SETUP_PREVIEW`, no trade.
+- `SETUP_PREVIEW` significa “revisar gráfico si se desea”.
 - `TRADE_READY` requiere la secuencia experimental completa.
 
 ---
@@ -464,6 +467,7 @@ Filosofía actual:
 
 ```text
 preliminary states remain silent
+SETUP_PREVIEW → Telegram alert
 TRADE_READY → Telegram alert
 ```
 
@@ -473,7 +477,6 @@ Estados silenciosos:
 - `BREAKOUT_CONFIRMED`
 - `FVG_CREATED`
 - `FVG_RETESTED`
-- `PRE_RETRACE_HIGH_BROKEN`
 
 Telegram debe actuar como capa selectiva de setups, no como stream de cada evento técnico.
 
@@ -554,3 +557,57 @@ promising exploratory structure under active prospective validation
 ```
 
 Evitar describir ORB-FVG como profitable, validated, proven o con demonstrated edge.
+
+
+---
+
+## 2026-09-09 — Telegram SETUP_PREVIEW / TRADE_READY
+
+Se ajusta la filosofía de alertas para reducir spam sin esperar hasta que todo el movimiento haya ocurrido.
+
+Telegram ORB-FVG queda en dos niveles informativos:
+
+```text
+FVG_RETESTED
+→ PRE_RETRACE_HIGH_BROKEN
+→ SETUP_PREVIEW
+
+SETUP_PREVIEW
+→ continuation confirmation
+→ TRADE_READY
+```
+
+`SETUP_PREVIEW` significa:
+
+> Este gráfico ya merece revisión si el trader quiere abrir TradingView.
+
+`TRADE_READY` significa:
+
+> La estructura experimental completa quedó confirmada. Revisar 1m para posible entrada discrecional.
+
+Ambos mensajes son informativos. Ninguno calcula Entry, Stop Loss, Take Profit, Risk %, position sizing ni ejecución broker.
+
+Los estados `OR_READY`, `BREAKOUT_CONFIRMED`, `FVG_CREATED` y `FVG_RETESTED` permanecen silenciosos en Telegram, pero siguen observables en logs/DB.
+
+Campos nuevos de investigación preparados:
+
+- previous breakout candle OHLC;
+- first retest candle OHLC;
+- `setupPreviewAt`;
+- `setupPreviewPrice` = close de la vela que rompe `preRetraceHigh`;
+- `setupPreviewAlertSent`;
+- `setupPreviewAlertedAt`;
+- `tradeReadyAt`;
+- `tradeReadyPrice` = close de la vela de confirmation;
+- `tradeReadyAlertSent`;
+- `tradeReadyAlertedAt`.
+
+Estos precios son referencias para research. No son Entry automática.
+
+Objetivo de la próxima sesión:
+
+- medir si preview reduce ruido;
+- observar cuántos previews llegan a ready;
+- comparar precio preview vs ready;
+- estudiar setups que fallan entre preview y ready;
+- preparar análisis futuro de MFE/MAE desde ambos puntos.
