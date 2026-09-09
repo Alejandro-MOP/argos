@@ -31,6 +31,7 @@ export interface EngineRuntimeConfig {
     forwardTestContextEnabled: boolean;
   };
   telegramNotificationTimeframes: string[];
+  orbFvgTradeReadyAlertsEnabled: boolean;
   scoring: {
     maxAnalyzerScore: number;
     opportunityMinScore: number;

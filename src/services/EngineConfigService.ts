@@ -44,6 +44,7 @@ const REQUIRED_ENGINE_CONFIG_KEYS = [
   'MOMENTUM_RSI_NEUTRAL_MAX',
   'MOMENTUM_RSI_EXTENDED_MAX',
   'STRUCTURE_LOOKBACK_PERIOD',
+  'ORB_FVG_TRADE_READY_ALERTS_ENABLED',
 ] as const;
 
 export class EngineConfigService {
@@ -94,6 +95,7 @@ export class EngineConfigService {
         forwardTestContextEnabled: this.getBoolean(parsedValues, 'FORWARD_TEST_CONTEXT_ENABLED'),
       },
       telegramNotificationTimeframes: this.getStringList(parsedValues, 'TELEGRAM_NOTIFICATION_TIMEFRAMES'),
+      orbFvgTradeReadyAlertsEnabled: this.getBoolean(parsedValues, 'ORB_FVG_TRADE_READY_ALERTS_ENABLED'),
       scoring: {
         maxAnalyzerScore: this.getNumber(parsedValues, 'SCORING_MAX_ANALYZER_SCORE'),
         opportunityMinScore: this.getNumber(parsedValues, 'OPPORTUNITY_MIN_SCORE'),

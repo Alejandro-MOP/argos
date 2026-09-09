@@ -37,11 +37,23 @@ export class OrbFvgMemoryRepository implements OrbFvgSignalRepository {
   public async findOpen(limit = 100): Promise<PersistedOrbFvgSignalSnapshot[]> {
     return [...this.signals.values()]
       .filter((signal) => signal.status === 'OPEN')
+      .filter((signal) => signal.orbFvgState === undefined || (signal.orbFvgState === 'TRADE_READY' && signal.entryPrice !== undefined && signal.stopPrice !== undefined && signal.risk !== undefined && signal.target2RPrice !== undefined))
       .sort((left, right) => left.signalAt.getTime() - right.signalAt.getTime())
       .slice(0, limit);
   }
 
   public async updateForwardState(signal: OrbFvgSignalSnapshot): Promise<void> {
+    if (!signal.id) {
+      return;
+    }
+    const existing = this.signals.get(signal.id);
+    if (!existing) {
+      return;
+    }
+    this.signals.set(signal.id, { ...existing, ...signal, id: existing.id, createdAt: existing.createdAt, updatedAt: new Date() });
+  }
+
+  public async updateSetupState(signal: OrbFvgSignalSnapshot): Promise<void> {
     if (!signal.id) {
       return;
     }

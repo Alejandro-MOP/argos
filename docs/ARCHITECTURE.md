@@ -675,6 +675,48 @@ El universo de símbolos y timeframes activos se lee desde `market_signal_engine
 
 ORB-FVG es un dominio paralelo de research, aislado de Strategy v1.
 
+La variante activa es `experiment_version=orb-fvg-v0.3` y cambia la semántica clave del experimento:
+
+```text
+Breakout + FVG
+  ↓
+setup de interés
+  ↓
+NO trade automático
+```
+
+v0.3 implementa una máquina de estados prospectiva LONG-only:
+
+```text
+WAITING_FOR_OR
+  ↓
+OR_READY
+  ↓
+WAITING_FOR_BREAKOUT
+  ↓
+BREAKOUT_CONFIRMED
+  ↓
+WAITING_FOR_FVG
+  ↓
+FVG_CREATED
+  ↓
+WAITING_FOR_RETEST
+  ↓
+FVG_RETESTED
+  ↓
+WAITING_FOR_STRUCTURE_BREAK
+  ↓
+PRE_RETRACE_HIGH_BROKEN
+  ↓
+WAITING_FOR_CONTINUATION
+  ↓
+CONTINUATION_CONFIRMED
+  ↓
+TRADE_READY
+```
+
+Implementación actual persistida:
+
 ```text
 orbFvgScanner timer
   ↓
@@ -682,41 +724,52 @@ MarketUniverseService
   ↓
 MarketDataService / Yahoo Finance
   ↓
-Opening Range 15m + LONG Breakout 5m + bullish FVG 5m
+Opening Range 15m
   ↓
-OrbFvgSignalRepository
+LONG Breakout 5m
   ↓
-PostgreSQL silent research persistence
-
-orbFvgForwardMonitor timer
+bullish FVG 5m
   ↓
-Open ORB-FVG candidates
+FVG retest
   ↓
-1m future candles after signalAt
+close above pre-retrace high
   ↓
-WIN / LOSS / AMBIGUOUS / EXPIRED + MFE / MAE + R levels
+next candle continuation
+  ↓
+TRADE_READY
 ```
 
-Este carril no llama ni modifica:
+Reglas v0.3:
 
-- `MarketScanExecutor`
-- `OpportunityService`
-- analyzers/scoring
-- Evidence Strategy v1
-- Forward Evaluation Strategy v1
-- Shadow Paper Trading
-- `PaperTradeMonitorService`
+- Opening Range: primera vela 15m 09:30-09:45 ET.
+- Breakout LONG: `candle.close > ORHigh AND candle.open <= ORHigh`.
+- Bullish FVG: `candle3.low > candle1.high`.
+- Retest: una vela posterior intersecta la zona `[fvgLow, fvgHigh]`.
+- `preRetraceHigh`: máximo high observado prospectivamente desde la vela que crea el FVG hasta antes del primer retest. No usa swing detection retrospectivo.
+- Structure break: una vela posterior al retest cierra arriba de `preRetraceHigh`.
+- Continuation: la siguiente vela completada cierra arriba de `preRetraceHigh` y arriba del cierre de la vela de structure break.
+- Multiple retests: se permiten y se cuentan mientras no exista `TRADE_READY` ni expire la sesión; no reinician `preRetraceHigh`.
+- Expiration: si termina la regular session antes de `TRADE_READY`, el setup pasa a `EXPIRED_SETUP`.
 
-La variante histórica `experiment_version=orb-fvg-v0.1` preserva el experimento 15m OR + detector 1m. La variante activa `experiment_version=orb-fvg-v0.2` usa 15m OR + detector 5m. Ambas comparten `market_signal_engine.orb_fvg_signals` y `market_signal_engine.orb_fvg_signal_levels`, separadas por `experiment_version`.
+`TRADE_READY` significa que ARGOS encontró una estructura que cumple la hipótesis experimental. No significa recomendación, orden automática ni ejecución broker.
 
-La idempotencia principal se protege con una restricción única por:
+Importante: v0.3 no inventa `entry`, `stop`, `risk` ni `target2R`. Esos campos pueden permanecer `NULL` para setups v0.3 hasta que exista una entrada manual/paper trade metodológicamente definida. Por lo mismo, el forward monitor de WIN/LOSS no evalúa setups v0.3 sin modelo de trade.
 
-```text
-ticker + session_date + direction + experiment_version + breakout_candle_timestamp
-```
+La historia se preserva:
 
-El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de detecciones, niveles R y outcomes. Por defecto consulta la versión activa v0.2; `experimentVersion=orb-fvg-v0.1` permite revisar históricos. Sigue permitiendo `direction=SHORT` para consultar históricos preservados, aunque el scanner activo no genera nuevas señales SHORT.
+- `orb-fvg-v0.1`: histórico; Opening Range 15m + detector automático 1m.
+- `orb-fvg-v0.2`: histórico; Opening Range 15m + detector automático 5m con entry en `candle3.close`.
+- `orb-fvg-v0.3`: activo; Opening Range 15m + 5m breakout/FVG + retest + structure confirmation.
 
-Telegram behavior: ORB-FVG permanece temporalmente silenciado durante la validación técnica de v0.2. Candidate detection y final outcome notifications están deshabilitadas; el scanner y monitor siguen recolectando y persistiendo research data. Strategy v1 Telegram y Shadow Paper Trading no cambian.
+Todas comparten `market_signal_engine.orb_fvg_signals` y `market_signal_engine.orb_fvg_signal_levels`, separadas por `experiment_version`.
 
-v0.2 es prospectivo: el scanner corre alineado a cierre de 5m con tolerancia de publicación y evalúa únicamente la estructura 5m recientemente cerrada más las dos velas previas necesarias para FVG. No recorre 09:45 → now buscando patrones históricos.
+El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de setups, estados, niveles R legacy y outcomes históricos. Por defecto consulta la versión activa v0.3; `experimentVersion=orb-fvg-v0.1` o `orb-fvg-v0.2` permite revisar históricos.
+
+Telegram behavior: ORB-FVG usa `ORB_FVG_TRADE_READY_ALERTS_ENABLED`. El default
+es `false`, por lo que scanner y persistencia siguen activos pero Telegram queda
+silencioso. Si se habilita, sólo se envía una alerta por transición completa a
+`TRADE_READY`; los estados preliminares (`OR_READY`, `BREAKOUT_CONFIRMED`,
+`FVG_CREATED`, `FVG_RETESTED`, `PRE_RETRACE_HIGH_BROKEN`) permanecen observables
+en logs/DB pero no alertan. Strategy v1 Telegram y Shadow Paper Trading no cambian.
+
+v0.3 es prospectivo: cada ejecución procesa la última vela 5m completada y sólo avanza el estado con información disponible hasta ese momento. No recorre toda la sesión buscando retrospectivamente la mejor combinación breakout/FVG/retest/continuation.

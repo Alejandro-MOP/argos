@@ -614,6 +614,7 @@ const sampleMarketScanPresenterResult = () => ({
       forwardTestContextEnabled: true,
     },
     telegramNotificationTimeframes: ['5m', '15m'],
+    orbFvgTradeReadyAlertsEnabled: false,
     scoring: {
       maxAnalyzerScore: 25,
       opportunityMinScore: 90,

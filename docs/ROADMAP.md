@@ -2771,3 +2771,38 @@ Limitaciones conocidas:
 - No hay calendario bursátil completo para holidays/early closes.
 - Resultados brutos no incluyen spread, slippage ni comisiones.
 - v0.2 todavía no está validado prospectivamente.
+
+## ORB-FVG v0.3 — Retest Structure Confirmation
+
+Estado: **v0.3 IMPLEMENTED — PENDING PROSPECTIVE VALIDATION**.
+
+Hipótesis v0.3: breakout + bullish FVG no deben tratarse como entrada automática. Deben crear una zona de interés. El setup sólo queda listo si después existe retest del FVG, recuperación estructural sobre el high previo al retroceso y confirmación de continuación.
+
+Boundary v0.3:
+
+```text
+Breakout + FVG = setup de interés
+TRADE_READY = estructura confirmada
+WIN/LOSS = no aplica sin entry manual/paper definida
+```
+
+Implementado:
+
+- `orb-fvg-v0.3` activo: 15m OR + 5m breakout/FVG + retest + structure confirmation;
+- detección prospectiva LONG-only;
+- bullish FVG matemático de tres velas 5m;
+- small FVG permitido si es matemáticamente válido;
+- `preRetraceHigh` calculado prospectivamente como máximo high observado desde FVG creation hasta antes del primer retest;
+- multiple retests permitidos sin reiniciar `preRetraceHigh`;
+- estado terminal `TRADE_READY` para setup listo;
+- estado terminal `EXPIRED_SETUP` si termina la sesión antes de confirmar;
+- v0.3 no inventa `entry`, `stop`, `risk` ni `target2R`;
+- el forward monitor de outcomes no evalúa setups v0.3 que no tengan modelo de trade;
+- Telegram ORB-FVG queda controlado por `ORB_FVG_TRADE_READY_ALERTS_ENABLED`;
+  default `false` durante validación técnica.
+- Si se habilita, sólo alerta setups que llegan a `TRADE_READY`; estados
+  preliminares no generan Telegram.
+
+Ejemplos exploratorios que motivaron la hipótesis: TSLA, BA, PLD, GOOGL, SO y BAC. Estas observaciones no afirman rentabilidad.
+
+Limitación consciente: invalidation estructural distinta de `EXPIRED_SETUP` queda para investigación posterior.

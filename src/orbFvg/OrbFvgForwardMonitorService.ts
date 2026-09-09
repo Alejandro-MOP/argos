@@ -69,6 +69,15 @@ export class OrbFvgForwardMonitorService {
   }
 
   private async monitorSignal(signal: PersistedOrbFvgSignalSnapshot, now: Date, metrics: OrbFvgForwardMonitorMetrics): Promise<void> {
+    if (
+      signal.entryPrice === undefined ||
+      signal.stopPrice === undefined ||
+      signal.risk === undefined ||
+      signal.target2RPrice === undefined
+    ) {
+      return;
+    }
+
     const sessionService = this.dependencies.sessionService ?? new OrbFvgSessionService();
     const window = sessionService.getSessionWindow(signal.sessionDate);
     const to = new Date(Math.min(now.getTime(), window.regularSessionEndsAt.getTime()));

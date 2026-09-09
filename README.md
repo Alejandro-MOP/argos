@@ -1921,3 +1921,57 @@ Yahoo Finance se usa únicamente como feed experimental de research. No debe int
 Nota metodológica 2026-09-08: `orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. Si existen señales SHORT anteriores en PostgreSQL, se preservan como histórico y pueden consultarse, pero no deben mezclarse con el dataset LONG-only posterior al cambio.
 
 Telegram behavior: ORB-FVG permanece silenciado durante la validación técnica de v0.2. Candidate detection y final outcome notifications están deshabilitadas; scanner y monitor siguen persistiendo research data silenciosamente. Strategy v1 Telegram y Shadow Paper Trading no cambian.
+
+### ORB-FVG v0.3 — Retest Structure Confirmation
+
+`orb-fvg-v0.3` es la variante activa del experimento.
+
+Idea principal:
+
+```text
+Breakout + FVG = zona de interés
+Retest + structure break + continuation = TRADE_READY
+```
+
+`TRADE_READY` no significa recomendación ni orden automática. Significa solamente que ARGOS encontró una estructura que cumple la hipótesis experimental. La entrada real/manual sigue siendo discrecional.
+
+Reglas v0.3:
+
+1. Opening Range: primera vela 15m 09:30-09:45 ET.
+2. Breakout LONG: una vela 5m cierra arriba del ORHigh y abrió en/debajo del ORHigh.
+3. FVG bullish: `candle3.low > candle1.high`.
+4. Retest: una vela posterior toca/intersecta la zona del FVG.
+5. `preRetraceHigh`: máximo high observado prospectivamente desde FVG creation hasta antes del primer retest.
+6. Structure break: una vela posterior al retest cierra arriba de `preRetraceHigh`.
+7. Continuation: la siguiente vela completada cierra arriba de `preRetraceHigh` y arriba del cierre del structure break.
+
+v0.3 permite FVGs pequeños si son matemáticamente válidos. No agrega filtros de EMA, RSI, volumen, ATR, patrón de vela, cooldown ni SHORT.
+
+Multiple retests: se cuentan con `retestCount`, `firstRetestAt` y `latestRetestAt`. No reinician `preRetraceHigh`.
+
+Expiration: si termina la sesión regular antes de `TRADE_READY`, el setup pasa a `EXPIRED_SETUP`.
+
+Forward outcomes: v0.3 no calcula WIN/LOSS/AMBIGUOUS/EXPIRED desde `FVG_CREATED`. Como no hay entry automática aprobada, `entryPrice`, `stopPrice`, `risk` y `target2RPrice` pueden quedar vacíos para setups v0.3. El forward monitor sólo evalúa señales legacy o futuras señales con modelo de trade definido.
+
+Endpoint read-only:
+
+```http
+GET /api/orb-fvg/signals
+GET /api/orb-fvg/signals?experimentVersion=orb-fvg-v0.3
+GET /api/orb-fvg/signals?experimentVersion=orb-fvg-v0.2
+```
+
+Telegram behavior: ORB-FVG usa el flag funcional `ORB_FVG_TRADE_READY_ALERTS_ENABLED`.
+Por default queda en `false`. Con el flag apagado, ORB-FVG recolecta research data
+silenciosamente en PostgreSQL. Con el flag encendido, Telegram sólo alerta cuando
+un setup alcanza `TRADE_READY`; no alerta `OR_READY`, `BREAKOUT_CONFIRMED`,
+`FVG_CREATED`, `FVG_RETESTED` ni `PRE_RETRACE_HIGH_BROKEN`. Strategy v1 Telegram
+y Shadow Paper Trading no cambian.
+
+Para habilitar alertas `TRADE_READY` después de validar la sesión:
+
+```sql
+UPDATE market_signal_engine.engine_config
+SET value = 'true', updated_at = now()
+WHERE key = 'ORB_FVG_TRADE_READY_ALERTS_ENABLED';
+```

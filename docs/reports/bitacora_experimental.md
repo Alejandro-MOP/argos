@@ -3599,3 +3599,40 @@ Impacto esperado:
 Objetivo:
 
 Recolectar la sesión completa silenciosamente para auditoría manual posterior al cierre.
+
+## 2026-09-08 — ORB-FVG v0.3 Retest Structure Confirmation
+
+Se crea la boundary experimental `orb-fvg-v0.3`.
+
+Hipótesis metodológica:
+
+```text
+Breakout + FVG no equivalen a entrada.
+Breakout + FVG crean una zona de interés.
+La estructura sólo queda lista después de retest, recuperación sobre pre-retrace high y continuación.
+```
+
+ORB-FVG v0.3 conserva:
+
+- Opening Range 15m 09:30-09:45 ET;
+- detección automática en 5m;
+- LONG-only;
+- FVG bullish matemático;
+- research prospectivo;
+- Telegram ORB-FVG controlado por `ORB_FVG_TRADE_READY_ALERTS_ENABLED`.
+
+Durante implementación el flag queda deshabilitado. Si se habilita para una
+sesión futura, Telegram sólo debe alertar `TRADE_READY`; los estados preliminares
+siguen observables en logs/DB pero silenciosos.
+
+Nueva semántica:
+
+- `FVG_CREATED` no define entry automática;
+- `FVG_CREATED` no inicia WIN/LOSS;
+- `TRADE_READY` significa setup estructuralmente listo, no recomendación ni ejecución;
+- sin entry manual/paper definida, el forward monitor no evalúa outcomes de trade para v0.3;
+- `EXPIRED_SETUP` representa setup no confirmado antes del cierre de sesión.
+
+`preRetraceHigh` se calcula prospectivamente como el máximo high observado desde la vela que crea el FVG hasta antes del primer retest. Multiple retests se permiten y no reinician ese high.
+
+Ejemplos exploratorios que motivaron el cambio: TSLA, BA, PLD, GOOGL, SO y BAC. Estas observaciones no afirman rentabilidad.

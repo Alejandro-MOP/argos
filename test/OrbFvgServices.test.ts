@@ -97,6 +97,9 @@ describe('ORB-FVG services', () => {
     expect(stored[0].signal.experimentVersion).toBe(ORB_FVG_EXPERIMENT_VERSION);
     expect(stored[0].signal.setupTimeframe).toBe('5m');
     expect(stored[0].signal.telegramAlertSent).toBe(false);
+    expect(stored[0].signal.orbFvgState).toBe('FVG_CREATED');
+    expect(stored[0].signal.entryPrice).toBeUndefined();
+    expect(stored[0].levels).toHaveLength(0);
     expect(stored[0].signal.scannerRunAt).toEqual(new Date('2026-09-04T14:01:00.000Z'));
     expect(stored[0].signal.detectedAt).toEqual(new Date('2026-09-04T14:01:00.000Z'));
     expect(stored[0].signal.detectionLagSeconds).toBe(660);
@@ -308,26 +311,13 @@ describe('ORB-FVG services', () => {
 
   it('monitors open signals, resolves a LONG win and triggers R levels once', async () => {
     const repository = new OrbFvgMemoryRepository();
-    const scanner = new OrbFvgScannerService({
-      marketUniverseService: {
-        loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
-      },
-      marketDataService: {
-        getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
-          timeframe === '15m'
-            ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
-            : [
-                candle('2026-09-04T13:45:00.000Z', 101, 101.5, 100.5, 101),
-                candle('2026-09-04T13:50:00.000Z', 101, 103, 100.8, 102.5),
-                candle('2026-09-04T13:55:00.000Z', 102.5, 104, 102.2, 103.5),
-              ],
-        ),
-      } as never,
-      repository,
-      now: () => new Date('2026-09-04T14:01:00.000Z'),
-    });
-    await scanner.run(logger);
-    const signal = (await repository.find())[0].signal;
+    const signal = buildLongSignal();
+    await repository.saveIfNotDuplicate(signal, ORB_FVG_R_LEVELS.map((rMultiple) => ({
+      orbFvgSignalId: '',
+      rMultiple,
+      levelPrice: signal.entryPrice! + signal.risk! * rMultiple,
+    })));
+
     const sendMessage = jest.fn().mockResolvedValue(true);
     const monitor = new OrbFvgForwardMonitorService({
       repository,
@@ -337,10 +327,10 @@ describe('ORB-FVG services', () => {
           .mockResolvedValue([
             candle(
               '2026-09-04T14:00:00.000Z',
-              signal.entryPrice,
-              signal.target2RPrice + 0.5,
-              signal.entryPrice,
-              signal.target2RPrice,
+              signal.entryPrice!,
+              signal.target2RPrice! + 0.5,
+              signal.entryPrice!,
+              signal.target2RPrice!,
             ),
           ]),
       } as never,
@@ -370,7 +360,7 @@ describe('ORB-FVG services', () => {
     const levels = ORB_FVG_R_LEVELS.map((rMultiple) => ({
       orbFvgSignalId: '',
       rMultiple,
-      levelPrice: shortSignal.entryPrice - shortSignal.risk * rMultiple,
+      levelPrice: shortSignal.entryPrice! - shortSignal.risk! * rMultiple,
     }));
     const saved = await repository.saveIfNotDuplicate(shortSignal, levels);
     const shortSignals = await repository.find({ direction: 'SHORT' });
@@ -425,7 +415,7 @@ describe('ORB-FVG services', () => {
       const levels = ORB_FVG_R_LEVELS.map((rMultiple) => ({
         orbFvgSignalId: '',
         rMultiple,
-        levelPrice: signal.entryPrice + signal.risk * rMultiple,
+        levelPrice: signal.entryPrice! + signal.risk! * rMultiple,
       }));
       await repository.saveIfNotDuplicate(signal, levels);
       const sendMessage = jest.fn().mockResolvedValue(true);
@@ -447,7 +437,238 @@ describe('ORB-FVG services', () => {
       expect(sendMessage).not.toHaveBeenCalled();
     },
   );
+
+  it('advances a TSLA-like setup through retest, structure break and continuation into TRADE_READY', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 104, 102.4, 103.5),
+      candle('2026-09-04T13:55:00.000Z', 103.5, 105, 103.3, 104),
+      candle('2026-09-04T14:00:00.000Z', 104, 106, 104, 105.5),
+      candle('2026-09-04T14:05:00.000Z', 105.5, 105.8, 103.1, 104),
+      candle('2026-09-04T14:10:00.000Z', 104, 107, 104, 106.5),
+      candle('2026-09-04T14:15:00.000Z', 106.5, 108, 106.4, 107.2),
+    ]);
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z', '2026-09-04T14:21:00.000Z']);
+    const stored = (await repository.find())[0].signal;
+
+    expect(stored.orbFvgState).toBe('TRADE_READY');
+    expect(stored.preRetraceHigh).toBe(106);
+    expect(stored.retestCount).toBe(1);
+    expect(stored.structureBreakCandleTimestamp).toEqual(new Date('2026-09-04T14:10:00.000Z'));
+    expect(stored.continuationCandleTimestamp).toEqual(new Date('2026-09-04T14:15:00.000Z'));
+    expect(stored.setupReadyAt).toEqual(new Date('2026-09-04T14:15:00.000Z'));
+    expect(stored.entryPrice).toBeUndefined();
+  });
+
+  it('keeps a BA-like breakout without valid FVG away from TRADE_READY', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 103.1, 101.8, 102.8),
+      candle('2026-09-04T13:55:00.000Z', 102.8, 103.2, 102.6, 103),
+    ]);
+
+    await service.run(logger);
+
+    expect(await repository.find()).toHaveLength(0);
+  });
+
+  it('keeps a PLD-like setup below TRADE_READY when price never closes above pre-retrace high', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 104, 102.4, 103.5),
+      candle('2026-09-04T13:55:00.000Z', 103.5, 105, 103.3, 104),
+      candle('2026-09-04T14:00:00.000Z', 104, 106, 104, 105.5),
+      candle('2026-09-04T14:05:00.000Z', 105.5, 105.8, 103.1, 104),
+      candle('2026-09-04T14:10:00.000Z', 104, 106.4, 104, 105.9),
+      candle('2026-09-04T14:15:00.000Z', 105.9, 106.6, 105, 105.8),
+    ]);
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z', '2026-09-04T14:21:00.000Z']);
+    const stored = (await repository.find())[0].signal;
+
+    expect(stored.orbFvgState).toBe('FVG_RETESTED');
+    expect(stored.setupReadyAt).toBeUndefined();
+  });
+
+  it('allows a GOOGL-like small mathematically valid FVG to reach TRADE_READY', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 103.8, 102.6, 103.2),
+      candle('2026-09-04T13:55:00.000Z', 103.2, 104.2, 103.01, 103.7),
+      candle('2026-09-04T14:00:00.000Z', 103.7, 104.5, 103.8, 104.3),
+      candle('2026-09-04T14:05:00.000Z', 104.3, 104.4, 102.99, 103.6),
+      candle('2026-09-04T14:10:00.000Z', 103.6, 105, 103.5, 104.8),
+      candle('2026-09-04T14:15:00.000Z', 104.8, 105.5, 104.7, 105.1),
+    ]);
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z', '2026-09-04T14:21:00.000Z']);
+    const stored = (await repository.find())[0].signal;
+
+    expect(stored.fvgSizePct).toBeGreaterThan(0);
+    expect(stored.orbFvgState).toBe('TRADE_READY');
+  });
+
+  it('tracks SO-like multiple retests without resetting pre-retrace high or reaching TRADE_READY', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 104, 102.4, 103.5),
+      candle('2026-09-04T13:55:00.000Z', 103.5, 105, 103.3, 104),
+      candle('2026-09-04T14:00:00.000Z', 104, 106, 104, 105.5),
+      candle('2026-09-04T14:05:00.000Z', 105.5, 105.8, 103.1, 104),
+      candle('2026-09-04T14:10:00.000Z', 104, 105.7, 104, 105.2),
+      candle('2026-09-04T14:15:00.000Z', 105.2, 105.5, 103.2, 104.1),
+      candle('2026-09-04T14:20:00.000Z', 104.1, 105.9, 104, 105.6),
+    ]);
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z', '2026-09-04T14:21:00.000Z', '2026-09-04T14:26:00.000Z']);
+    const stored = (await repository.find())[0].signal;
+
+    expect(stored.orbFvgState).toBe('FVG_RETESTED');
+    expect(stored.retestCount).toBe(2);
+    expect(stored.firstRetestAt).toEqual(new Date('2026-09-04T14:05:00.000Z'));
+    expect(stored.latestRetestAt).toEqual(new Date('2026-09-04T14:15:00.000Z'));
+    expect(stored.preRetraceHigh).toBe(106);
+  });
+
+  it('keeps a BAC-like sequence without complete FVG structure away from TRADE_READY', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 103.5, 102.2, 103.2),
+      candle('2026-09-04T13:55:00.000Z', 103.2, 103.8, 102.9, 103.4),
+      candle('2026-09-04T14:00:00.000Z', 103.4, 104, 102.8, 103.1),
+    ]);
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z']);
+
+    expect(await repository.find()).toHaveLength(0);
+  });
+
+
+  it('sends exactly one TRADE_READY Telegram alert for TSLA-like setup when the flag is enabled', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const sendMessage = jest.fn().mockResolvedValue(true);
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 104, 102.4, 103.5),
+      candle('2026-09-04T13:55:00.000Z', 103.5, 105, 103.3, 104),
+      candle('2026-09-04T14:00:00.000Z', 104, 106, 104, 105.5),
+      candle('2026-09-04T14:05:00.000Z', 105.5, 105.8, 103.1, 104),
+      candle('2026-09-04T14:10:00.000Z', 104, 107, 104, 106.5),
+      candle('2026-09-04T14:15:00.000Z', 106.5, 108, 106.4, 107.2),
+      candle('2026-09-04T14:20:00.000Z', 107.2, 109, 107, 108),
+    ], { alertsEnabled: true, sendMessage });
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z', '2026-09-04T14:21:00.000Z', '2026-09-04T14:26:00.000Z']);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][0]).toContain('ORB-FVG TRADE READY');
+    expect(sendMessage.mock.calls[0][0]).toContain('Setup confirmed. Review 1m for discretionary entry.');
+    expect((await repository.find())[0].signal.telegramAlertSent).toBe(true);
+  });
+
+  it('sends exactly one TRADE_READY Telegram alert for GOOGL-like small FVG when the flag is enabled', async () => {
+    const repository = new OrbFvgMemoryRepository();
+    const sendMessage = jest.fn().mockResolvedValue(true);
+    const service = buildStateMachineScanner(repository, [
+      candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+      candle('2026-09-04T13:50:00.000Z', 102.5, 103.8, 102.6, 103.2),
+      candle('2026-09-04T13:55:00.000Z', 103.2, 104.2, 103.01, 103.7),
+      candle('2026-09-04T14:00:00.000Z', 103.7, 104.5, 103.8, 104.3),
+      candle('2026-09-04T14:05:00.000Z', 104.3, 104.4, 102.99, 103.6),
+      candle('2026-09-04T14:10:00.000Z', 103.6, 105, 103.5, 104.8),
+      candle('2026-09-04T14:15:00.000Z', 104.8, 105.5, 104.7, 105.1),
+    ], { alertsEnabled: true, sendMessage });
+
+    await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z', '2026-09-04T14:21:00.000Z']);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect((await repository.find())[0].signal.orbFvgState).toBe('TRADE_READY');
+  });
+
+  it('does not send Telegram alerts for BA/PLD/SO/BAC-like incomplete setups', async () => {
+    const cases = [
+      [
+        candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+        candle('2026-09-04T13:50:00.000Z', 102.5, 103.1, 101.8, 102.8),
+        candle('2026-09-04T13:55:00.000Z', 102.8, 103.2, 102.6, 103),
+      ],
+      [
+        candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+        candle('2026-09-04T13:50:00.000Z', 102.5, 104, 102.4, 103.5),
+        candle('2026-09-04T13:55:00.000Z', 103.5, 105, 103.3, 104),
+        candle('2026-09-04T14:00:00.000Z', 104, 106, 104, 105.5),
+        candle('2026-09-04T14:05:00.000Z', 105.5, 105.8, 103.1, 104),
+        candle('2026-09-04T14:10:00.000Z', 104, 106.4, 104, 105.9),
+      ],
+      [
+        candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+        candle('2026-09-04T13:50:00.000Z', 102.5, 104, 102.4, 103.5),
+        candle('2026-09-04T13:55:00.000Z', 103.5, 105, 103.3, 104),
+        candle('2026-09-04T14:00:00.000Z', 104, 106, 104, 105.5),
+        candle('2026-09-04T14:05:00.000Z', 105.5, 105.8, 103.1, 104),
+        candle('2026-09-04T14:10:00.000Z', 104, 105.7, 104, 105.2),
+        candle('2026-09-04T14:15:00.000Z', 105.2, 105.5, 103.2, 104.1),
+      ],
+      [
+        candle('2026-09-04T13:45:00.000Z', 101, 103, 100.8, 102.5),
+        candle('2026-09-04T13:50:00.000Z', 102.5, 103.5, 102.2, 103.2),
+        candle('2026-09-04T13:55:00.000Z', 103.2, 103.8, 102.9, 103.4),
+      ],
+    ];
+
+    for (const setupCandles of cases) {
+      const repository = new OrbFvgMemoryRepository();
+      const sendMessage = jest.fn().mockResolvedValue(true);
+      const service = buildStateMachineScanner(repository, setupCandles, { alertsEnabled: true, sendMessage });
+      await runScannerSequence(service, ['2026-09-04T14:01:00.000Z', '2026-09-04T14:06:00.000Z', '2026-09-04T14:11:00.000Z', '2026-09-04T14:16:00.000Z']);
+      expect(sendMessage).not.toHaveBeenCalled();
+    }
+  });
+
 });
+
+
+const buildStateMachineScanner = (
+  repository: OrbFvgMemoryRepository,
+  setupCandles: Candle[],
+  options: { alertsEnabled?: boolean; sendMessage?: jest.Mock } = {},
+): OrbFvgScannerService => new OrbFvgScannerService({
+  marketUniverseService: {
+    loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [stock] }),
+  },
+  marketDataService: {
+    getHistoricalCandles: jest.fn(async (_ticker: string, timeframe: string) =>
+      timeframe === '15m'
+        ? [candle('2026-09-04T13:30:00.000Z', 100, 102, 99, 101)]
+        : setupCandles,
+    ),
+  } as never,
+  repository,
+  engineConfigService: {
+    loadSnapshot: jest.fn().mockResolvedValue({
+      source: 'postgres',
+      values: { orbFvgTradeReadyAlertsEnabled: options.alertsEnabled ?? false },
+    }),
+  } as never,
+  telegramClient: options.sendMessage ? { sendMessage: options.sendMessage } : undefined,
+  now: () => currentScannerNow,
+});
+
+let currentScannerNow = new Date('2026-09-04T14:01:00.000Z');
+
+const runScannerSequence = async (service: OrbFvgScannerService, timestamps: string[]): Promise<void> => {
+  for (const timestamp of timestamps) {
+    currentScannerNow = new Date(timestamp);
+    await service.run(logger);
+  }
+};
 
 const buildLongSignal = (): OrbFvgSignalSnapshot => ({
   experimentVersion: ORB_FVG_EXPERIMENT_VERSION_V1,

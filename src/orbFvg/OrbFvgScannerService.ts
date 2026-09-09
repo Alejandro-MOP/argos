@@ -1,7 +1,7 @@
 import type { Candle } from '../models/Candle';
 import {
   ORB_FVG_EXPERIMENT_VERSION,
-  ORB_FVG_R_LEVELS,
+  type OrbFvgResearchState,
   type OrbFvgSignalSnapshot,
 } from '../models/OrbFvgSignal';
 import type { MarketSymbol } from '../models/MarketSymbol';
@@ -9,24 +9,25 @@ import type { OrbFvgSignalRepository } from '../ports/OrbFvgSignalRepository';
 import type { TelegramClient } from '../clients/TelegramClient';
 import type { HistoricalMarketDataProvider } from '../services/MarketDataService';
 import type { MarketUniverseService } from '../services/MarketUniverseService';
+import type { EngineConfigService } from '../services/EngineConfigService';
 import {
   calculateOpeningRangeSizePct,
-  calculateRLevelPrice,
-  calculateRiskPct,
-  calculateTarget2R,
   detectBreakout,
   detectFvg,
   findOpeningRangeCandle,
+  roundPercent,
   roundPrice,
   toCandleSnapshot,
 } from './OrbFvgMath';
 import { OrbFvgSessionService } from './OrbFvgSessionService';
+import { formatOrbFvgTradeReadyAlert } from './OrbFvgTelegramFormatter';
 
 const ONE_MINUTE_MS = 60_000;
 const SETUP_TIMEFRAME = '5m';
 const SETUP_CANDLE_MS = 5 * ONE_MINUTE_MS;
 const SETUP_CANDLE_PUBLICATION_DELAY_MS = 15_000;
-const ORB_FVG_DETECTION_MODE = 'LONG_ONLY';
+const ORB_FVG_DETECTION_MODE = 'LONG_ONLY_RETEST_STRUCTURE_CONFIRMATION';
+const TERMINAL_SETUP_STATES: OrbFvgResearchState[] = ['TRADE_READY', 'EXPIRED_SETUP', 'INVALIDATED_SETUP'];
 
 export interface OrbFvgScannerLogger {
   log(message: string): void;
@@ -41,8 +42,13 @@ export interface OrbFvgScannerMetrics {
   marketDataRequests: number;
   breakoutsDetected: number;
   fvgConfirmed: number;
+  retestsDetected: number;
+  structureBreaksDetected: number;
+  tradeReady: number;
+  expiredSetups: number;
   persisted: number;
   duplicates: number;
+  stateUpdates: number;
   telegramAlertsSent: number;
   errors: number;
   durationMs: number;
@@ -57,6 +63,7 @@ export class OrbFvgScannerService {
       marketUniverseService: Pick<MarketUniverseService, 'loadSnapshot'>;
       marketDataService: HistoricalMarketDataProvider;
       repository: OrbFvgSignalRepository;
+      engineConfigService?: Pick<EngineConfigService, 'loadSnapshot'>;
       telegramClient?: Pick<TelegramClient, 'sendMessage'>;
       sessionService?: OrbFvgSessionService;
       now?: () => Date;
@@ -69,12 +76,21 @@ export class OrbFvgScannerService {
     const sessionService = this.dependencies.sessionService ?? new OrbFvgSessionService();
     const window = sessionService.getCurrentSessionWindow(now);
     const metrics = this.initialMetrics();
-    logger.log('[ORB-FVG] telegramAlerts=DISABLED researchCollection=ACTIVE');
+    const tradeReadyAlertsEnabled = await this.areTradeReadyAlertsEnabled(logger);
+    logger.log(`[ORB-FVG] telegramAlerts=${tradeReadyAlertsEnabled ? 'TRADE_READY_ONLY' : 'DISABLED'} researchCollection=ACTIVE`);
     logger.log(
       `[ORB-FVG scanner] cycle start experimentVersion=${ORB_FVG_EXPERIMENT_VERSION} setupTimeframe=${SETUP_TIMEFRAME} mode=${ORB_FVG_DETECTION_MODE}`,
     );
 
-    if (!window || !sessionService.isRegularSessionActive(window, now)) {
+    if (!window) {
+      metrics.marketClosed = 1;
+      metrics.durationMs = Date.now() - startedAt;
+      logger.log(`[ORB-FVG scanner] market-closed durationMs=${metrics.durationMs}`);
+      return metrics;
+    }
+
+    if (!sessionService.isRegularSessionActive(window, now)) {
+      await this.expireOpenSetups(window.sessionDate, now, metrics, logger);
       metrics.marketClosed = 1;
       metrics.durationMs = Date.now() - startedAt;
       logger.log(`[ORB-FVG scanner] market-closed durationMs=${metrics.durationMs}`);
@@ -124,6 +140,7 @@ export class OrbFvgScannerService {
           now,
           metrics,
           logger,
+          tradeReadyAlertsEnabled,
         );
       } catch (error) {
         metrics.errors += 1;
@@ -133,7 +150,7 @@ export class OrbFvgScannerService {
 
     metrics.durationMs = Date.now() - startedAt;
     logger.log(
-      `[ORB-FVG scanner] eligible=${metrics.eligible} openingRangeReady=${metrics.openingRangeReady} waiting=${metrics.waitingForOpeningRange} breakouts=${metrics.breakoutsDetected} fvgConfirmed=${metrics.fvgConfirmed} persisted=${metrics.persisted} duplicates=${metrics.duplicates} telegramAlertsSent=${metrics.telegramAlertsSent} errors=${metrics.errors} durationMs=${metrics.durationMs}`,
+      `[ORB-FVG scanner] eligible=${metrics.eligible} openingRangeReady=${metrics.openingRangeReady} waiting=${metrics.waitingForOpeningRange} breakouts=${metrics.breakoutsDetected} fvgConfirmed=${metrics.fvgConfirmed} retests=${metrics.retestsDetected} structureBreaks=${metrics.structureBreaksDetected} tradeReady=${metrics.tradeReady} expiredSetups=${metrics.expiredSetups} persisted=${metrics.persisted} duplicates=${metrics.duplicates} stateUpdates=${metrics.stateUpdates} telegramAlertsSent=${metrics.telegramAlertsSent} errors=${metrics.errors} durationMs=${metrics.durationMs}`,
     );
     return metrics;
   }
@@ -173,6 +190,7 @@ export class OrbFvgScannerService {
     now: Date,
     metrics: OrbFvgScannerMetrics,
     logger: OrbFvgScannerLogger,
+    tradeReadyAlertsEnabled: boolean,
   ): Promise<void> {
     metrics.marketDataRequests += 1;
     const candles = await this.dependencies.marketDataService.getHistoricalCandles(
@@ -182,19 +200,7 @@ export class OrbFvgScannerService {
       now,
       { minimumCandles: 0 },
     );
-    const recentStructure = candles
-      .filter(
-        (candle) =>
-          candle.timestamp.getTime() >= recentSetupCandleStart.getTime() - 2 * SETUP_CANDLE_MS,
-      )
-      .filter((candle) => candle.timestamp.getTime() <= recentSetupCandleStart.getTime())
-      .filter(
-        (candle) =>
-          candle.timestamp.getTime() + SETUP_CANDLE_MS + SETUP_CANDLE_PUBLICATION_DELAY_MS <=
-          now.getTime(),
-      )
-      .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime())
-      .slice(-3);
+    const recentStructure = getRecentClosedStructure(candles, recentSetupCandleStart, now);
 
     if (
       recentStructure.length < 3 ||
@@ -207,6 +213,34 @@ export class OrbFvgScannerService {
       return;
     }
 
+    const activeSetups = await this.dependencies.repository.find({
+      sessionDate,
+      ticker: symbol.symbol,
+      experimentVersion: ORB_FVG_EXPERIMENT_VERSION,
+      status: 'OPEN',
+      limit: 20,
+    });
+    const latestCandle = recentStructure.at(-1);
+    if (latestCandle) {
+      for (const { signal } of activeSetups) {
+        if (TERMINAL_SETUP_STATES.includes(signal.orbFvgState ?? 'TRADE_READY')) {
+          continue;
+        }
+        await this.advanceSetup(signal, latestCandle, now, metrics, tradeReadyAlertsEnabled);
+      }
+    }
+
+    await this.detectNewFvgSetup(symbol, openingRange, sessionDate, recentStructure, now, metrics);
+  }
+
+  private async detectNewFvgSetup(
+    symbol: MarketSymbol,
+    openingRange: Candle,
+    sessionDate: string,
+    recentStructure: Candle[],
+    now: Date,
+    metrics: OrbFvgScannerMetrics,
+  ): Promise<void> {
     const fvg = detectFvg(recentStructure[0], recentStructure[1], recentStructure[2]);
     if (fvg?.direction !== 'LONG') {
       return;
@@ -219,7 +253,7 @@ export class OrbFvgScannerService {
       }
       metrics.breakoutsDetected += 1;
       metrics.fvgConfirmed += 1;
-      const signal = this.buildSignal(
+      const signal = this.buildFvgSetup(
         symbol,
         sessionDate,
         openingRange,
@@ -227,21 +261,8 @@ export class OrbFvgScannerService {
         { ...fvg, candlesAfterBreakout: 2 - breakoutIndex },
         now,
       );
-      if (!signal) {
-        continue;
-      }
-      const levels = ORB_FVG_R_LEVELS.map((rMultiple) => ({
-        orbFvgSignalId: signal.id ?? '',
-        rMultiple,
-        levelPrice: calculateRLevelPrice(
-          signal.direction,
-          signal.entryPrice,
-          signal.risk,
-          rMultiple,
-        ),
-      }));
-      const saved = await this.dependencies.repository.saveIfNotDuplicate(signal, levels);
-      if (!saved.inserted || !saved.signal) {
+      const saved = await this.dependencies.repository.saveIfNotDuplicate(signal, []);
+      if (!saved.inserted) {
         metrics.duplicates += 1;
         continue;
       }
@@ -249,26 +270,186 @@ export class OrbFvgScannerService {
     }
   }
 
-  private buildSignal(
+  private async advanceSetup(
+    signal: OrbFvgSignalSnapshot,
+    candle: Candle,
+    now: Date,
+    metrics: OrbFvgScannerMetrics,
+    tradeReadyAlertsEnabled: boolean,
+  ): Promise<void> {
+    const state = signal.orbFvgState ?? 'TRADE_READY';
+    if (state === 'FVG_CREATED' || state === 'WAITING_FOR_RETEST') {
+      if (candle.timestamp.getTime() <= signal.fvgCandle3.timestamp.getTime()) {
+        return;
+      }
+      if (intersectsFvg(signal, candle)) {
+        await this.updateSetup({
+          ...signal,
+          orbFvgState: 'FVG_RETESTED',
+          retestCount: (signal.retestCount ?? 0) + 1,
+          firstRetestAt: signal.firstRetestAt ?? candle.timestamp,
+          latestRetestAt: candle.timestamp,
+          retestCandleTimestamp: candle.timestamp,
+          retestLow: roundPrice(candle.low),
+          retestHigh: roundPrice(candle.high),
+          retestClose: roundPrice(candle.close),
+          retestDepthPct: calculateRetestDepthPct(signal, candle),
+          scannerRunAt: now,
+        }, metrics);
+        metrics.retestsDetected += 1;
+        return;
+      }
+      await this.updatePreRetraceHigh(signal, candle, now, metrics);
+      return;
+    }
+
+    if (state === 'FVG_RETESTED' || state === 'WAITING_FOR_STRUCTURE_BREAK') {
+      if (signal.latestRetestAt && candle.timestamp.getTime() <= signal.latestRetestAt.getTime()) {
+        return;
+      }
+      if (intersectsFvg(signal, candle)) {
+        await this.updateSetup({
+          ...signal,
+          orbFvgState: 'FVG_RETESTED',
+          retestCount: (signal.retestCount ?? 0) + 1,
+          latestRetestAt: candle.timestamp,
+          retestCandleTimestamp: candle.timestamp,
+          retestLow: roundPrice(candle.low),
+          retestHigh: roundPrice(candle.high),
+          retestClose: roundPrice(candle.close),
+          retestDepthPct: calculateRetestDepthPct(signal, candle),
+          scannerRunAt: now,
+        }, metrics);
+        metrics.retestsDetected += 1;
+        return;
+      }
+      const preRetraceHigh = signal.preRetraceHigh;
+      if (preRetraceHigh !== undefined && candle.close > preRetraceHigh) {
+        await this.updateSetup({
+          ...signal,
+          orbFvgState: 'PRE_RETRACE_HIGH_BROKEN',
+          structureBreakCandleTimestamp: candle.timestamp,
+          structureBreakOpen: roundPrice(candle.open),
+          structureBreakHigh: roundPrice(candle.high),
+          structureBreakLow: roundPrice(candle.low),
+          structureBreakClose: roundPrice(candle.close),
+          scannerRunAt: now,
+        }, metrics);
+        metrics.structureBreaksDetected += 1;
+      }
+      return;
+    }
+
+    if (state === 'PRE_RETRACE_HIGH_BROKEN' || state === 'WAITING_FOR_CONTINUATION') {
+      if (!signal.structureBreakCandleTimestamp || !signal.structureBreakClose || !signal.preRetraceHigh) {
+        return;
+      }
+      if (candle.timestamp.getTime() <= signal.structureBreakCandleTimestamp.getTime()) {
+        return;
+      }
+      if (candle.close > signal.preRetraceHigh && candle.close > signal.structureBreakClose) {
+        const tradeReadySignal = {
+          ...signal,
+          orbFvgState: 'TRADE_READY' as const,
+          continuationCandleTimestamp: candle.timestamp,
+          continuationOpen: roundPrice(candle.open),
+          continuationHigh: roundPrice(candle.high),
+          continuationLow: roundPrice(candle.low),
+          continuationClose: roundPrice(candle.close),
+          setupReadyAt: candle.timestamp,
+          scannerRunAt: now,
+        };
+        await this.updateSetup(tradeReadySignal, metrics);
+        metrics.tradeReady += 1;
+        await this.sendTradeReadyAlertOnce(tradeReadySignal, metrics, tradeReadyAlertsEnabled);
+      }
+    }
+  }
+
+
+  private async sendTradeReadyAlertOnce(
+    signal: OrbFvgSignalSnapshot,
+    metrics: OrbFvgScannerMetrics,
+    tradeReadyAlertsEnabled: boolean,
+  ): Promise<void> {
+    if (!tradeReadyAlertsEnabled || !this.dependencies.telegramClient || signal.telegramAlertSent) {
+      return;
+    }
+    await this.dependencies.telegramClient.sendMessage(formatOrbFvgTradeReadyAlert(signal));
+    await this.dependencies.repository.updateSetupState({ ...signal, telegramAlertSent: true });
+    metrics.telegramAlertsSent += 1;
+  }
+
+  private async areTradeReadyAlertsEnabled(logger: OrbFvgScannerLogger): Promise<boolean> {
+    if (!this.dependencies.engineConfigService) {
+      return false;
+    }
+    try {
+      return (await this.dependencies.engineConfigService.loadSnapshot(logger)).values.orbFvgTradeReadyAlertsEnabled;
+    } catch (error) {
+      logger.error('[ORB-FVG scanner] could not load trade-ready alert flag; keeping ORB-FVG Telegram disabled', error);
+      return false;
+    }
+  }
+
+  private async updatePreRetraceHigh(
+    signal: OrbFvgSignalSnapshot,
+    candle: Candle,
+    now: Date,
+    metrics: OrbFvgScannerMetrics,
+  ): Promise<void> {
+    const currentHigh = signal.preRetraceHigh ?? signal.fvgCandle3.high;
+    if (candle.high <= currentHigh) {
+      return;
+    }
+    await this.updateSetup({
+      ...signal,
+      preRetraceHigh: roundPrice(candle.high),
+      preRetraceHighTimestamp: candle.timestamp,
+      scannerRunAt: now,
+    }, metrics);
+  }
+
+  private async expireOpenSetups(
+    sessionDate: string,
+    now: Date,
+    metrics: OrbFvgScannerMetrics,
+    logger: OrbFvgScannerLogger,
+  ): Promise<void> {
+    const activeSetups = await this.dependencies.repository.find({
+      sessionDate,
+      experimentVersion: ORB_FVG_EXPERIMENT_VERSION,
+      status: 'OPEN',
+      limit: 500,
+    });
+    for (const { signal } of activeSetups) {
+      if (TERMINAL_SETUP_STATES.includes(signal.orbFvgState ?? 'TRADE_READY')) {
+        continue;
+      }
+      await this.updateSetup({ ...signal, orbFvgState: 'EXPIRED_SETUP', expiredAt: now, scannerRunAt: now }, metrics);
+      metrics.expiredSetups += 1;
+      logger.log(`[ORB-FVG scanner] setup expired ticker=${signal.ticker} sessionDate=${signal.sessionDate} state=${signal.orbFvgState}`);
+    }
+  }
+
+  private async updateSetup(
+    signal: OrbFvgSignalSnapshot,
+    metrics: OrbFvgScannerMetrics,
+  ): Promise<void> {
+    await this.dependencies.repository.updateSetupState(signal);
+    metrics.stateUpdates += 1;
+  }
+
+  private buildFvgSetup(
     symbol: MarketSymbol,
     sessionDate: string,
     openingRange: Candle,
     breakout: NonNullable<ReturnType<typeof detectBreakout>>,
     fvg: NonNullable<ReturnType<typeof detectFvg>> & { candlesAfterBreakout: number },
     now: Date,
-  ): OrbFvgSignalSnapshot | undefined {
-    const entryPrice = roundPrice(fvg.candle3.close);
-    const stopPrice = roundPrice(
-      breakout.direction === 'LONG' ? breakout.candle.low : breakout.candle.high,
-    );
-    const risk = roundPrice(Math.abs(entryPrice - stopPrice));
-    if (!Number.isFinite(risk) || risk <= 0) {
-      return undefined;
-    }
-    const target2RPrice = calculateTarget2R(breakout.direction, entryPrice, risk);
-    if (target2RPrice <= 0) {
-      return undefined;
-    }
+  ): OrbFvgSignalSnapshot {
+    const referencePrice = roundPrice(fvg.candle3.close);
+    const fvgMidpoint = roundPrice((fvg.fvgLow + fvg.fvgHigh) / 2);
 
     return {
       experimentVersion: ORB_FVG_EXPERIMENT_VERSION,
@@ -293,9 +474,11 @@ export class OrbFvgScannerService {
       fvgCandle3: toCandleSnapshot(fvg.candle3),
       fvgLow: fvg.fvgLow,
       fvgHigh: fvg.fvgHigh,
+      fvgMidpoint,
       fvgSizePct: fvg.fvgSizePct,
       candlesAfterBreakout: fvg.candlesAfterBreakout,
       signalAt: fvg.candle3.timestamp,
+      orbFvgState: 'FVG_CREATED',
       setupTimeframe: SETUP_TIMEFRAME,
       scannerRunAt: now,
       detectedAt: now,
@@ -303,14 +486,12 @@ export class OrbFvgScannerService {
         0,
         Math.round((now.getTime() - breakout.candle.timestamp.getTime()) / 1000),
       ),
-      entryPrice,
-      stopPrice,
-      risk,
-      riskPct: calculateRiskPct(risk, entryPrice),
-      target2RPrice,
+      retestCount: 0,
+      preRetraceHigh: roundPrice(fvg.candle3.high),
+      preRetraceHighTimestamp: fvg.candle3.timestamp,
       status: 'OPEN',
-      highestPriceSeen: entryPrice,
-      lowestPriceSeen: entryPrice,
+      highestPriceSeen: referencePrice,
+      lowestPriceSeen: referencePrice,
       mfePct: 0,
       maePct: 0,
       maxR: 0,
@@ -327,8 +508,13 @@ export class OrbFvgScannerService {
       marketDataRequests: 0,
       breakoutsDetected: 0,
       fvgConfirmed: 0,
+      retestsDetected: 0,
+      structureBreaksDetected: 0,
+      tradeReady: 0,
+      expiredSetups: 0,
       persisted: 0,
       duplicates: 0,
+      stateUpdates: 0,
       telegramAlertsSent: 0,
       errors: 0,
       durationMs: 0,
@@ -347,4 +533,27 @@ const getRecentCompletedSetupCandleStart = (now: Date): Date | undefined => {
   const recentClose = Math.floor(adjustedTimestamp / SETUP_CANDLE_MS) * SETUP_CANDLE_MS;
   const recentStart = recentClose - SETUP_CANDLE_MS;
   return recentStart > 0 ? new Date(recentStart) : undefined;
+};
+
+const getRecentClosedStructure = (candles: Candle[], recentSetupCandleStart: Date, now: Date): Candle[] => candles
+  .filter((candle) => candle.timestamp.getTime() >= recentSetupCandleStart.getTime() - 2 * SETUP_CANDLE_MS)
+  .filter((candle) => candle.timestamp.getTime() <= recentSetupCandleStart.getTime())
+  .filter(
+    (candle) =>
+      candle.timestamp.getTime() + SETUP_CANDLE_MS + SETUP_CANDLE_PUBLICATION_DELAY_MS <=
+      now.getTime(),
+  )
+  .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime())
+  .slice(-3);
+
+const intersectsFvg = (signal: OrbFvgSignalSnapshot, candle: Candle): boolean =>
+  candle.low <= signal.fvgHigh && candle.high >= signal.fvgLow;
+
+const calculateRetestDepthPct = (signal: OrbFvgSignalSnapshot, candle: Candle): number => {
+  const fvgSize = signal.fvgHigh - signal.fvgLow;
+  if (fvgSize <= 0) {
+    return 0;
+  }
+  const deepestTouch = Math.min(Math.max(candle.low, signal.fvgLow), signal.fvgHigh);
+  return roundPercent(((signal.fvgHigh - deepestTouch) / fvgSize) * 100);
 };

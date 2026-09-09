@@ -32,6 +32,7 @@ const runtimeConfig: EngineRuntimeConfig = {
   marketDataMaxRetries: 3,
   marketDataRetryBaseDelayMs: 30000,
   marketDataSequential: false,
+  orbFvgTradeReadyAlertsEnabled: false,
   tradePlan: { stopLossPercent: 1, targetMinPercent: 2, targetMaxPercent: 5 },
   signalIntelligence: {
     backtestContextEnabled: true,

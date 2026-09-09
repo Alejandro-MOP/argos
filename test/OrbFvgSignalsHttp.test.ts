@@ -36,7 +36,7 @@ describe('orbFvgSignals HTTP', () => {
       assetType: 'STOCK',
       direction: 'LONG',
       status: 'OPEN',
-      experimentVersion: 'orb-fvg-v0.2',
+      experimentVersion: 'orb-fvg-v0.3',
       limit: 25,
     });
     expect(response).toEqual({ status: 200, jsonBody: { ok: true, count: 0, signals: [] } });

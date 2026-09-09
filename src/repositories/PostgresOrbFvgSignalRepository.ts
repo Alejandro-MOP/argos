@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Queryable } from '../db/postgres';
 import type {
   OrbFvgCandleSnapshot,
+  OrbFvgResearchState,
   OrbFvgSignalFilters,
   OrbFvgSignalLevelSnapshot,
   OrbFvgSignalSnapshot,
@@ -54,18 +55,42 @@ interface OrbFvgSignalRow {
   fvg_candle3_close: string | number;
   fvg_low: string | number;
   fvg_high: string | number;
+  fvg_midpoint: string | number | null;
   fvg_size_pct: string | number;
   candles_after_breakout: number;
   signal_at: Date;
+  orb_fvg_state: OrbFvgResearchState | null;
   setup_timeframe: string | null;
   scanner_run_at: Date | null;
   detected_at: Date | null;
   detection_lag_seconds: number | null;
-  entry_price: string | number;
-  stop_price: string | number;
-  risk: string | number;
-  risk_pct: string | number;
-  target_2r_price: string | number;
+  retest_count: number | null;
+  first_retest_at: Date | null;
+  latest_retest_at: Date | null;
+  retest_candle_timestamp: Date | null;
+  retest_low: string | number | null;
+  retest_high: string | number | null;
+  retest_close: string | number | null;
+  retest_depth_pct: string | number | null;
+  pre_retrace_high: string | number | null;
+  pre_retrace_high_timestamp: Date | null;
+  structure_break_candle_timestamp: Date | null;
+  structure_break_open: string | number | null;
+  structure_break_high: string | number | null;
+  structure_break_low: string | number | null;
+  structure_break_close: string | number | null;
+  continuation_candle_timestamp: Date | null;
+  continuation_open: string | number | null;
+  continuation_high: string | number | null;
+  continuation_low: string | number | null;
+  continuation_close: string | number | null;
+  setup_ready_at: Date | null;
+  expired_at: Date | null;
+  entry_price: string | number | null;
+  stop_price: string | number | null;
+  risk: string | number | null;
+  risk_pct: string | number | null;
+  target_2r_price: string | number | null;
   status: 'OPEN' | 'WIN' | 'LOSS' | 'AMBIGUOUS' | 'EXPIRED';
   outcome: 'WIN' | 'LOSS' | 'AMBIGUOUS' | 'EXPIRED' | null;
   highest_price_seen: string | number;
@@ -99,95 +124,32 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
     levels: OrbFvgSignalLevelSnapshot[],
   ): Promise<OrbFvgSaveResult> {
     const id = signal.id ?? randomUUID();
+    const columns = [
+      'id', 'experiment_version', 'ticker', 'provider_symbol', 'asset_type', 'sector', 'industry', 'market', 'exchange',
+      'session_date', 'direction', 'opening_range_candle_timestamp', 'opening_range_open', 'opening_range_high',
+      'opening_range_low', 'opening_range_close', 'opening_range_size_pct', 'breakout_at', 'breakout_candle_timestamp',
+      'breakout_open', 'breakout_high', 'breakout_low', 'breakout_close', 'breakout_distance_pct', 'wick_breakout',
+      'close_breakout', 'fvg_candle1_timestamp', 'fvg_candle1_open', 'fvg_candle1_high', 'fvg_candle1_low',
+      'fvg_candle1_close', 'fvg_candle2_timestamp', 'fvg_candle2_open', 'fvg_candle2_high', 'fvg_candle2_low',
+      'fvg_candle2_close', 'fvg_candle3_timestamp', 'fvg_candle3_open', 'fvg_candle3_high', 'fvg_candle3_low',
+      'fvg_candle3_close', 'fvg_low', 'fvg_high', 'fvg_midpoint', 'fvg_size_pct', 'candles_after_breakout', 'signal_at',
+      'orb_fvg_state', 'setup_timeframe', 'scanner_run_at', 'detected_at', 'detection_lag_seconds', 'retest_count',
+      'first_retest_at', 'latest_retest_at', 'retest_candle_timestamp', 'retest_low', 'retest_high', 'retest_close',
+      'retest_depth_pct', 'pre_retrace_high', 'pre_retrace_high_timestamp', 'structure_break_candle_timestamp',
+      'structure_break_open', 'structure_break_high', 'structure_break_low', 'structure_break_close',
+      'continuation_candle_timestamp', 'continuation_open', 'continuation_high', 'continuation_low', 'continuation_close',
+      'setup_ready_at', 'expired_at', 'entry_price', 'stop_price', 'risk', 'risk_pct', 'target_2r_price', 'status', 'outcome',
+      'highest_price_seen', 'lowest_price_seen', 'mfe_pct', 'mae_pct', 'max_r', 'target_reached_at', 'stop_reached_at',
+      'resolved_at', 'telegram_alert_sent',
+    ];
+    const values = buildSignalValues(id, signal);
+    const placeholders = values.map((_, index) => `$${index + 1}`).join(',');
     const result = await this.database.query<OrbFvgSignalRow>(
-      `INSERT INTO orb_fvg_signals (
-        id, experiment_version, ticker, provider_symbol, asset_type, sector, industry, market, exchange,
-        session_date, direction, opening_range_candle_timestamp, opening_range_open, opening_range_high,
-        opening_range_low, opening_range_close, opening_range_size_pct, breakout_at, breakout_candle_timestamp,
-        breakout_open, breakout_high, breakout_low, breakout_close, breakout_distance_pct, wick_breakout,
-        close_breakout, fvg_candle1_timestamp, fvg_candle1_open, fvg_candle1_high, fvg_candle1_low,
-        fvg_candle1_close, fvg_candle2_timestamp, fvg_candle2_open, fvg_candle2_high, fvg_candle2_low,
-        fvg_candle2_close, fvg_candle3_timestamp, fvg_candle3_open, fvg_candle3_high, fvg_candle3_low,
-        fvg_candle3_close, fvg_low, fvg_high, fvg_size_pct, candles_after_breakout, signal_at, setup_timeframe,
-        scanner_run_at, detected_at, detection_lag_seconds, entry_price,
-        stop_price, risk, risk_pct, target_2r_price, status, outcome, highest_price_seen, lowest_price_seen,
-        mfe_pct, mae_pct, max_r, target_reached_at, stop_reached_at, resolved_at, telegram_alert_sent
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-        $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,
-        $41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,
-        $61,$62,$63,$64,$65,$66
-      ) ON CONFLICT (ticker, session_date, direction, experiment_version, breakout_candle_timestamp)
-      DO NOTHING
-      RETURNING *`,
-      [
-        id,
-        signal.experimentVersion,
-        signal.ticker,
-        signal.providerSymbol,
-        signal.assetType,
-        signal.sector ?? null,
-        signal.industry ?? null,
-        signal.market ?? null,
-        signal.exchange ?? null,
-        signal.sessionDate,
-        signal.direction,
-        signal.openingRangeCandle.timestamp,
-        signal.openingRangeCandle.open,
-        signal.openingRangeCandle.high,
-        signal.openingRangeCandle.low,
-        signal.openingRangeCandle.close,
-        signal.openingRangeSizePct,
-        signal.breakoutAt,
-        signal.breakoutCandle.timestamp,
-        signal.breakoutCandle.open,
-        signal.breakoutCandle.high,
-        signal.breakoutCandle.low,
-        signal.breakoutCandle.close,
-        signal.breakoutDistancePct,
-        signal.wickBreakout,
-        signal.closeBreakout,
-        signal.fvgCandle1.timestamp,
-        signal.fvgCandle1.open,
-        signal.fvgCandle1.high,
-        signal.fvgCandle1.low,
-        signal.fvgCandle1.close,
-        signal.fvgCandle2.timestamp,
-        signal.fvgCandle2.open,
-        signal.fvgCandle2.high,
-        signal.fvgCandle2.low,
-        signal.fvgCandle2.close,
-        signal.fvgCandle3.timestamp,
-        signal.fvgCandle3.open,
-        signal.fvgCandle3.high,
-        signal.fvgCandle3.low,
-        signal.fvgCandle3.close,
-        signal.fvgLow,
-        signal.fvgHigh,
-        signal.fvgSizePct,
-        signal.candlesAfterBreakout,
-        signal.signalAt,
-        signal.setupTimeframe ?? null,
-        signal.scannerRunAt ?? null,
-        signal.detectedAt ?? null,
-        signal.detectionLagSeconds ?? null,
-        signal.entryPrice,
-        signal.stopPrice,
-        signal.risk,
-        signal.riskPct,
-        signal.target2RPrice,
-        signal.status,
-        signal.outcome ?? null,
-        signal.highestPriceSeen,
-        signal.lowestPriceSeen,
-        signal.mfePct,
-        signal.maePct,
-        signal.maxR,
-        signal.targetReachedAt ?? null,
-        signal.stopReachedAt ?? null,
-        signal.resolvedAt ?? null,
-        signal.telegramAlertSent,
-      ],
+      `INSERT INTO orb_fvg_signals (${columns.join(', ')}) VALUES (${placeholders})
+       ON CONFLICT (ticker, session_date, direction, experiment_version, breakout_candle_timestamp)
+       DO NOTHING
+       RETURNING *`,
+      values,
     );
 
     if (!result.rowCount || result.rows.length === 0) {
@@ -200,7 +162,19 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
 
   public async findOpen(limit = 100): Promise<PersistedOrbFvgSignalSnapshot[]> {
     const result = await this.database.query<OrbFvgSignalRow>(
-      `SELECT * FROM orb_fvg_signals WHERE status = 'OPEN' ORDER BY signal_at ASC LIMIT $1`,
+      `SELECT * FROM orb_fvg_signals
+       WHERE status = 'OPEN'
+         AND (
+           orb_fvg_state IS NULL
+           OR (
+             orb_fvg_state = 'TRADE_READY'
+             AND entry_price IS NOT NULL
+             AND stop_price IS NOT NULL
+             AND risk IS NOT NULL
+             AND target_2r_price IS NOT NULL
+           )
+         )
+       ORDER BY signal_at ASC LIMIT $1`,
       [limit],
     );
     return result.rows.map(mapSignalRow);
@@ -236,6 +210,70 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
         signal.targetReachedAt ?? null,
         signal.stopReachedAt ?? null,
         signal.resolvedAt ?? null,
+      ],
+    );
+  }
+
+  public async updateSetupState(signal: OrbFvgSignalSnapshot): Promise<void> {
+    if (!signal.id) {
+      return;
+    }
+    await this.database.query(
+      `UPDATE orb_fvg_signals SET
+        orb_fvg_state = $2,
+        scanner_run_at = $3,
+        retest_count = $4,
+        first_retest_at = $5,
+        latest_retest_at = $6,
+        retest_candle_timestamp = $7,
+        retest_low = $8,
+        retest_high = $9,
+        retest_close = $10,
+        retest_depth_pct = $11,
+        pre_retrace_high = $12,
+        pre_retrace_high_timestamp = $13,
+        structure_break_candle_timestamp = $14,
+        structure_break_open = $15,
+        structure_break_high = $16,
+        structure_break_low = $17,
+        structure_break_close = $18,
+        continuation_candle_timestamp = $19,
+        continuation_open = $20,
+        continuation_high = $21,
+        continuation_low = $22,
+        continuation_close = $23,
+        setup_ready_at = $24,
+        expired_at = $25,
+        telegram_alert_sent = $26,
+        updated_at = now()
+      WHERE id = $1`,
+      [
+        signal.id,
+        signal.orbFvgState ?? null,
+        signal.scannerRunAt ?? null,
+        signal.retestCount ?? null,
+        signal.firstRetestAt ?? null,
+        signal.latestRetestAt ?? null,
+        signal.retestCandleTimestamp ?? null,
+        signal.retestLow ?? null,
+        signal.retestHigh ?? null,
+        signal.retestClose ?? null,
+        signal.retestDepthPct ?? null,
+        signal.preRetraceHigh ?? null,
+        signal.preRetraceHighTimestamp ?? null,
+        signal.structureBreakCandleTimestamp ?? null,
+        signal.structureBreakOpen ?? null,
+        signal.structureBreakHigh ?? null,
+        signal.structureBreakLow ?? null,
+        signal.structureBreakClose ?? null,
+        signal.continuationCandleTimestamp ?? null,
+        signal.continuationOpen ?? null,
+        signal.continuationHigh ?? null,
+        signal.continuationLow ?? null,
+        signal.continuationClose ?? null,
+        signal.setupReadyAt ?? null,
+        signal.expiredAt ?? null,
+        signal.telegramAlertSent,
       ],
     );
   }
@@ -326,6 +364,99 @@ export class PostgresOrbFvgSignalRepository implements OrbFvgSignalRepository {
   }
 }
 
+const buildSignalValues = (id: string, signal: OrbFvgSignalSnapshot): unknown[] => [
+  id,
+  signal.experimentVersion,
+  signal.ticker,
+  signal.providerSymbol,
+  signal.assetType,
+  signal.sector ?? null,
+  signal.industry ?? null,
+  signal.market ?? null,
+  signal.exchange ?? null,
+  signal.sessionDate,
+  signal.direction,
+  signal.openingRangeCandle.timestamp,
+  signal.openingRangeCandle.open,
+  signal.openingRangeCandle.high,
+  signal.openingRangeCandle.low,
+  signal.openingRangeCandle.close,
+  signal.openingRangeSizePct,
+  signal.breakoutAt,
+  signal.breakoutCandle.timestamp,
+  signal.breakoutCandle.open,
+  signal.breakoutCandle.high,
+  signal.breakoutCandle.low,
+  signal.breakoutCandle.close,
+  signal.breakoutDistancePct,
+  signal.wickBreakout,
+  signal.closeBreakout,
+  signal.fvgCandle1.timestamp,
+  signal.fvgCandle1.open,
+  signal.fvgCandle1.high,
+  signal.fvgCandle1.low,
+  signal.fvgCandle1.close,
+  signal.fvgCandle2.timestamp,
+  signal.fvgCandle2.open,
+  signal.fvgCandle2.high,
+  signal.fvgCandle2.low,
+  signal.fvgCandle2.close,
+  signal.fvgCandle3.timestamp,
+  signal.fvgCandle3.open,
+  signal.fvgCandle3.high,
+  signal.fvgCandle3.low,
+  signal.fvgCandle3.close,
+  signal.fvgLow,
+  signal.fvgHigh,
+  signal.fvgMidpoint ?? null,
+  signal.fvgSizePct,
+  signal.candlesAfterBreakout,
+  signal.signalAt,
+  signal.orbFvgState ?? null,
+  signal.setupTimeframe ?? null,
+  signal.scannerRunAt ?? null,
+  signal.detectedAt ?? null,
+  signal.detectionLagSeconds ?? null,
+  signal.retestCount ?? null,
+  signal.firstRetestAt ?? null,
+  signal.latestRetestAt ?? null,
+  signal.retestCandleTimestamp ?? null,
+  signal.retestLow ?? null,
+  signal.retestHigh ?? null,
+  signal.retestClose ?? null,
+  signal.retestDepthPct ?? null,
+  signal.preRetraceHigh ?? null,
+  signal.preRetraceHighTimestamp ?? null,
+  signal.structureBreakCandleTimestamp ?? null,
+  signal.structureBreakOpen ?? null,
+  signal.structureBreakHigh ?? null,
+  signal.structureBreakLow ?? null,
+  signal.structureBreakClose ?? null,
+  signal.continuationCandleTimestamp ?? null,
+  signal.continuationOpen ?? null,
+  signal.continuationHigh ?? null,
+  signal.continuationLow ?? null,
+  signal.continuationClose ?? null,
+  signal.setupReadyAt ?? null,
+  signal.expiredAt ?? null,
+  signal.entryPrice ?? null,
+  signal.stopPrice ?? null,
+  signal.risk ?? null,
+  signal.riskPct ?? null,
+  signal.target2RPrice ?? null,
+  signal.status,
+  signal.outcome ?? null,
+  signal.highestPriceSeen,
+  signal.lowestPriceSeen,
+  signal.mfePct,
+  signal.maePct,
+  signal.maxR,
+  signal.targetReachedAt ?? null,
+  signal.stopReachedAt ?? null,
+  signal.resolvedAt ?? null,
+  signal.telegramAlertSent,
+];
+
 const candle = (
   timestamp: Date,
   open: string | number,
@@ -339,6 +470,11 @@ const candle = (
   low: Number(low),
   close: Number(close),
 });
+
+const optionalNumber = (value: string | number | null): number | undefined =>
+  value === null ? undefined : Number(value);
+
+const optionalDate = (value: Date | null): Date | undefined => value ? new Date(value) : undefined;
 
 const mapSignalRow = (row: OrbFvgSignalRow): PersistedOrbFvgSignalSnapshot => ({
   id: row.id,
@@ -374,41 +510,47 @@ const mapSignalRow = (row: OrbFvgSignalRow): PersistedOrbFvgSignalSnapshot => ({
   breakoutDistancePct: Number(row.breakout_distance_pct),
   wickBreakout: row.wick_breakout,
   closeBreakout: row.close_breakout,
-  fvgCandle1: candle(
-    row.fvg_candle1_timestamp,
-    row.fvg_candle1_open,
-    row.fvg_candle1_high,
-    row.fvg_candle1_low,
-    row.fvg_candle1_close,
-  ),
-  fvgCandle2: candle(
-    row.fvg_candle2_timestamp,
-    row.fvg_candle2_open,
-    row.fvg_candle2_high,
-    row.fvg_candle2_low,
-    row.fvg_candle2_close,
-  ),
-  fvgCandle3: candle(
-    row.fvg_candle3_timestamp,
-    row.fvg_candle3_open,
-    row.fvg_candle3_high,
-    row.fvg_candle3_low,
-    row.fvg_candle3_close,
-  ),
+  fvgCandle1: candle(row.fvg_candle1_timestamp, row.fvg_candle1_open, row.fvg_candle1_high, row.fvg_candle1_low, row.fvg_candle1_close),
+  fvgCandle2: candle(row.fvg_candle2_timestamp, row.fvg_candle2_open, row.fvg_candle2_high, row.fvg_candle2_low, row.fvg_candle2_close),
+  fvgCandle3: candle(row.fvg_candle3_timestamp, row.fvg_candle3_open, row.fvg_candle3_high, row.fvg_candle3_low, row.fvg_candle3_close),
   fvgLow: Number(row.fvg_low),
   fvgHigh: Number(row.fvg_high),
+  fvgMidpoint: optionalNumber(row.fvg_midpoint),
   fvgSizePct: Number(row.fvg_size_pct),
   candlesAfterBreakout: row.candles_after_breakout,
   signalAt: new Date(row.signal_at),
+  orbFvgState: row.orb_fvg_state ?? undefined,
   setupTimeframe: row.setup_timeframe ?? undefined,
-  scannerRunAt: row.scanner_run_at ? new Date(row.scanner_run_at) : undefined,
-  detectedAt: row.detected_at ? new Date(row.detected_at) : undefined,
+  scannerRunAt: optionalDate(row.scanner_run_at),
+  detectedAt: optionalDate(row.detected_at),
   detectionLagSeconds: row.detection_lag_seconds ?? undefined,
-  entryPrice: Number(row.entry_price),
-  stopPrice: Number(row.stop_price),
-  risk: Number(row.risk),
-  riskPct: Number(row.risk_pct),
-  target2RPrice: Number(row.target_2r_price),
+  retestCount: row.retest_count ?? undefined,
+  firstRetestAt: optionalDate(row.first_retest_at),
+  latestRetestAt: optionalDate(row.latest_retest_at),
+  retestCandleTimestamp: optionalDate(row.retest_candle_timestamp),
+  retestLow: optionalNumber(row.retest_low),
+  retestHigh: optionalNumber(row.retest_high),
+  retestClose: optionalNumber(row.retest_close),
+  retestDepthPct: optionalNumber(row.retest_depth_pct),
+  preRetraceHigh: optionalNumber(row.pre_retrace_high),
+  preRetraceHighTimestamp: optionalDate(row.pre_retrace_high_timestamp),
+  structureBreakCandleTimestamp: optionalDate(row.structure_break_candle_timestamp),
+  structureBreakOpen: optionalNumber(row.structure_break_open),
+  structureBreakHigh: optionalNumber(row.structure_break_high),
+  structureBreakLow: optionalNumber(row.structure_break_low),
+  structureBreakClose: optionalNumber(row.structure_break_close),
+  continuationCandleTimestamp: optionalDate(row.continuation_candle_timestamp),
+  continuationOpen: optionalNumber(row.continuation_open),
+  continuationHigh: optionalNumber(row.continuation_high),
+  continuationLow: optionalNumber(row.continuation_low),
+  continuationClose: optionalNumber(row.continuation_close),
+  setupReadyAt: optionalDate(row.setup_ready_at),
+  expiredAt: optionalDate(row.expired_at),
+  entryPrice: optionalNumber(row.entry_price),
+  stopPrice: optionalNumber(row.stop_price),
+  risk: optionalNumber(row.risk),
+  riskPct: optionalNumber(row.risk_pct),
+  target2RPrice: optionalNumber(row.target_2r_price),
   status: row.status,
   outcome: row.outcome ?? undefined,
   highestPriceSeen: Number(row.highest_price_seen),
@@ -416,9 +558,9 @@ const mapSignalRow = (row: OrbFvgSignalRow): PersistedOrbFvgSignalSnapshot => ({
   mfePct: Number(row.mfe_pct),
   maePct: Number(row.mae_pct),
   maxR: Number(row.max_r),
-  targetReachedAt: row.target_reached_at ? new Date(row.target_reached_at) : undefined,
-  stopReachedAt: row.stop_reached_at ? new Date(row.stop_reached_at) : undefined,
-  resolvedAt: row.resolved_at ? new Date(row.resolved_at) : undefined,
+  targetReachedAt: optionalDate(row.target_reached_at),
+  stopReachedAt: optionalDate(row.stop_reached_at),
+  resolvedAt: optionalDate(row.resolved_at),
   telegramAlertSent: row.telegram_alert_sent,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at),

@@ -40,6 +40,7 @@ const activeConfigEntries = (overrides: Partial<Record<string, string>> = {}): E
     ['MOMENTUM_RSI_NEUTRAL_MAX', '55', 'number', 'momentum'],
     ['MOMENTUM_RSI_EXTENDED_MAX', '80', 'number', 'momentum'],
     ['STRUCTURE_LOOKBACK_PERIOD', '20', 'number', 'structure'],
+    ['ORB_FVG_TRADE_READY_ALERTS_ENABLED', 'false', 'boolean', 'orb-fvg'],
   ];
 
   return values.map(([key, value, valueType, category]) => ({
@@ -74,6 +75,7 @@ describe('EngineConfigService', () => {
     expect(snapshot.values.telegramNotificationTimeframes).toEqual(['5m', '15m']);
     expect(snapshot.values.tradePlan.targetMaxPercent).toBe(5);
     expect(snapshot.values.marketDataSequential).toBe(false);
+    expect(snapshot.values.orbFvgTradeReadyAlertsEnabled).toBe(false);
     expect(logger.log).toHaveBeenCalledWith('configSource=postgres');
   });
 

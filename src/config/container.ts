@@ -163,6 +163,7 @@ const orbFvgScannerService = new OrbFvgScannerService({
   marketUniverseService,
   marketDataService,
   repository: orbFvgSignalRepository,
+  engineConfigService,
   telegramClient,
   sessionService: orbFvgSessionService,
 });
