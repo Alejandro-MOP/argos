@@ -2763,7 +2763,9 @@ Nota metodológica 2026-09-08:
 
 `orb-fvg-v0.1` queda restringido a investigación prospectiva LONG-only. El experimento inicial podía generar LONG y SHORT, pero la hipótesis deseada para esta fase corresponde únicamente a rupturas alcistas del Opening Range acompañadas por bullish FVG. Señales SHORT previas, si existen, se preservan intactas y pueden terminar su forward evaluation; no deben mezclarse con el dataset LONG-only posterior al cambio.
 
-Telegram behavior: candidate detection alerts only. Final outcomes are persisted silently for research: no se envían notificaciones `ORB-FVG RESULT` para WIN, LOSS, AMBIGUOUS o EXPIRED.
+Telegram behavior: temporarily muted for ORB-FVG on 2026-09-08. Candidate detection and final outcome notifications are disabled; final outcomes continue to be persisted silently for research.
+
+Previous behavior: candidate detection alerts only. Final outcomes are persisted silently for research: no se envían notificaciones `ORB-FVG RESULT` para WIN, LOSS, AMBIGUOUS o EXPIRED.
 
 Limitaciones conocidas:
 

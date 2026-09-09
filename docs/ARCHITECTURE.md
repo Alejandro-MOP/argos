@@ -718,4 +718,6 @@ ticker + session_date + direction + experiment_version + breakout_candle_timesta
 
 El endpoint `GET /api/orb-fvg/signals` es read-only y sirve para auditoría de detecciones, niveles R y outcomes. Sigue permitiendo `direction=SHORT` para consultar históricos preservados, aunque el scanner ya no genera nuevas señales SHORT para v0.1.
 
-Telegram behavior: candidate detection alerts only. Final outcomes are persisted silently for research: el monitor actualiza WIN/LOSS/AMBIGUOUS/EXPIRED, MFE/MAE, maxR y niveles R sin enviar mensajes `ORB-FVG RESULT`.
+Telegram behavior: temporarily muted for ORB-FVG on 2026-09-08. Candidate detection and final outcome notifications are disabled; el scanner y monitor siguen recolectando y persistiendo research data.
+
+Previous behavior: candidate detection alerts only. Final outcomes are persisted silently for research: el monitor actualiza WIN/LOSS/AMBIGUOUS/EXPIRED, MFE/MAE, maxR y niveles R sin enviar mensajes `ORB-FVG RESULT`.

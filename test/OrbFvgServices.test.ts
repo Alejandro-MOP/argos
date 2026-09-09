@@ -68,7 +68,9 @@ describe('ORB-FVG services', () => {
     expect(second.duplicates).toBe(2);
     expect(stored).toHaveLength(2);
     expect(stored[0].signal.experimentVersion).toBe(ORB_FVG_EXPERIMENT_VERSION);
-    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(first.telegramAlertsSent).toBe(0);
+    expect(second.telegramAlertsSent).toBe(0);
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('keeps ORB-FVG v0.1 detection LONG-only and does not persist bearish setups', async () => {
@@ -100,6 +102,20 @@ describe('ORB-FVG services', () => {
     expect(second.persisted).toBe(0);
     expect(stored).toHaveLength(0);
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+
+  it('logs that ORB-FVG Telegram is muted while research collection stays active', async () => {
+    const service = new OrbFvgScannerService({
+      marketUniverseService: { loadSnapshot: jest.fn().mockResolvedValue({ source: 'postgres', symbols: [] }) },
+      marketDataService: { getHistoricalCandles: jest.fn() } as never,
+      repository: new OrbFvgMemoryRepository(),
+      now: () => new Date('2026-09-04T14:00:00.000Z'),
+    });
+
+    await service.run(logger);
+
+    expect(logger.log).toHaveBeenCalledWith('[ORB-FVG] telegramAlerts=DISABLED researchCollection=ACTIVE');
   });
 
   it('does not scan before 09:45 ET', async () => {

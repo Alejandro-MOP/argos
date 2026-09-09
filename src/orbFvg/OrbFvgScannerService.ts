@@ -18,7 +18,6 @@ import {
   toCandleSnapshot,
 } from './OrbFvgMath';
 import { OrbFvgSessionService } from './OrbFvgSessionService';
-import { formatOrbFvgDetectionAlert } from './OrbFvgTelegramFormatter';
 
 const MAX_FVG_LAG_CANDLES = 3;
 const ONE_MINUTE_MS = 60_000;
@@ -64,6 +63,7 @@ export class OrbFvgScannerService {
     const sessionService = this.dependencies.sessionService ?? new OrbFvgSessionService();
     const window = sessionService.getCurrentSessionWindow(now);
     const metrics = this.initialMetrics();
+    logger.log('[ORB-FVG] telegramAlerts=DISABLED researchCollection=ACTIVE');
     logger.log(`[ORB-FVG scanner] cycle start mode=${ORB_FVG_DETECTION_MODE}`);
 
     if (!window || !sessionService.isRegularSessionActive(window, now)) {
@@ -164,9 +164,6 @@ export class OrbFvgScannerService {
         continue;
       }
       metrics.persisted += 1;
-      if (this.dependencies.telegramClient && await this.dependencies.telegramClient.sendMessage(formatOrbFvgDetectionAlert(saved.signal))) {
-        metrics.telegramAlertsSent += 1;
-      }
     }
   }
 

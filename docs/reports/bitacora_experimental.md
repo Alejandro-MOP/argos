@@ -3178,3 +3178,25 @@ Impacto:
 - Shadow Paper Trading alerts no cambian;
 - Telegram Control Bot no cambia.
 
+## 2026-09-08 — ORB-FVG Telegram temporalmente silenciado
+
+Cambio temporal para la sesión de research:
+
+Todas las notificaciones Telegram originadas por `orb-fvg-v0.1` quedan silenciadas durante la sesión.
+
+Impacto esperado:
+
+- candidate alerts deshabilitadas temporalmente;
+- `ORB-FVG RESULT` sigue deshabilitado;
+- scanner sigue activo;
+- forward monitor sigue activo;
+- persistencia PostgreSQL sigue activa;
+- R ladder, MFE, MAE, maxR y outcomes siguen actualizándose;
+- Strategy v1 Telegram no cambia;
+- Shadow Paper Trading Telegram no cambia;
+- Telegram Control Bot no cambia.
+
+Objetivo:
+
+Recolectar la sesión completa silenciosamente para auditoría manual posterior al cierre.
+

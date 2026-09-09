@@ -41,6 +41,7 @@ export class OrbFvgForwardMonitorService {
     const startedAt = Date.now();
     const now = this.dependencies.now?.() ?? new Date();
     const metrics = this.initialMetrics();
+    logger.log('[ORB-FVG] telegramAlerts=DISABLED researchCollection=ACTIVE');
     logger.log('[ORB-FVG monitor] cycle start');
 
     try {
