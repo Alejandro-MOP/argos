@@ -1432,46 +1432,46 @@ Objetivo del corte:
 
 ## Estado general de Evidence
 
-| Métrica | Valor |
-| ------- | ----: |
-| strategyVersion | v1 |
-| Evidence total / elegible | 473 |
-| Evidence evaluada | 356 |
-| Evidence sin evaluación | 117 |
-| Señales/oportunidades con operational threshold >= 90 | 191 |
+| Métrica                                               | Valor |
+| ----------------------------------------------------- | ----: |
+| strategyVersion                                       |    v1 |
+| Evidence total / elegible                             |   473 |
+| Evidence evaluada                                     |   356 |
+| Evidence sin evaluación                               |   117 |
+| Señales/oportunidades con operational threshold >= 90 |   191 |
 
 ### Distribución por scoreBucket
 
 | Score bucket | Evidence |
 | ------------ | -------: |
-| 80-84 | 163 |
-| 85-89 | 119 |
-| 90-94 | 124 |
-| 95-100 | 67 |
+| 80-84        |      163 |
+| 85-89        |      119 |
+| 90-94        |      124 |
+| 95-100       |       67 |
 
 ### Estados de evaluación
 
-| Estado | Total |
-| ------ | ----: |
-| OPEN | 87 |
-| PARTIALLY_RESOLVED | 9 |
-| CLOSED | 214 |
-| EXPIRED | 42 |
-| AMBIGUOUS | 4 |
+| Estado             | Total |
+| ------------------ | ----: |
+| OPEN               |    87 |
+| PARTIALLY_RESOLVED |     9 |
+| CLOSED             |   214 |
+| EXPIRED            |    42 |
+| AMBIGUOUS          |     4 |
 
 ## Forward Evaluation del corte
 
 La ejecución manual de `POST /api/forward-evaluate` realizada inmediatamente antes del Research Snapshot produjo:
 
-| Métrica | Total |
-| ------- | ----: |
-| Evidence pendientes | 100 |
-| Evaluadas | 100 |
-| PARTIALLY_RESOLVED | 9 |
-| OPEN | 91 |
-| Provider errors | 0 |
-| Evaluation errors | 0 |
-| Casos sin future candles | 0 |
+| Métrica                  | Total |
+| ------------------------ | ----: |
+| Evidence pendientes      |   100 |
+| Evaluadas                |   100 |
+| PARTIALLY_RESOLVED       |     9 |
+| OPEN                     |    91 |
+| Provider errors          |     0 |
+| Evaluation errors        |     0 |
+| Casos sin future candles |     0 |
 
 ### Lectura permitida
 
@@ -1500,14 +1500,14 @@ Win Rate no significa automáticamente rentabilidad.
 
 | Target | Wins | Losses | Win Rate |
 | ------ | ---: | -----: | -------: |
-| +0.50% | 181 | 105 | 63.29% |
-| +0.75% | 152 | 118 | 56.30% |
-| +1.00% | 123 | 131 | 48.43% |
-| +1.25% | 105 | 143 | 42.34% |
-| +1.50% | 93 | 145 | 39.08% |
-| +2.00% | 67 | 165 | 28.88% |
-| +3.00% | 41 | 174 | 19.07% |
-| +5.00% | 10 | 176 | 5.38% |
+| +0.50% |  181 |    105 |   63.29% |
+| +0.75% |  152 |    118 |   56.30% |
+| +1.00% |  123 |    131 |   48.43% |
+| +1.25% |  105 |    143 |   42.34% |
+| +1.50% |   93 |    145 |   39.08% |
+| +2.00% |   67 |    165 |   28.88% |
+| +3.00% |   41 |    174 |   19.07% |
+| +5.00% |   10 |    176 |    5.38% |
 
 Observación descriptiva:
 
@@ -1555,14 +1555,14 @@ Durante el periodo se desarrolló la interfaz privada de control bidireccional m
 
 Estado real observado en repositorio y commits recientes:
 
-| Hito | Estado | Impacto experimental |
-| ---- | ------ | -------------------- |
-| V1.5-A — Control Core | Implementado y validado | Ingeniería / observabilidad |
-| V1.5-B — Telegram Control Transport / Long Polling | Implementado y validado | Ingeniería / observabilidad |
-| V1.5-C — Read-Only Research Integrations | Implementado y validado | Observabilidad read-only |
-| V1.5-D — Telegram Transaction Costs | Implementado y validado | Simulación/costos read-only |
-| V1.5-E — Analyze Symbol | Implementado y validado | Análisis ad-hoc read-only |
-| V1.5-F — Full Market Scan from Telegram | Implementado; commit presente | Mecanismo de ejecución/recolección |
+| Hito                                               | Estado                        | Impacto experimental               |
+| -------------------------------------------------- | ----------------------------- | ---------------------------------- |
+| V1.5-A — Control Core                              | Implementado y validado       | Ingeniería / observabilidad        |
+| V1.5-B — Telegram Control Transport / Long Polling | Implementado y validado       | Ingeniería / observabilidad        |
+| V1.5-C — Read-Only Research Integrations           | Implementado y validado       | Observabilidad read-only           |
+| V1.5-D — Telegram Transaction Costs                | Implementado y validado       | Simulación/costos read-only        |
+| V1.5-E — Analyze Symbol                            | Implementado y validado       | Análisis ad-hoc read-only          |
+| V1.5-F — Full Market Scan from Telegram            | Implementado; commit presente | Mecanismo de ejecución/recolección |
 
 `Analyze Symbol` es read-only: no persiste signals, no crea Evidence, no crea Forward Signals, no envía Alerts y no modifica scoring.
 
@@ -1592,42 +1592,42 @@ Este es el cambio experimental más importante del periodo.
 
 Antes:
 
-| Concepto | Valor |
-| -------- | ----: |
-| Símbolos activos | 61 |
-| Timeframes | 5 |
-| Combinaciones símbolo-timeframe aproximadas | 305 |
+| Concepto                                    | Valor |
+| ------------------------------------------- | ----: |
+| Símbolos activos                            |    61 |
+| Timeframes                                  |     5 |
+| Combinaciones símbolo-timeframe aproximadas |   305 |
 
 Después:
 
-| Concepto | Valor |
-| -------- | ----: |
-| Símbolos activos | 103 |
-| Timeframes | 5 |
-| Combinaciones símbolo-timeframe | 515 |
-| Símbolos nuevos | 42 |
+| Concepto                        | Valor |
+| ------------------------------- | ----: |
+| Símbolos activos                |   103 |
+| Timeframes                      |     5 |
+| Combinaciones símbolo-timeframe |   515 |
+| Símbolos nuevos                 |    42 |
 
 Composición final:
 
 | Asset type | Total |
 | ---------- | ----: |
-| STOCK | 72 |
-| ETF | 22 |
-| CRYPTO | 9 |
+| STOCK      |    72 |
+| ETF        |    22 |
+| CRYPTO     |     9 |
 
 Mercados:
 
 | Market | Total |
 | ------ | ----: |
-| US | 94 |
-| Crypto | 9 |
+| US     |    94 |
+| Crypto |     9 |
 
 Sesiones:
 
-| Session type | Total |
-| ------------ | ----: |
-| US_REGULAR | 94 |
-| TWENTY_FOUR_SEVEN | 9 |
+| Session type      | Total |
+| ----------------- | ----: |
+| US_REGULAR        |    94 |
+| TWENTY_FOUR_SEVEN |     9 |
 
 Cobertura actual incluye exposición a:
 
@@ -1820,11 +1820,11 @@ Próxima revisión semanal propuesta:
 
 Baseline para comparar:
 
-| Métrica | 31-AGO-2026 |
-| ------- | ----------: |
-| Evidence | 473 |
-| Evaluadas | 356 |
-| Operacionales >= 90 | 191 |
+| Métrica             | 31-AGO-2026 |
+| ------------------- | ----------: |
+| Evidence            |         473 |
+| Evaluadas           |         356 |
+| Operacionales >= 90 |         191 |
 
 En el siguiente corte observar especialmente:
 
@@ -1855,8 +1855,7 @@ La expansión puede coincidir con:
 - diferente cantidad de sesiones observadas;
 - comportamiento específico de ciertos sectores.
 
-Por ahora únicamente se registra el antes/después y se buscarán patrones repetidos con más Evidence.
----
+## Por ahora únicamente se registra el antes/después y se buscarán patrones repetidos con más Evidence.
 
 # 2026-09-01 — Telegram Alert Timeframe Filter
 
@@ -1946,10 +1945,10 @@ Frontera experimental:
 MARKET UNIVERSE EXPANSION
 ```
 
-| Concepto | Antes | Después |
-| -------- | ----: | ------: |
-| Símbolos | 61 | 103 |
-| Combinaciones symbol/timeframe | 305 | 515 |
+| Concepto                       | Antes | Después |
+| ------------------------------ | ----: | ------: |
+| Símbolos                       |    61 |     103 |
+| Combinaciones symbol/timeframe |   305 |     515 |
 
 Clasificación metodológica:
 
@@ -1988,25 +1987,25 @@ Estado operativo:
 
 ## Research Snapshot — 01-SEP-2026
 
-| Métrica | Valor |
-| ------- | ----: |
-| Total Evidence | 639 |
-| Evaluated | 594 |
-| Without evaluation | 45 |
-| Operational opportunities score >= 90 | 265 |
-| Evidence evaluada | 92.96% |
+| Métrica                               |  Valor |
+| ------------------------------------- | -----: |
+| Total Evidence                        |    639 |
+| Evaluated                             |    594 |
+| Without evaluation                    |     45 |
+| Operational opportunities score >= 90 |    265 |
+| Evidence evaluada                     | 92.96% |
 
 El pipeline de evaluación está procesando correctamente la nueva Evidence. La cola pendiente disminuyó respecto al corte anterior a pesar del crecimiento de la muestra.
 
 ## Comparación contra baseline 31-AGO-2026
 
-| Métrica | 31-AGO | 01-SEP | Delta | Delta % |
-| ------- | -----: | -----: | ----: | ------: |
-| Evidence total | 473 | 639 | +166 | +35.1% |
-| Evaluated | 356 | 594 | +238 | +66.9% |
-| Without evaluation | 117 | 45 | -72 | — |
-| Operational opportunities >= 90 | 191 | 265 | +74 | +38.7% |
-| Evidence evaluada | 75.3% | 93.0% | +17.7 pp | — |
+| Métrica                         | 31-AGO | 01-SEP |    Delta | Delta % |
+| ------------------------------- | -----: | -----: | -------: | ------: |
+| Evidence total                  |    473 |    639 |     +166 |  +35.1% |
+| Evaluated                       |    356 |    594 |     +238 |  +66.9% |
+| Without evaluation              |    117 |     45 |      -72 |       — |
+| Operational opportunities >= 90 |    191 |    265 |      +74 |  +38.7% |
+| Evidence evaluada               |  75.3% |  93.0% | +17.7 pp |       — |
 
 Interpretación permitida:
 
@@ -2016,13 +2015,13 @@ No interpretar esto como mejora de la estrategia. Es una observación sobre thro
 
 ## Estados de Forward Evaluation
 
-| Estado | Total |
-| ------ | ----: |
-| OPEN | 89 |
-| PARTIALLY_RESOLVED | 11 |
-| CLOSED | 405 |
-| EXPIRED | 85 |
-| AMBIGUOUS | 4 |
+| Estado             | Total |
+| ------------------ | ----: |
+| OPEN               |    89 |
+| PARTIALLY_RESOLVED |    11 |
+| CLOSED             |   405 |
+| EXPIRED            |    85 |
+| AMBIGUOUS          |     4 |
 
 Lectura breve:
 
@@ -2038,10 +2037,10 @@ No interpretar `OPEN` como `LOSS`.
 
 | Target | Wins | Losses | Win Rate |
 | ------ | ---: | -----: | -------: |
-| +0.50% | 289 | 224 | 56.34% |
-| +0.75% | — | — | 46.86% |
-| +1.00% | — | — | 39.08% |
-| +1.25% | — | — | 33.41% |
+| +0.50% |  289 |    224 |   56.34% |
+| +0.75% |    — |      — |   46.86% |
+| +1.00% |    — |      — |   39.08% |
+| +1.25% |    — |      — |   33.41% |
 
 No inventar valores no disponibles en el snapshot documentado.
 
@@ -2076,11 +2075,11 @@ Los datos continúan sin demostrar una relación monotónica donde un score más
 
 Ejemplo descriptivo disponible en `CRYPTO / 1m`:
 
-| Score bucket | MFE avg | MAE avg | N |
-| ------------ | ------: | ------: | -: |
-| 80-84 | +1.57% | -1.04% | 28 |
-| 90-94 | +1.70% | -0.92% | 18 |
-| 95-100 | +1.05% | -0.93% | 7 |
+| Score bucket | MFE avg | MAE avg |   N |
+| ------------ | ------: | ------: | --: |
+| 80-84        |  +1.57% |  -1.04% |  28 |
+| 90-94        |  +1.70% |  -0.92% |  18 |
+| 95-100       |  +1.05% |  -0.93% |   7 |
 
 No convertir esto en conclusión. Especialmente `95-100` tiene una muestra demasiado pequeña.
 
@@ -2109,23 +2108,23 @@ No inferir todavía rendimiento superior o inferior por ETF, sector o industria.
 
 ## ARGOS — Experimental State — 01-SEP-2026
 
-| Área | Estado |
-| ---- | ------ |
-| Strategy | v1 |
-| Phase | Research / Evidence Build |
-| Evidence | 639 |
-| Evaluated | 594 / 639 ≈ 93% |
-| Pending | 45 |
-| Operational score >= 90 | 265 |
-| Forward Evaluation | HEALTHY |
-| Expanded Market Universe | ACTIVE |
-| ETF Evidence | ARRIVING |
-| 1m / 5m Research | ACTIVE |
-| 1m / 5m Automatic Telegram Alerts | SILENCED |
-| Strategy profitability | UNKNOWN |
-| Trade Plan | NOT READY |
-| Strategy tuning | FROZEN |
-| Research accumulation | CONTINUE |
+| Área                              | Estado                    |
+| --------------------------------- | ------------------------- |
+| Strategy                          | v1                        |
+| Phase                             | Research / Evidence Build |
+| Evidence                          | 639                       |
+| Evaluated                         | 594 / 639 ≈ 93%           |
+| Pending                           | 45                        |
+| Operational score >= 90           | 265                       |
+| Forward Evaluation                | HEALTHY                   |
+| Expanded Market Universe          | ACTIVE                    |
+| ETF Evidence                      | ARRIVING                  |
+| 1m / 5m Research                  | ACTIVE                    |
+| 1m / 5m Automatic Telegram Alerts | SILENCED                  |
+| Strategy profitability            | UNKNOWN                   |
+| Trade Plan                        | NOT READY                 |
+| Strategy tuning                   | FROZEN                    |
+| Research accumulation             | CONTINUE                  |
 
 ## Conclusión del corte
 
@@ -2163,20 +2162,20 @@ Los datos de este corte no deben interpretarse como prueba de rentabilidad.
 
 ## Research Snapshot — 03-SEP-2026
 
-| Métrica | Valor |
-| ------- | ----: |
-| Total Evidence | 1,162 |
-| Evaluated Evidence | 935 |
-| Evidence without evaluation | 227 |
-| Operational opportunities score >= 90 | 470 |
-| Evaluation coverage | 935 / 1,162 ≈ 80.5% |
+| Métrica                               |               Valor |
+| ------------------------------------- | ------------------: |
+| Total Evidence                        |               1,162 |
+| Evaluated Evidence                    |                 935 |
+| Evidence without evaluation           |                 227 |
+| Operational opportunities score >= 90 |                 470 |
+| Evaluation coverage                   | 935 / 1,162 ≈ 80.5% |
 
 Backlog de Evidence sin evaluar:
 
-| Corte | Evidence sin evaluar |
-| ----- | -------------------: |
-| 01-SEP-2026 | 45 |
-| 03-SEP-2026 | 227 |
+| Corte       | Evidence sin evaluar |
+| ----------- | -------------------: |
+| 01-SEP-2026 |                   45 |
+| 03-SEP-2026 |                  227 |
 
 El backlog aumentó respecto al corte anterior. Esto no debe interpretarse automáticamente como un problema del evaluador. El Forward Evaluation ejecutado antes del snapshot procesó los lotes actuales sin errores ni fallos de proveedor.
 
@@ -2184,26 +2183,26 @@ El backlog aumentó respecto al corte anterior. Esto no debe interpretarse autom
 
 ### Forward branch
 
-| Métrica | Valor |
-| ------- | ----: |
-| Pending | 97 |
-| Evaluated | 97 |
-| Errors | 0 |
-| Provider errors | 0 |
-| No future candles | 0 |
+| Métrica           | Valor |
+| ----------------- | ----: |
+| Pending           |    97 |
+| Evaluated         |    97 |
+| Errors            |     0 |
+| Provider errors   |     0 |
+| No future candles |     0 |
 
 ### Evidence branch
 
-| Métrica | Valor |
-| ------- | ----: |
-| Pending | 100 |
-| Evaluated | 100 |
-| CLOSED | 2 |
-| PARTIALLY_RESOLVED | 9 |
-| OPEN | 89 |
-| Errors | 0 |
-| Provider errors | 0 |
-| No future candles | 0 |
+| Métrica            | Valor |
+| ------------------ | ----: |
+| Pending            |   100 |
+| Evaluated          |   100 |
+| CLOSED             |     2 |
+| PARTIALLY_RESOLVED |     9 |
+| OPEN               |    89 |
+| Errors             |     0 |
+| Provider errors    |     0 |
+| No future candles  |     0 |
 
 Conclusión técnica:
 
@@ -2211,13 +2210,13 @@ El pipeline/evaluador se observa sano en este corte, pero la generación y acumu
 
 ## Estados de Forward Evaluation
 
-| Estado | Total |
-| ------ | ----: |
-| OPEN | 89 |
-| PARTIALLY_RESOLVED | 9 |
-| CLOSED | 629 |
-| EXPIRED | 204 |
-| AMBIGUOUS | 4 |
+| Estado             | Total |
+| ------------------ | ----: |
+| OPEN               |    89 |
+| PARTIALLY_RESOLVED |     9 |
+| CLOSED             |   629 |
+| EXPIRED            |   204 |
+| AMBIGUOUS          |     4 |
 
 No interpretar `OPEN` como `LOSS`.
 
@@ -2225,14 +2224,14 @@ No interpretar `OPEN` como `LOSS`.
 
 | Target | Wins | Losses | Win Rate |
 | ------ | ---: | -----: | -------: |
-| +0.50% | 534 | 314 | 62.97% |
-| +0.75% | 442 | 377 | 53.97% |
-| +1.00% | 375 | 417 | 47.35% |
-| +1.25% | 314 | 446 | 41.32% |
-| +1.50% | 266 | 460 | 36.64% |
-| +2.00% | 187 | 497 | 27.34% |
-| +3.00% | 116 | 514 | 18.41% |
-| +5.00% | 34 | 516 | 6.18% |
+| +0.50% |  534 |    314 |   62.97% |
+| +0.75% |  442 |    377 |   53.97% |
+| +1.00% |  375 |    417 |   47.35% |
+| +1.25% |  314 |    446 |   41.32% |
+| +1.50% |  266 |    460 |   36.64% |
+| +2.00% |  187 |    497 |   27.34% |
+| +3.00% |  116 |    514 |   18.41% |
+| +5.00% |   34 |    516 |    6.18% |
 
 La definición vigente se mantiene:
 
@@ -2250,12 +2249,12 @@ MFE significa `Maximum Favorable Excursion`: máximo movimiento favorable observ
 
 MAE significa `Maximum Adverse Excursion`: máximo movimiento adverso observado después de la señal.
 
-| Métrica | 01-SEP | 03-SEP |
-| ------- | -----: | -----: |
+| Métrica     | 01-SEP | 03-SEP |
+| ----------- | -----: | -----: |
 | MFE average | +1.01% | +1.21% |
-| MFE median | +0.52% | +0.70% |
+| MFE median  | +0.52% | +0.70% |
 | MAE average | -1.17% | -1.04% |
-| MAE median | -1.03% | -1.01% |
+| MAE median  | -1.03% | -1.01% |
 
 Observación descriptiva:
 
@@ -2276,14 +2275,14 @@ Profit Factor: ganancias modeladas acumuladas / pérdidas modeladas acumuladas.
 
 | Target | 01-SEP Expectancy | 01-SEP PF | 03-SEP Expectancy | 03-SEP PF |
 | ------ | ----------------: | --------: | ----------------: | --------: |
-| +0.50% | -0.15% | 0.65 | -0.06% | 0.85 |
-| +0.75% | -0.18% | 0.66 | -0.06% | 0.88 |
-| +1.00% | -0.22% | 0.64 | -0.05% | 0.90 |
-| +1.25% | — | — | -0.07% | 0.88 |
-| +1.50% | -0.26% | 0.63 | -0.08% | 0.87 |
-| +2.00% | -0.39% | 0.51 | -0.18% | 0.75 |
-| +3.00% | -0.56% | 0.37 | -0.26% | 0.68 |
-| +5.00% | -0.84% | 0.14 | -0.63% | 0.33 |
+| +0.50% |            -0.15% |      0.65 |            -0.06% |      0.85 |
+| +0.75% |            -0.18% |      0.66 |            -0.06% |      0.88 |
+| +1.00% |            -0.22% |      0.64 |            -0.05% |      0.90 |
+| +1.25% |                 — |         — |            -0.07% |      0.88 |
+| +1.50% |            -0.26% |      0.63 |            -0.08% |      0.87 |
+| +2.00% |            -0.39% |      0.51 |            -0.18% |      0.75 |
+| +3.00% |            -0.56% |      0.37 |            -0.26% |      0.68 |
+| +5.00% |            -0.84% |      0.14 |            -0.63% |      0.33 |
 
 Las métricas agregadas continúan siendo negativas:
 
@@ -2294,10 +2293,10 @@ Sin embargo, el agregado del 03-SEP se encuentra considerablemente más cerca de
 
 Caso destacado:
 
-| Target | 01-SEP | 03-SEP |
-| ------ | ------ | ------ |
-| +1.00% Expectancy | -0.22% | -0.05% |
-| +1.00% Profit Factor | 0.64 | 0.90 |
+| Target               | 01-SEP | 03-SEP |
+| -------------------- | ------ | ------ |
+| +1.00% Expectancy    | -0.22% | -0.05% |
+| +1.00% Profit Factor | 0.64   | 0.90   |
 
 No interpretar esto como evidencia de rentabilidad.
 
@@ -2307,10 +2306,10 @@ Esta variación, ocurrida sin modificar Strategy v1, refuerza metodológicamente
 
 | Score bucket | TP +2% | TP +3% |
 | ------------ | -----: | -----: |
-| 80-84 | 28.17% | 17.44% |
-| 85-89 | 25.57% | 17.79% |
-| 90-94 | 25.42% | 18.45% |
-| 95-100 | 31.36% | 21.15% |
+| 80-84        | 28.17% | 17.44% |
+| 85-89        | 25.57% | 17.79% |
+| 90-94        | 25.42% | 18.45% |
+| 95-100       | 31.36% | 21.15% |
 
 El bucket `95-100` presenta además:
 
@@ -2346,13 +2345,13 @@ La relación entre score y resultado forward permanece inestable y requiere una 
 
 ## Timeframes
 
-| Timeframe | N | TP +2% | TP +3% |
-| --------- | -: | -----: | -----: |
-| 1m | 456 | 27.06% | 17.69% |
-| 5m | 300 | 30.13% | 20.19% |
-| 15m | 161 | 24.63% | 18.11% |
-| 1d | 17 | 17.65% | 11.76% |
-| 1w | 1 | 0.00% | 0.00% |
+| Timeframe |   N | TP +2% | TP +3% |
+| --------- | --: | -----: | -----: |
+| 1m        | 456 | 27.06% | 17.69% |
+| 5m        | 300 | 30.13% | 20.19% |
+| 15m       | 161 | 24.63% | 18.11% |
+| 1d        |  17 | 17.65% | 11.76% |
+| 1w        |   1 |  0.00% |  0.00% |
 
 Observación descriptiva:
 
@@ -2364,11 +2363,11 @@ No convertirlo en regla operativa.
 
 ## Asset types
 
-| Asset type | N | TP +2% | TP +3% |
-| ---------- | -: | -----: | -----: |
-| STOCK | 597 | 28.37% | 17.49% |
-| CRYPTO | 210 | 26.40% | 19.79% |
-| ETF | 128 | 22.81% | 20.00% |
+| Asset type |   N | TP +2% | TP +3% |
+| ---------- | --: | -----: | -----: |
+| STOCK      | 597 | 28.37% | 17.49% |
+| CRYPTO     | 210 | 26.40% | 19.79% |
+| ETF        | 128 | 22.81% | 20.00% |
 
 ETF ya no presenta `0% / 0%` como en el corte anterior.
 
@@ -2417,12 +2416,12 @@ Fuentes:
 
 ## Market regime observado
 
-| Área | Régimen descriptivo |
-| ---- | ------------------- |
-| Equities | Risk-on / tech-led rebound |
-| Crypto | Risk-on con señales mixtas en flujos ETF |
-| Rates | Yields easing |
-| Volatility | Moderada / sin evidencia suficiente para clasificar como high volatility |
+| Área            | Régimen descriptivo                                                                 |
+| --------------- | ----------------------------------------------------------------------------------- |
+| Equities        | Risk-on / tech-led rebound                                                          |
+| Crypto          | Risk-on con señales mixtas en flujos ETF                                            |
+| Rates           | Yields easing                                                                       |
+| Volatility      | Moderada / sin evidencia suficiente para clasificar como high volatility            |
 | Sector behavior | Liderazgo tecnológico y broad market positivo; comportamiento sectorial no uniforme |
 
 Confidence:
@@ -2486,34 +2485,34 @@ v1
 
 Snapshot utilizado:
 
-| Campo | Valor |
-| ----- | ----- |
-| snapshotDate | 2026-09-04 |
-| generatedAt | 2026-09-04T23:58:43.480Z |
-| timeZone | America/Mexico_City |
-| strategyVersion | v1 |
+| Campo           | Valor                    |
+| --------------- | ------------------------ |
+| snapshotDate    | 2026-09-04               |
+| generatedAt     | 2026-09-04T23:58:43.480Z |
+| timeZone        | America/Mexico_City      |
+| strategyVersion | v1                       |
 
 Este corte es documental / research log. No modifica estrategia, scoring, thresholds, stops, Target Ladder, Evidence, Forward Evaluation, Market Scan ni `strategyVersion`.
 
 ## Research Snapshot — 04-SEP-2026
 
-| Métrica | Valor |
-| ------- | ----: |
-| Evidence total | 1,372 |
-| Evaluated Evidence | 1,271 |
-| Evidence sin evaluación | 101 |
-| Evidence con MFE/MAE | 1,271 |
-| Evaluation coverage | ≈ 92.6% |
-| Operational Opportunities score >= 90 | 557 |
+| Métrica                               |   Valor |
+| ------------------------------------- | ------: |
+| Evidence total                        |   1,372 |
+| Evaluated Evidence                    |   1,271 |
+| Evidence sin evaluación               |     101 |
+| Evidence con MFE/MAE                  |   1,271 |
+| Evaluation coverage                   | ≈ 92.6% |
+| Operational Opportunities score >= 90 |     557 |
 
 Comparación contra el corte de referencia 01-SEP:
 
-| Métrica | 01-SEP | 04-SEP |
-| ------- | -----: | -----: |
-| Evidence total | 639 | 1,372 |
-| Evaluated Evidence | 594 | 1,271 |
-| Evidence sin evaluación | 45 | 101 |
-| Evaluation coverage | ≈ 93.0% | ≈ 92.6% |
+| Métrica                 |  01-SEP |  04-SEP |
+| ----------------------- | ------: | ------: |
+| Evidence total          |     639 |   1,372 |
+| Evaluated Evidence      |     594 |   1,271 |
+| Evidence sin evaluación |      45 |     101 |
+| Evaluation coverage     | ≈ 93.0% | ≈ 92.6% |
 
 Observación descriptiva:
 
@@ -2530,20 +2529,20 @@ Por lo tanto, no interpretar automáticamente cambios agregados como mejora o de
 
 | Score bucket | Evidence |
 | ------------ | -------: |
-| 80-84 | 436 |
-| 85-89 | 379 |
-| 90-94 | 330 |
-| 95-100 | 227 |
+| 80-84        |      436 |
+| 85-89        |      379 |
+| 90-94        |      330 |
+| 95-100       |      227 |
 
 ## Evaluation statuses
 
-| Estado | Total |
-| ------ | ----: |
-| OPEN | 94 |
-| PARTIALLY_RESOLVED | 6 |
-| CLOSED | 909 |
-| EXPIRED | 258 |
-| AMBIGUOUS | 4 |
+| Estado             | Total |
+| ------------------ | ----: |
+| OPEN               |    94 |
+| PARTIALLY_RESOLVED |     6 |
+| CLOSED             |   909 |
+| EXPIRED            |   258 |
+| AMBIGUOUS          |     4 |
 
 No interpretar `OPEN` como `LOSS`. La gran cantidad de señales recientes en estado `OPEN` es esperable cuando todavía están dentro de su ventana de evaluación.
 
@@ -2551,14 +2550,14 @@ No interpretar `OPEN` como `LOSS`. La gran cantidad de señales recientes en est
 
 | Target | Wins | Losses | Expired | Ambiguous | Unresolved | Resolved Sample Size | Win Rate |
 | ------ | ---: | -----: | ------: | --------: | ---------: | -------------------: | -------: |
-| +0.50% | 682 | 465 | 48 | 24 | 153 | 1,219 | 59.46% |
-| +0.75% | 555 | 561 | 76 | 14 | 166 | 1,206 | 49.73% |
-| +1.00% | 466 | 613 | 105 | 13 | 175 | 1,197 | 43.19% |
-| +1.25% | — | — | — | — | — | — | 37.27% |
-| +1.50% | — | — | — | — | — | — | 32.21% |
-| +2.00% | 232 | 732 | 209 | 4 | 195 | 1,177 | 24.07% |
-| +3.00% | — | — | — | — | — | — | 16.04% |
-| +5.00% | — | — | — | — | — | — | 5.19% |
+| +0.50% |  682 |    465 |      48 |        24 |        153 |                1,219 |   59.46% |
+| +0.75% |  555 |    561 |      76 |        14 |        166 |                1,206 |   49.73% |
+| +1.00% |  466 |    613 |     105 |        13 |        175 |                1,197 |   43.19% |
+| +1.25% |    — |      — |       — |         — |          — |                    — |   37.27% |
+| +1.50% |    — |      — |       — |         — |          — |                    — |   32.21% |
+| +2.00% |  232 |    732 |     209 |         4 |        195 |                1,177 |   24.07% |
+| +3.00% |    — |      — |       — |         — |          — |                    — |   16.04% |
+| +5.00% |    — |      — |       — |         — |          — |                    — |    5.19% |
 
 `winRate` no equivale a profitability. Estos resultados son métricas experimentales del Forward Evaluation bajo las reglas actuales.
 
@@ -2602,15 +2601,15 @@ CRYPTO / 1m:
 
 | Score bucket | Avg MFE | Median MFE |
 | ------------ | ------: | ---------: |
-| 90-94 | +1.56% | +1.35% |
-| 95-100 | +1.27% | +1.15% |
+| 90-94        |  +1.56% |     +1.35% |
+| 95-100       |  +1.27% |     +1.15% |
 
 STOCK / 15m:
 
 | Score bucket | Avg MFE |
 | ------------ | ------: |
-| 90-94 | +1.50% |
-| 95-100 | +0.92% |
+| 90-94        |  +1.50% |
+| 95-100       |  +0.92% |
 
 Esto continúa siendo consistente con H1/H7:
 
@@ -2652,29 +2651,29 @@ Posteriormente se podrá incorporar formalmente sector/industry mediante V1.6-B.
 
 ### Forward
 
-| Métrica | Valor |
-| ------- | ----: |
-| pendingSignals | 77 |
-| evaluated | 77 |
-| partial | 3 |
-| open | 74 |
-| expired | 0 |
-| ambiguous | 0 |
-| providerErrors | 0 |
-| errors | 0 |
+| Métrica        | Valor |
+| -------------- | ----: |
+| pendingSignals |    77 |
+| evaluated      |    77 |
+| partial        |     3 |
+| open           |    74 |
+| expired        |     0 |
+| ambiguous      |     0 |
+| providerErrors |     0 |
+| errors         |     0 |
 
 ### Evidence
 
-| Métrica | Valor |
-| ------- | ----: |
-| pendingSignals | 100 |
-| evaluated | 100 |
-| partial | 6 |
-| open | 94 |
-| expired | 0 |
-| ambiguous | 0 |
-| providerErrors | 0 |
-| errors | 0 |
+| Métrica        | Valor |
+| -------------- | ----: |
+| pendingSignals |   100 |
+| evaluated      |   100 |
+| partial        |     6 |
+| open           |    94 |
+| expired        |     0 |
+| ambiguous      |     0 |
+| providerErrors |     0 |
+| errors         |     0 |
 
 Interpretación:
 
@@ -2806,8 +2805,6 @@ El siguiente objetivo sigue siendo acumular Evidence y realizar cortes descripti
 
 10. Strategy v1 permanece congelada.
 
-
-
 ---
 
 # 2026-09-05 — Corte documental: Score Research, auditoría humana y Shadow Paper Trading v0.1
@@ -2862,22 +2859,22 @@ MAE median  = -1.05%
 
 Comparación descriptiva con `STOCK · 5m · Score90-94`:
 
-| Métrica | Score100 | Score90-94 |
-| ------- | -------: | ---------: |
-| N | 38 | 57 |
-| MFE avg | +1.40% | +1.06% |
-| MFE median | +0.89% | +0.47% |
-| MAE avg | -1.21% | -1.20% |
-| MAE median | -1.05% | -1.04% |
+| Métrica    | Score100 | Score90-94 |
+| ---------- | -------: | ---------: |
+| N          |       38 |         57 |
+| MFE avg    |   +1.40% |     +1.06% |
+| MFE median |   +0.89% |     +0.47% |
+| MAE avg    |   -1.21% |     -1.20% |
+| MAE median |   -1.05% |     -1.04% |
 
 Reach Rate:
 
 | Target | Score100 | Score90-94 |
 | ------ | -------: | ---------: |
-| +0.5% | 66.67% | 50.00% |
-| +1.0% | 47.22% | 32.65% |
-| +2.0% | 32.35% | 16.67% |
-| +3.0% | 21.21% | 10.42% |
+| +0.5%  |   66.67% |     50.00% |
+| +1.0%  |   47.22% |     32.65% |
+| +2.0%  |   32.35% |     16.67% |
+| +3.0%  |   21.21% |     10.42% |
 
 Interpretación permitida:
 
@@ -2914,25 +2911,25 @@ Debe sobrevivir a:
 
 Resumen actual:
 
-| Timeframe | Lectura descriptiva |
-| --------- | ------------------- |
-| 1m | STOCK Score100 no domina claramente; 95-99 parece descriptivamente fuerte en varios targets, con N todavía insuficiente. |
-| 5m | STOCK Score100 es actualmente el subconjunto más interesante. |
-| 15m | STOCK Score100 no supera consistentemente 90-94 y además muestra discrepancias en auditoría humana. |
-| 1h | Sin Evidence útil todavía; fue agregado recientemente. Cero datos no significa mala estrategia. |
-| 1d | Muestra extremadamente pequeña. |
-| 1w | Sin Evidence suficiente. |
+| Timeframe | Lectura descriptiva                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 1m        | STOCK Score100 no domina claramente; 95-99 parece descriptivamente fuerte en varios targets, con N todavía insuficiente. |
+| 5m        | STOCK Score100 es actualmente el subconjunto más interesante.                                                            |
+| 15m       | STOCK Score100 no supera consistentemente 90-94 y además muestra discrepancias en auditoría humana.                      |
+| 1h        | Sin Evidence útil todavía; fue agregado recientemente. Cero datos no significa mala estrategia.                          |
+| 1d        | Muestra extremadamente pequeña.                                                                                          |
+| 1w        | Sin Evidence suficiente.                                                                                                 |
 
 Distribución llamativa en STOCK:
 
 | Timeframe | 90-94 | 95-99 | 100 |
 | --------- | ----: | ----: | --: |
-| 1m | 90 | 23 | 60 |
-| 5m | 57 | 11 | 38 |
-| 15m | 29 | 2 | 31 |
-| 1h | 0 | 0 | 0 |
-| 1d | 6 | 0 | 0 |
-| 1w | 0 | 0 | 0 |
+| 1m        |    90 |    23 |  60 |
+| 5m        |    57 |    11 |  38 |
+| 15m       |    29 |     2 |  31 |
+| 1h        |     0 |     0 |   0 |
+| 1d        |     6 |     0 |   0 |
+| 1w        |     0 |     0 |   0 |
 
 Pregunta abierta:
 
@@ -2948,12 +2945,12 @@ Casos Score100 auditados:
 
 | Ticker | ARGOS | Human | Delta |
 | ------ | ----: | ----: | ----: |
-| MU | 100 | 91 | -9 |
-| PYPL | 100 | 90 | -10 |
-| CAT | 100 | 90 | -10 |
-| META | 100 | 83 | -17 |
-| T | 100 | 87 | -13 |
-| NFLX | 100 | 81 | -19 |
+| MU     |   100 |    91 |    -9 |
+| PYPL   |   100 |    90 |   -10 |
+| CAT    |   100 |    90 |   -10 |
+| META   |   100 |    83 |   -17 |
+| T      |   100 |    87 |   -13 |
+| NFLX   |   100 |    81 |   -19 |
 
 Resumen:
 
@@ -2984,12 +2981,12 @@ Muestra:
 
 | Ticker | ARGOS | Human | Delta |
 | ------ | ----: | ----: | ----: |
-| XLE | 100 | 92 | -8 |
-| QQQ | 100 | 80 | -20 |
-| GDX | 100 | 74 | -26 |
-| XLRE | 100 | 79 | -21 |
-| TLT | 95 | 74 | -21 |
-| XLI | 90 | 73 | -17 |
+| XLE    |   100 |    92 |    -8 |
+| QQQ    |   100 |    80 |   -20 |
+| GDX    |   100 |    74 |   -26 |
+| XLRE   |   100 |    79 |   -21 |
+| TLT    |    95 |    74 |   -21 |
+| XLI    |    90 |    73 |   -17 |
 
 Resumen:
 
@@ -3126,6 +3123,371 @@ Conclusión vigente:
 
 Mantener V1.6-B — Sector-Aware Research como siguiente fase principal. Shadow Paper Trading v0.1 avanza en paralelo como observación prospectiva y no debe usarse para modificar Strategy v1 antes de revisión metodológica.
 
+## 2026-09-08 — Corte diario Evidence / Strategy Research v1
+
+## Contexto
+
+Este corte continúa siendo investigación descriptiva de `strategy_version=v1`.
+
+No demuestra edge, rentabilidad ni justifica cambios operativos.
+
+Regla metodológica vigente:
+
+> No iniciar decisiones de Trade Plan basadas en Evidence antes del primer corte mensual, salvo bugs o problemas metodológicos.
+
+Este corte no modifica Strategy v1, scoring, thresholds, targets/stops, Evidence, Forward Evaluation, Market Scan, Telegram, ORB-FVG ni Shadow Paper Trading.
+
+## 1. STOCK · 5m
+
+### Score 100
+
+| Métrica               |  Valor |
+| --------------------- | -----: |
+| sampleSize            |     39 |
+| evaluatedCount        |     39 |
+| evaluationCoveragePct |   100% |
+| MFE average           | +1.33% |
+| MFE median            | +0.87% |
+| MAE average           | -1.13% |
+| MAE median            | -1.02% |
+
+Reach rate:
+
+| Target |  Reach |
+| ------ | -----: |
+| +0.50% | 65.79% |
+| +0.75% | 52.63% |
+| +1.00% | 47.37% |
+| +1.25% | 31.58% |
+| +1.50% | 31.58% |
+| +2.00% | 28.95% |
+| +3.00% | 18.42% |
+| +5.00% |  6.06% |
+
+### Score 90–94
+
+| Métrica        |  Valor |
+| -------------- | -----: |
+| sampleSize     |     64 |
+| evaluatedCount |     62 |
+| MFE average    | +1.08% |
+| MFE median     | +0.50% |
+| MAE average    | -1.10% |
+| MAE median     | -1.02% |
+
+Reach rate:
+
+| Target |  Reach |
+| ------ | -----: |
+| +0.50% | 50.82% |
+| +0.75% | 36.07% |
+| +1.00% | 34.43% |
+| +1.25% | 31.15% |
+| +1.50% | 26.23% |
+| +2.00% | 16.67% |
+| +3.00% | 10.00% |
+| +5.00% |  1.82% |
+
+### Score 95–99
+
+| Métrica        |  Valor |
+| -------------- | -----: |
+| sampleSize     |     13 |
+| evaluatedCount |     11 |
+| MFE average    | +1.02% |
+| MFE median     | +0.37% |
+| MAE average    | -1.07% |
+| MAE median     | -1.03% |
+
+Observación principal:
+
+`STOCK · 5m · Score100` continúa siendo el segmento descriptivamente más interesante de Strategy v1.
+
+Comparado con `Score90–94`:
+
+| Métrica    | Score100 | Score90–94 |
+| ---------- | -------: | ---------: |
+| MFE median |   +0.87% |     +0.50% |
+| MAE median |   -1.02% |     -1.02% |
+
+Score100 continúa mostrando mayor excursión favorable posterior sin deterioro material de la excursión adversa mediana.
+
+Esto fortalece descriptivamente H9, pero no demuestra profitability/edge. El segmento continúa temprano y no debe utilizarse todavía para calibrar Strategy v1.
+
+## 2. STOCK · 15m
+
+### Score 100
+
+| Métrica        |  Valor |
+| -------------- | -----: |
+| sampleSize     |     32 |
+| evaluatedCount |     29 |
+| coverage       | 90.63% |
+| MFE average    | +0.89% |
+| MFE median     | +0.58% |
+| MAE average    | -0.96% |
+| MAE median     | -1.01% |
+
+Reach:
+
+| Target |  Reach |
+| ------ | -----: |
+| +0.50% | 51.72% |
+| +0.75% | 31.03% |
+| +1.00% | 31.03% |
+| +1.25% | 27.59% |
+| +1.50% | 24.14% |
+| +2.00% | 17.24% |
+| +3.00% |  6.90% |
+
+### Score 90–94
+
+| Métrica        |  Valor |
+| -------------- | -----: |
+| sampleSize     |     35 |
+| evaluatedCount |     35 |
+| MFE average    | +1.50% |
+| MFE median     | +0.90% |
+| MAE average    | -1.12% |
+| MAE median     | -1.02% |
+
+Reach:
+
+| Target |  Reach |
+| ------ | -----: |
+| +0.50% | 62.86% |
+| +0.75% | 57.58% |
+| +1.00% | 51.52% |
+| +1.25% | 36.36% |
+| +1.50% | 28.13% |
+| +2.00% | 15.63% |
+| +3.00% | 15.63% |
+
+Observación:
+
+En `STOCK · 15m` no existe una relación monotónica simple donde Score100 produzca mejores resultados posteriores que Score90–94.
+
+Score90–94 presenta actualmente mayor MFE average, mayor MFE median y mayor reach rate en buena parte de la escalera de targets.
+
+Esto continúa siendo compatible con:
+
+- H1: un score mayor no implica necesariamente mayor MFE/reach futuro.
+- H7: Strategy v1 podría estar midiendo intensidad/cantidad de confluencias técnicas presentes más que una escala ordinal de calidad futura del setup.
+
+Esta observación se relaciona con auditorías humanas previas de `STOCK · 15m`, donde varios Score100 fueron degradados humanamente, especialmente por contextual quality de Structure.
+
+No cambiar Structure ni scoring todavía.
+
+## 3. CRYPTO · 5m
+
+### Score100
+
+| Métrica        |  Valor |
+| -------------- | -----: |
+| sampleSize     |     15 |
+| evaluatedCount |     14 |
+| MFE average    | +1.70% |
+| MFE median     | +1.53% |
+| MAE average    | -1.59% |
+| MAE median     | -1.30% |
+
+Reach:
+
+| Target |  Reach |
+| ------ | -----: |
+| +0.50% | 71.43% |
+| +1.00% | 64.29% |
+| +1.50% | 50.00% |
+| +2.00% | 42.86% |
+| +3.00% | 28.57% |
+
+Comparativamente, `STOCK · 5m · Score100` muestra:
+
+| Métrica    |  Valor |
+| ---------- | -----: |
+| MFE median | +0.87% |
+| MAE median | -1.02% |
+
+Observación:
+
+Los datos continúan siendo compatibles con H3: CRYPTO puede presentar mayor amplitud favorable intradía que STOCK, acompañada potencialmente de mayor excursión adversa.
+
+La muestra `N=15` sigue siendo insuficiente para una conclusión fuerte. Mantener segmentación por `assetType + timeframe`.
+
+## 4. CRYPTO · 15m
+
+### Score100
+
+| Métrica     |  Valor |
+| ----------- | -----: |
+| sampleSize  |      7 |
+| MFE average | +0.71% |
+| MFE median  |  0.00% |
+| MAE average | -1.52% |
+| MAE median  | -1.10% |
+| reach +1%   | 28.57% |
+| reach +2%   | 14.29% |
+
+Muestra demasiado pequeña. No extraer conclusiones.
+
+## 5. ETF · 5m
+
+### Score100
+
+| Métrica     |  Valor |
+| ----------- | -----: |
+| sampleSize  |     10 |
+| MFE average | +1.28% |
+| MFE median  | +0.61% |
+| MAE average | -0.63% |
+| MAE median  | -0.28% |
+
+Reach:
+
+| Target |  Reach |
+| ------ | -----: |
+| +0.50% | 66.67% |
+| +1.00% | 44.44% |
+| +2.00% | 33.33% |
+| +3.00% | 33.33% |
+
+La MAE mediana resulta descriptivamente interesante, pero `N=10` es demasiado pequeño. Registrar únicamente como observación temprana; no promover a hipótesis fuerte todavía.
+
+## Estado de hipótesis
+
+### H1 — Higher score is not necessarily monotonic with future MFE/reach
+
+Status:
+
+```text
+SUPPORTED / remains active
+```
+
+### H2 — Historical STOCK5m 95–100 behavior
+
+Status:
+
+```text
+REQUIRES REFINEMENT
+```
+
+La separación actual entre `95–99` y `Score100` sugiere que no deberían interpretarse necesariamente como un único bloque.
+
+### H3 — CRYPTO may exhibit larger favorable amplitude than STOCK intraday, potentially with larger MAE
+
+Status:
+
+```text
+COMPATIBLE WITH CURRENT EVIDENCE / still insufficient sample
+```
+
+### H4 — Higher MFE does not imply a better executable trade
+
+Status:
+
+```text
+ACTIVE / unchanged
+```
+
+### H5 — Strategy behavior should be researched separately by assetType + timeframe
+
+Status:
+
+```text
+INCREASINGLY SUPPORTED
+```
+
+### H6 — Do not conclude from insufficient samples
+
+Status:
+
+```text
+ACTIVE
+```
+
+### H7 — Score may measure technical-state intensity/confluence rather than ordinal future setup quality
+
+Status:
+
+```text
+STRENGTHENED BY CURRENT 5m/15m DIVERGENCE
+```
+
+### H8 — Market-regime dependency
+
+Status:
+
+```text
+OPEN / descriptive research pending
+```
+
+### H9 — STOCK 5m Score100 may identify a descriptively stronger subset than STOCK 5m Score90–94
+
+Status:
+
+```text
+STRENGTHENED, BUT STILL EARLY / NOT PROFITABILITY EVIDENCE
+```
+
+Supporting observation:
+
+- MFE median `+0.87%` vs `+0.50%`.
+- MAE median `-1.02%` vs `-1.02%`.
+- Score100 `N=39`, `100%` evaluation coverage.
+
+No llamar a esto edge.
+
+### H10 — Signal Timing / Movement Maturity
+
+Hypothesis:
+
+> Strategy v1 may sometimes identify strong technical confluence only after a substantial part of the movement has already occurred.
+
+In that case, a high score could correctly describe the current technical state while still arriving relatively late from an entry/timing perspective.
+
+Status:
+
+```text
+OPEN / UNTESTED
+```
+
+Potential future descriptive metrics:
+
+- `preSignalMovePct`
+- `distanceFromEMA20`
+- `distanceFromEMA50`
+- `distanceFromRecentLow`
+- `distanceFromRecentHigh`
+- `distanceToResistance`
+- `barsSinceBreakout`
+- `barsSinceMomentumExpansion`
+- `RSIAtSignal`
+- `ATR-normalized extension`
+
+Estas métricas son candidatas de investigación futura. No se implementan en este corte.
+
+Research futuro puede comparar timing de señales Strategy v1 contra timing de candidates ORB-FVG en el mismo ticker/session, pero esa comparación no se implementa ahora.
+
+## Conclusión oficial diaria
+
+Al corte de investigación del 2026-09-08, `STOCK · 5m · Score100` permanece como el segmento Strategy v1 más interesante descriptivamente. Con `N=39` y `100%` de cobertura de evaluación, mantiene una mediana MFE materialmente mayor que `Score90–94` (`+0.87%` vs `+0.50%`), mientras la mediana MAE permanece prácticamente idéntica (`-1.02%` vs `-1.02%`). Esto fortalece H9 descriptivamente, pero no demuestra rentabilidad ni edge ejecutable.
+
+`STOCK · 15m` continúa mostrando comportamiento no monotónico por score: `Score90–94` supera actualmente a `Score100` en varias métricas de favorable excursion/reach. Esto fortalece la distinción entre intensidad de confluencia técnica presente y calidad/timing futuro del setup.
+
+No se justifica ninguna calibración de Strategy v1 desde este corte diario. Continuar acumulando Evidence hasta el corte mensual planeado, salvo que se identifique un bug o problema metodológico.
+
+## Boundaries
+
+Este cierre diario de Strategy v1 no debe mezclarse con el experimento prospectivo ORB-FVG del mismo día. ORB-FVG tendrá una auditoría forense/calibración separada.
+
+Los fake trades seleccionados manualmente del experimento ORB-FVG no son Evidence de Strategy v1.
+
+No actualizar metodología ORB-FVG desde esta tarea.
+
+No actualizar reglas de Shadow Paper Trading.
+
+---
+
 ## 2026-09-08 — ORB-FVG v0.1 queda LONG-only
 
 Cambio metodológico:
@@ -3199,4 +3561,3 @@ Impacto esperado:
 Objetivo:
 
 Recolectar la sesión completa silenciosamente para auditoría manual posterior al cierre.
-
